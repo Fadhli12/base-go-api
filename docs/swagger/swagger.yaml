@@ -1,0 +1,1499 @@
+basePath: /api/v1
+definitions:
+  github_com_example_go-api-base_internal_http_request.CreateInvoiceRequest:
+    properties:
+      amount:
+        type: number
+      customer:
+        maxLength: 255
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      due_date:
+        type: string
+    required:
+    - amount
+    - customer
+    type: object
+  github_com_example_go-api-base_internal_http_request.CreatePermissionRequest:
+    properties:
+      action:
+        maxLength: 20
+        type: string
+      name:
+        maxLength: 100
+        type: string
+      resource:
+        maxLength: 50
+        type: string
+      scope:
+        maxLength: 20
+        type: string
+    required:
+    - action
+    - name
+    - resource
+    type: object
+  github_com_example_go-api-base_internal_http_request.CreateRoleRequest:
+    properties:
+      description:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 50
+        type: string
+    required:
+    - name
+    type: object
+  github_com_example_go-api-base_internal_http_request.CreateUserPermissionRequest:
+    properties:
+      effect:
+        enum:
+        - allow
+        - deny
+        type: string
+      permission_id:
+        type: string
+    required:
+    - effect
+    - permission_id
+    type: object
+  github_com_example_go-api-base_internal_http_request.CreateUserRoleRequest:
+    properties:
+      role_id:
+        type: string
+    required:
+    - role_id
+    type: object
+  github_com_example_go-api-base_internal_http_request.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_example_go-api-base_internal_http_request.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  github_com_example_go-api-base_internal_http_request.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_example_go-api-base_internal_http_request.UpdateInvoiceRequest:
+    properties:
+      amount:
+        type: number
+      customer:
+        maxLength: 255
+        type: string
+      description:
+        maxLength: 1000
+        type: string
+      due_date:
+        type: string
+      status:
+        enum:
+        - draft
+        - pending
+        - paid
+        - cancelled
+        type: string
+    type: object
+  github_com_example_go-api-base_internal_http_request.UpdateRoleRequest:
+    properties:
+      description:
+        maxLength: 255
+        type: string
+      name:
+        maxLength: 50
+        type: string
+    type: object
+  github_com_example_go-api-base_internal_http_response.Envelope:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.ErrorDetail'
+      meta:
+        $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Meta'
+    type: object
+  github_com_example_go-api-base_internal_http_response.ErrorDetail:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  github_com_example_go-api-base_internal_http_response.Meta:
+    properties:
+      request_id:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  internal_http_handler.EffectivePermissionResponse:
+    properties:
+      action:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+      scope:
+        type: string
+    type: object
+  internal_http_handler.HealthStatusResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_http_handler.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/internal_http_handler.UserResponse'
+    type: object
+  internal_http_handler.LogoutResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_http_handler.MeResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_http_handler.PermissionResponse:
+    properties:
+      action:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+      scope:
+        type: string
+    type: object
+  internal_http_handler.ReadyzSuccessResponse:
+    properties:
+      checks:
+        additionalProperties:
+          type: string
+        type: object
+      status:
+        example: ready
+        type: string
+    type: object
+  internal_http_handler.RefreshResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  internal_http_handler.RegisterRequestResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+    type: object
+  internal_http_handler.RoleListResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/internal_http_handler.PermissionResponse'
+        type: array
+    type: object
+  internal_http_handler.RoleResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/internal_http_handler.PermissionResponse'
+        type: array
+    type: object
+  internal_http_handler.UserDetailResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_http_handler.UserListResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_http_handler.UserResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+    type: object
+  internal_http_handler.UserRoleResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/internal_http_handler.PermissionResponse'
+        type: array
+    type: object
+  internal_module_invoice.InvoiceListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  internal_module_invoice.InvoiceResponse:
+    properties:
+      amount:
+        type: number
+      created_at:
+        type: string
+      customer:
+        type: string
+      description:
+        type: string
+      due_date:
+        type: string
+      id:
+        type: string
+      number:
+        type: string
+      status:
+        $ref: '#/definitions/internal_module_invoice.InvoiceStatus'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  internal_module_invoice.InvoiceStatus:
+    enum:
+    - draft
+    - pending
+    - paid
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - InvoiceStatusDraft
+    - InvoiceStatusPending
+    - InvoiceStatusPaid
+    - InvoiceStatusCancelled
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: A production-ready Go REST API with RBAC, JWT authentication, and permission
+    management
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Go API Base
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return access/refresh tokens
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.LoginResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Login a user
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Revoke all refresh tokens for the authenticated user
+      parameters:
+      - description: User ID
+        in: header
+        name: X-User-ID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.LogoutResponse'
+              type: object
+        "400":
+          description: Missing user ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Logout a user
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a valid refresh token for new access and refresh tokens
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.RefreshResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Invalid refresh token
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Refresh access token
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email and password
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.RegisterRequestResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "409":
+          description: Email already exists
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Register a new user
+      tags:
+      - auth
+  /api/v1/invoices:
+    get:
+      consumes:
+      - application/json
+      description: List invoices. Regular users see their own invoices, admins see
+        all.
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_module_invoice.InvoiceListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List invoices
+      tags:
+      - invoices
+    post:
+      consumes:
+      - application/json
+      description: Create a new invoice
+      parameters:
+      - description: Invoice data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateInvoiceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create invoice
+      tags:
+      - invoices
+  /api/v1/invoices/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete an invoice. Users can only delete their own invoices.
+      parameters:
+      - description: Invoice ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid invoice ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Invoice not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete invoice
+      tags:
+      - invoices
+    get:
+      consumes:
+      - application/json
+      description: Get an invoice by ID. Regular users can only see their own invoices.
+      parameters:
+      - description: Invoice ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+              type: object
+        "400":
+          description: Invalid invoice ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Invoice not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get invoice by ID
+      tags:
+      - invoices
+    put:
+      consumes:
+      - application/json
+      description: Update an invoice. Users can only update their own invoices.
+      parameters:
+      - description: Invoice ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Invoice data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.UpdateInvoiceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Invoice not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update invoice
+      tags:
+      - invoices
+  /api/v1/invoices/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Update the status of an invoice (admin only)
+      parameters:
+      - description: Invoice ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status (draft, pending, paid, cancelled)
+        in: query
+        name: status
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Invoice not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update invoice status
+      tags:
+      - invoices
+  /api/v1/me:
+    get:
+      consumes:
+      - application/json
+      description: Get the currently authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.MeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - user
+  /api/v1/permissions:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all permissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_http_handler.PermissionResponse'
+                  type: array
+              type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Get all permissions
+      tags:
+      - permissions
+    post:
+      consumes:
+      - application/json
+      description: Create a new permission with name, resource, action, and optional
+        scope
+      parameters:
+      - description: Permission details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.PermissionResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "409":
+          description: Permission already exists
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Create a new permission
+      tags:
+      - permissions
+  /api/v1/roles:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all roles with their associated permissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_http_handler.RoleListResponse'
+                  type: array
+              type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Get all roles
+      tags:
+      - roles
+    post:
+      consumes:
+      - application/json
+      description: Create a new role with name and optional description
+      parameters:
+      - description: Role details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.RoleResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "409":
+          description: Role already exists
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Create a new role
+      tags:
+      - roles
+  /api/v1/roles/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a role (cannot delete system roles)
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid role ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "403":
+          description: Cannot delete system role
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Delete a role
+      tags:
+      - roles
+    put:
+      consumes:
+      - application/json
+      description: Update a role's name and description
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role update details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.RoleResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Update a role
+      tags:
+      - roles
+  /api/v1/roles/{id}/permissions/{pid}:
+    delete:
+      consumes:
+      - application/json
+      description: Detach a permission from a role
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission ID
+        in: path
+        name: pid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Detach permission from role
+      tags:
+      - roles
+    post:
+      consumes:
+      - application/json
+      description: Attach a permission to a role
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission ID
+        in: path
+        name: pid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Role or permission not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Attach permission to role
+      tags:
+      - roles
+  /api/v1/users:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all users
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_http_handler.UserListResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List all users
+      tags:
+      - users
+  /api/v1/users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete a user
+      tags:
+      - users
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a user by their ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_http_handler.UserDetailResponse'
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - users
+  /api/v1/users/{id}/effective-permissions:
+    get:
+      consumes:
+      - application/json
+      description: Get the effective permissions for a user after applying role permissions
+        and deny overrides
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_http_handler.EffectivePermissionResponse'
+                  type: array
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get effective permissions
+      tags:
+      - users
+  /api/v1/users/{id}/permissions:
+    post:
+      consumes:
+      - application/json
+      description: Grant or deny a permission directly to a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission assignment
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateUserPermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User or permission not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Grant permission to user
+      tags:
+      - users
+  /api/v1/users/{id}/permissions/{permId}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a direct permission assignment from a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permission ID
+        in: path
+        name: permId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: Permission assignment not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Remove permission from user
+      tags:
+      - users
+  /api/v1/users/{id}/roles:
+    get:
+      consumes:
+      - application/json
+      description: Get all roles assigned to a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_http_handler.UserRoleResponse'
+                  type: array
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get user roles
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Assign a role to a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role assignment
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateUserRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User or role not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Assign role to user
+      tags:
+      - users
+  /api/v1/users/{id}/roles/{roleId}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a role from a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+        "404":
+          description: User or role not found
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Remove role from user
+      tags:
+      - users
+  /healthz:
+    get:
+      consumes:
+      - application/json
+      description: Check if the server is alive
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_http_handler.HealthStatusResponse'
+      summary: Liveness probe
+      tags:
+      - health
+  /readyz:
+    get:
+      consumes:
+      - application/json
+      description: Check if the server is ready by verifying database and Redis connections
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_http_handler.ReadyzSuccessResponse'
+        "503":
+          description: Service unavailable
+          schema:
+            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+      summary: Readiness probe
+      tags:
+      - health
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

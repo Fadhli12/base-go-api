@@ -1,0 +1,46 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Binary
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+coverage.txt
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor directory
+vendor/
+
+# IDE
+.idea/
+.vscode/
+
+# Log files
+*.log
+
+# Distribution/dist
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.swp
+*.swo
+*~

@@ -2,13 +2,27 @@
   "version": "1.0.0",
   "lastScanned": 1776788094839,
   "projectRoot": "C:\\Development\\base\\go-api",
-  "techStack": "Go 1.22+, labstack/echo/v4, gorm.io/gorm + gorm.io/driver/postgres, PostgreSQL 15+, Redis 7+, github.com/casbin/casbin/v2 + casbin/gorm-adapter/v3, golang-jwt/jwt/v5, go-playground/validator/v10, spf13/viper, spf13/cobra, google/uuid, stretchr/testify + testcontainers-go, swaggo/swag + swaggo/echo-swagger",
-  "build": "Makefile (migrate, seed, serve, test, lint, docker-build), docker-compose.yml for local dev (Postgres + Redis + API)",
-  "conventions": "RBAC mandatory (no hardcoded perms), soft deletes required (deleted_at), permissions as DB records (resource:action format), RBAC-with-domains Casbin model, stateless JWT 5-15 min + refresh tokens in DB 30 days",
-  "structure": "cmd/api/main.go (cobra CLI), internal/{config,database,http/{server,middleware,handler,request,response},domain,repository,service,permission,auth,module}, migrations/, config/, pkg/, tests/{unit,integration,contract}, docs/",
-  "customNotes": [],
+  "techStack": "Go 1.22+, Echo v4, GORM, Casbin RBAC, JWT, Redis, PostgreSQL, testcontainers-go",
+  "build": "make serve | make migrate | make test | make test-integration | make lint",
+  "conventions": "SQL migrations (NOT AutoMigrate), soft deletes on all entities, UUID primary keys, context propagation, Envelope response format, two-tier permission (route middleware + scope check)",
+  "structure": "cmd/api (entry), internal/http (Echo), internal/service (business), internal/repository (GORM), internal/domain (entities), internal/permission (Casbin), internal/auth (JWT), internal/module (domain modules), tests/integration (testcontainers), migrations/*.sql",
+  "customNotes": [
+    {
+      "category": "testing",
+      "content": "Integration tests use testcontainers-go with PostgresContainer and RedisContainer. Run with: go test ./tests/integration/... -tags=integration. Tests auto-start ephemeral Docker containers with runMigrations embedded SQL. Each test gets clean DB via SetupTest()."
+    }
+  ],
   "directoryMap": {},
   "hotPaths": [],
   "userDirectives": [],
-  "notes": "Momus review identified 37 issues (7 clarity, 3 verifiability, 7 completeness, 9 consistency). 5 critical blockers fixed: CB-1 Casbin model (pre-existing), CB-2 unique token_hash constraint added, CB-3 audit log GET endpoint added, CB-4 scope semantics documented (service-layer hint, not Casbin), CB-5 user CRUD completed. Additions: GET /me, GET /users, DELETE /users/:id, GET /roles, DELETE /roles/:id, DELETE /users/:id/roles/:roleId, DELETE /users/:id/permissions/:pid, GET /me/sessions, DELETE /me/sessions/:id, GET /audit-logs. Clarifications: token rotation mandatory (not optional), access token 15 min fixed, graceful shutdown 30s timeout, load test: 1000 req/s for 5 min with p99 <200ms, business logic = services + handlers."
+  "notes": [
+    {
+      "category": "documentation",
+      "content": "Created 10 AGENTS.md files: root, permission, auth, invoice, integration, migrations, domain, service, repository, http"
+    },
+    {
+      "category": "documentation",
+      "content": "Each AGENTS.md includes: OVERVIEW, WHERE TO LOOK, CODE MAP, ANTI-PATTERNS, CRITICAL CONSTRAINTS, TROUBLESHOOTING"
+    }
+  ]
 }
