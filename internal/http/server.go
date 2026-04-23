@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/example/go-api-base/internal/cache"
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/http/handler"
 	"github.com/example/go-api-base/internal/http/middleware"
@@ -17,6 +18,7 @@ import (
 	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
+	"github.com/example/go-api-base/internal/storage"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/labstack/echo/v4"
 	echoSwagger "github.com/swaggo/echo-swagger"
@@ -47,7 +49,7 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new HTTP server with middleware chain
-func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client) *Server {
+func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, cacheDriver cache.Driver) *Server {
 	e := echo.New()
 
 	// Configure Echo settings
@@ -71,9 +73,9 @@ func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client) *Serv
 	e.Use(middleware.RequestID())
 	e.Use(middleware.CORS(cfg))
 
-	// Only apply rate limiting if Redis is available
-	if redisClient != nil {
-		rateLimiter := middleware.NewRateLimiter(redisClient, middleware.DefaultRequestsPerMinute)
+	// Apply rate limiting with cache driver
+	if cacheDriver != nil {
+		rateLimiter := middleware.NewRateLimiter(cacheDriver, middleware.DefaultRequestsPerMinute, cfg.Cache.RateLimitTTL)
 		e.Use(rateLimiter.Middleware())
 	}
 
@@ -248,6 +250,7 @@ func (s *Server) RegisterRoutes() {
 	userRoleRepo := repository.NewUserRoleRepository(s.db)
 	userPermissionRepo := repository.NewUserPermissionRepository(s.db)
 	auditLogRepo := repository.NewAuditLogRepository(s.db)
+	mediaRepo := repository.NewMediaRepository(s.db)
 
 	// Initialize services
 	tokenService := service.NewTokenService(s.config.JWT.Secret, s.config.JWT.AccessExpiry, s.config.JWT.RefreshExpiry)
@@ -261,6 +264,24 @@ func (s *Server) RegisterRoutes() {
 	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
 	s.SetAuditService(auditService)
 
+	// Initialize storage driver
+	storageDriver, err := storage.NewDriver(storage.Config{
+		Type:      s.config.Storage.Driver,
+		LocalPath: s.config.Storage.LocalPath,
+		BaseURL:   s.config.Storage.BaseURL,
+	})
+	if err != nil {
+		slog.Error("Failed to initialize storage driver", "error", err)
+		// Continue without media functionality if storage fails
+		storageDriver = nil
+	}
+
+	// Initialize media service
+	var mediaService service.MediaService
+	if storageDriver != nil {
+		mediaService = service.NewMediaService(mediaRepo, s.enforcer, storageDriver, s.config.JWT.Secret)
+	}
+
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService)
@@ -272,9 +293,20 @@ func (s *Server) RegisterRoutes() {
 	invoiceService := invoice.NewService(invoiceRepo, s.enforcer)
 	invoiceHandler := invoice.NewHandler(invoiceService, s.enforcer)
 
-	// Swagger documentation (no auth required)
-	swagger := s.echo.Group("/swagger")
-	swagger.GET("/*", echoSwagger.WrapHandler)
+	// Initialize media handler if media service is available
+	var mediaHandler *handler.MediaHandler
+	if mediaService != nil {
+		mediaHandler = handler.NewMediaHandler(mediaService, auditService, s.enforcer)
+	}
+
+	// Swagger documentation (conditional based on config)
+	if s.config.Swagger.Enabled {
+		swagger := s.echo.Group(s.config.Swagger.Path)
+		swagger.GET("/*", echoSwagger.WrapHandler)
+		slog.Info("Swagger documentation enabled", "path", s.config.Swagger.Path)
+	} else {
+		slog.Info("Swagger documentation disabled")
+	}
 
 	// API v1 routes
 	v1 := s.echo.Group("/api/v1")
@@ -294,6 +326,11 @@ func (s *Server) RegisterRoutes() {
 
 	// Invoice routes
 	s.RegisterInvoiceRoutes(v1, invoiceHandler)
+
+	// Media routes (if handler initialized)
+	if mediaHandler != nil {
+		mediaHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
 
 	// Protected routes (require JWT authentication)
 	protected := v1.Group("")

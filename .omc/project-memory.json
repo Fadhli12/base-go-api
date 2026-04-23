@@ -1,28 +1,167 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1776788094839,
+  "lastScanned": 1776928007635,
   "projectRoot": "C:\\Development\\base\\go-api",
-  "techStack": "Go 1.22+, Echo v4, GORM, Casbin RBAC, JWT, Redis, PostgreSQL, testcontainers-go",
-  "build": "make serve | make migrate | make test | make test-integration | make lint",
-  "conventions": "SQL migrations (NOT AutoMigrate), soft deletes on all entities, UUID primary keys, context propagation, Envelope response format, two-tier permission (route middleware + scope check)",
-  "structure": "cmd/api (entry), internal/http (Echo), internal/service (business), internal/repository (GORM), internal/domain (entities), internal/permission (Casbin), internal/auth (JWT), internal/module (domain modules), tests/integration (testcontainers), migrations/*.sql",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Go",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "go.mod"
+        ]
+      },
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Makefile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "go",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "make build",
+    "testCommand": "make test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "bin",
+      "docs",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
   "customNotes": [
     {
       "category": "testing",
       "content": "Integration tests use testcontainers-go with PostgresContainer and RedisContainer. Run with: go test ./tests/integration/... -tags=integration. Tests auto-start ephemeral Docker containers with runMigrations embedded SQL. Each test gets clean DB via SetupTest()."
     }
   ],
-  "directoryMap": {},
-  "hotPaths": [],
-  "userDirectives": [],
-  "notes": [
-    {
-      "category": "documentation",
-      "content": "Created 10 AGENTS.md files: root, permission, auth, invoice, integration, migrations, domain, service, repository, http"
+  "directoryMap": {
+    "bin": {
+      "path": "bin",
+      "purpose": "Executable scripts",
+      "fileCount": 1,
+      "lastAccessed": 1776928007622,
+      "keyFiles": [
+        "api.exe"
+      ]
     },
-    {
-      "category": "documentation",
-      "content": "Each AGENTS.md includes: OVERVIEW, WHERE TO LOOK, CODE MAP, ANTI-PATTERNS, CRITICAL CONSTRAINTS, TROUBLESHOOTING"
+    "cmd": {
+      "path": "cmd",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776928007622,
+      "keyFiles": []
+    },
+    "config": {
+      "path": "config",
+      "purpose": "Configuration files",
+      "fileCount": 2,
+      "lastAccessed": 1776928007622,
+      "keyFiles": [
+        "rbac_model.conf"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 4,
+      "lastAccessed": 1776928007623,
+      "keyFiles": [
+        "api-examples.md",
+        "FIRST_SETUP.md",
+        "postman.json",
+        "runbook.md"
+      ]
+    },
+    "internal": {
+      "path": "internal",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776928007623,
+      "keyFiles": []
+    },
+    "migrations": {
+      "path": "migrations",
+      "purpose": "Database migrations",
+      "fileCount": 10,
+      "lastAccessed": 1776928007623,
+      "keyFiles": [
+        "000001_init.down.sql",
+        "000001_init.up.sql",
+        "000002_audit_logs.down.sql",
+        "000002_audit_logs.up.sql",
+        "000003_create_news_table.down.sql"
+      ]
+    },
+    "pkg": {
+      "path": "pkg",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776928007624,
+      "keyFiles": []
+    },
+    "specs": {
+      "path": "specs",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776928007624,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1776928007624,
+      "keyFiles": []
+    },
+    "cmd\\api": {
+      "path": "cmd\\api",
+      "purpose": "API routes",
+      "fileCount": 1,
+      "lastAccessed": 1776928007625,
+      "keyFiles": [
+        "main.go"
+      ]
+    },
+    "internal\\config": {
+      "path": "internal\\config",
+      "purpose": "Configuration files",
+      "fileCount": 2,
+      "lastAccessed": 1776928007625,
+      "keyFiles": [
+        "config.go"
+      ]
+    },
+    "pkg\\utils": {
+      "path": "pkg\\utils",
+      "purpose": "Utility functions",
+      "fileCount": 1,
+      "lastAccessed": 1776928007626,
+      "keyFiles": []
     }
-  ]
+  },
+  "hotPaths": [],
+  "userDirectives": []
 }

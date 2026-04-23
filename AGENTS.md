@@ -181,3 +181,30 @@ From `.specify/memory/constitution.md`:
 - **Constitution**: `.specify/memory/constitution.md`
 - **Implementation**: `IMPLEMENTATION_PLAN.md` (10 phases)
 - **Specs**: `specs/go-api-base/`
+- **Config Docs**: `docs/configuration.md`
+- **Current Feature**: `specs/go-api-base/plan.md` - Dynamic Configuration (storage, image, cache, swagger)
+
+## CURRENT FEATURE
+
+### Branch: `001-dynamic-config`
+
+**Dynamic Configuration System** - Runtime-configurable subsystems via environment variables.
+
+**Modules:**
+- **Storage**: `internal/storage/` - Local, S3, MinIO backends
+- **Image Compression**: `internal/conversion/config.go` - Configurable quality/dimensions
+- **Cache**: `internal/cache/` - Redis, memory, none drivers
+- **Swagger**: `internal/http/server.go` - Toggle Swagger UI
+
+**Files Changed:**
+- `internal/config/*.go` - Config structs for all subsystems
+- `internal/storage/*.go` - Storage factory pattern
+- `internal/cache/*.go` - Cache driver interface
+- `internal/conversion/config.go` - Image compression config
+- `.env.example` - All new config variables
+- `docs/configuration.md` - Detailed configuration guide
+
+**Default Behavior:**
+- All configs match existing hardcoded values (backward compatible)
+- Existing `.env` files work without modification
+- No mandatory variables for local storage (uses defaults)

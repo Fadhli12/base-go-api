@@ -32,6 +32,7 @@ import (
 	"time"
 
 	_ "github.com/example/go-api-base/docs/swagger" // swagger docs
+	"github.com/example/go-api-base/internal/cache"
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/database"
 	apphttp "github.com/example/go-api-base/internal/http"
@@ -143,6 +144,18 @@ func runServer() error {
 		return fmt.Errorf("redis initialization failed: %w", err)
 	}
 
+	// Initialize cache driver based on configuration
+	cacheDriver, err := cache.NewDriver(cache.Config{
+		Driver:        cfg.Cache.Driver,
+		DefaultTTL:    cfg.Cache.DefaultTTL,
+		PermissionTTL: cfg.Cache.PermissionTTL,
+		RateLimitTTL:  cfg.Cache.RateLimitTTL,
+	}, redisClient)
+	if err != nil {
+		slog.Error("Failed to initialize cache driver", "error", err)
+		return fmt.Errorf("cache driver initialization failed: %w", err)
+	}
+
 	// Initialize Casbin enforcer for permission enforcement
 	enforcer, err := permission.NewEnforcer(db)
 	if err != nil {
@@ -150,15 +163,15 @@ func runServer() error {
 		return fmt.Errorf("permission enforcer initialization failed: %w", err)
 	}
 
-	// Initialize permission cache with 5-minute TTL
-	permCache := permission.NewCache(redisClient, 5*time.Minute)
+	// Initialize permission cache with configured TTL
+	permCache := permission.NewCache(cacheDriver, time.Duration(cfg.Cache.PermissionTTL)*time.Second)
 	enforcer.SetCache(permCache)
 
 	// Initialize permission invalidator for cache sync across instances
 	invalidator := permission.NewInvalidator(redisClient)
 
 	// Create server with Echo and dependencies
-	server := apphttp.NewServer(cfg, db, redisClient)
+	server := apphttp.NewServer(cfg, db, redisClient, cacheDriver)
 
 	// Set permission-related dependencies
 	server.SetEnforcer(enforcer)

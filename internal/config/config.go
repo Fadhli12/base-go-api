@@ -79,6 +79,10 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Log      LogConfig      `mapstructure:"log"`
 	CORS     CORSConfig     `mapstructure:"cors"`
+	Storage  StorageConfig  `mapstructure:"storage"`
+	Image    ImageConfig    `mapstructure:"image"`
+	Swagger  SwaggerConfig  `mapstructure:"swagger"`
+	Cache    CacheConfig    `mapstructure:"cache"`
 }
 
 var (
@@ -142,9 +146,21 @@ func loadConfig() (*Config, error) {
 	if err := parseCORSConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse cors config: %w", err)
 	}
+	if err := parseStorageConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse storage config: %w", err)
+	}
+	if err := parseImageConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse image config: %w", err)
+	}
+	if err := parseSwaggerConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse swagger config: %w", err)
+	}
+	if err := parseCacheConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse cache config: %w", err)
+	}
 
 	// Validate required fields
-	if err := validate(cfg); err != nil {
+	if err := Validate(cfg); err != nil {
 		return nil, err
 	}
 
@@ -198,6 +214,30 @@ func setDefaults(v *viper.Viper) {
 
 	// CORS defaults
 	v.SetDefault("cors.allowed_origins", "http://localhost:3000")
+
+	// Storage defaults
+	v.SetDefault("storage.driver", "local")
+	v.SetDefault("storage.local_path", "./storage/uploads")
+	v.SetDefault("storage.base_url", "http://localhost:8080/storage")
+
+	// Image defaults
+	v.SetDefault("image.compression_enabled", true)
+	v.SetDefault("image.thumbnail_quality", 85)
+	v.SetDefault("image.thumbnail_width", 300)
+	v.SetDefault("image.thumbnail_height", 300)
+	v.SetDefault("image.preview_quality", 90)
+	v.SetDefault("image.preview_width", 800)
+	v.SetDefault("image.preview_height", 600)
+
+	// Swagger defaults
+	v.SetDefault("swagger.enabled", true)
+	v.SetDefault("swagger.path", "/swagger")
+
+	// Cache defaults
+	v.SetDefault("cache.driver", "redis")
+	v.SetDefault("cache.default_ttl", 300)
+	v.SetDefault("cache.permission_ttl", 300)
+	v.SetDefault("cache.rate_limit_ttl", 60)
 }
 
 // loadYAMLConfig attempts to load configuration from YAML files.
@@ -480,6 +520,58 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// getEnvBoolOrDefault returns the boolean value of an environment variable or a default.
+func getEnvBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return strings.ToLower(value) == "true" || value == "1"
+	}
+	return defaultValue
+}
+
+// parseStorageConfig parses storage configuration from environment.
+func parseStorageConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Storage.Driver = getEnvOrDefault("STORAGE_DRIVER", v.GetString("storage.driver"))
+	cfg.Storage.LocalPath = getEnvOrDefault("STORAGE_LOCAL_PATH", v.GetString("storage.local_path"))
+	cfg.Storage.BaseURL = getEnvOrDefault("STORAGE_BASE_URL", v.GetString("storage.base_url"))
+	// S3/MinIO fields
+	cfg.Storage.S3Endpoint = getEnvOrDefault("STORAGE_S3_ENDPOINT", v.GetString("storage.s3_endpoint"))
+	cfg.Storage.S3Region = getEnvOrDefault("STORAGE_S3_REGION", v.GetString("storage.s3_region"))
+	cfg.Storage.S3Bucket = getEnvOrDefault("STORAGE_S3_BUCKET", v.GetString("storage.s3_bucket"))
+	cfg.Storage.S3AccessKey = getEnvOrDefault("STORAGE_S3_ACCESS_KEY", v.GetString("storage.s3_access_key"))
+	cfg.Storage.S3SecretKey = getEnvOrDefault("STORAGE_S3_SECRET_KEY", v.GetString("storage.s3_secret_key"))
+	cfg.Storage.S3UseSSL = getEnvBoolOrDefault("STORAGE_S3_USE_SSL", v.GetBool("storage.s3_use_ssl"))
+	cfg.Storage.S3PathStyle = getEnvBoolOrDefault("STORAGE_S3_PATH_STYLE", v.GetBool("storage.s3_path_style"))
+	return nil
+}
+
+// parseImageConfig parses image configuration from environment.
+func parseImageConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Image.CompressionEnabled = getEnvBoolOrDefault("IMAGE_COMPRESSION_ENABLED", v.GetBool("image.compression_enabled"))
+	cfg.Image.ThumbnailQuality = getEnvIntOrDefault("IMAGE_COMPRESSION_THUMBNAIL_QUALITY", v.GetInt("image.thumbnail_quality"))
+	cfg.Image.ThumbnailWidth = getEnvIntOrDefault("IMAGE_COMPRESSION_THUMBNAIL_WIDTH", v.GetInt("image.thumbnail_width"))
+	cfg.Image.ThumbnailHeight = getEnvIntOrDefault("IMAGE_COMPRESSION_THUMBNAIL_HEIGHT", v.GetInt("image.thumbnail_height"))
+	cfg.Image.PreviewQuality = getEnvIntOrDefault("IMAGE_COMPRESSION_PREVIEW_QUALITY", v.GetInt("image.preview_quality"))
+	cfg.Image.PreviewWidth = getEnvIntOrDefault("IMAGE_COMPRESSION_PREVIEW_WIDTH", v.GetInt("image.preview_width"))
+	cfg.Image.PreviewHeight = getEnvIntOrDefault("IMAGE_COMPRESSION_PREVIEW_HEIGHT", v.GetInt("image.preview_height"))
+	return nil
+}
+
+// parseSwaggerConfig parses swagger configuration from environment.
+func parseSwaggerConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Swagger.Enabled = getEnvBoolOrDefault("SWAGGER_ENABLED", v.GetBool("swagger.enabled"))
+	cfg.Swagger.Path = getEnvOrDefault("SWAGGER_PATH", v.GetString("swagger.path"))
+	return nil
+}
+
+// parseCacheConfig parses cache configuration from environment.
+func parseCacheConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Cache.Driver = getEnvOrDefault("CACHE_DRIVER", v.GetString("cache.driver"))
+	cfg.Cache.DefaultTTL = getEnvIntOrDefault("CACHE_DEFAULT_TTL", v.GetInt("cache.default_ttl"))
+	cfg.Cache.PermissionTTL = getEnvIntOrDefault("CACHE_PERMISSION_TTL", v.GetInt("cache.permission_ttl"))
+	cfg.Cache.RateLimitTTL = getEnvIntOrDefault("CACHE_RATE_LIMIT_TTL", v.GetInt("cache.rate_limit_ttl"))
+	return nil
 }
 
 // GetProjectRoot returns the project root directory.

@@ -14,6 +14,26 @@
       "key": "token",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "news_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "media_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -741,6 +761,516 @@
               ]
             },
             "description": "Update invoice status (admin only)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "News",
+      "item": [
+        {
+          "name": "Get News by Slug (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/news/slug/:slug",
+              "host": ["{{base_url}}"],
+              "path": ["news", "slug", ":slug"]
+            },
+            "description": "Get published news article by slug (public endpoint)"
+          }
+        },
+        {
+          "name": "Create News",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('news_id', jsonData.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Breaking News: API Update\",\n  \"content\": \"<p>The Go API Base has been updated with new features including...</p>\",\n  \"excerpt\": \"Summary of the breaking news article\",\n  \"tags\": [\"api\", \"update\", \"news\"],\n  \"metadata\": {\"featured\": true, \"category\": \"technology\"}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/news",
+              "host": ["{{base_url}}"],
+              "path": ["news"]
+            },
+            "description": "Create a new news article (draft status)"
+          }
+        },
+        {
+          "name": "List News",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/news?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["news"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "status",
+                  "value": "published",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List news articles (filtered by ownership for non-admins)"
+          }
+        },
+        {
+          "name": "Get News by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/news/{{news_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["news", "{{news_id}}"]
+            },
+            "description": "Get a news article by ID"
+          }
+        },
+        {
+          "name": "Update News",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated News Title\",\n  \"content\": \"<p>Updated content of the news article...</p>\",\n  \"excerpt\": \"Updated excerpt\",\n  \"status\": \"published\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/news/{{news_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["news", "{{news_id}}"]
+            },
+            "description": "Update a news article"
+          }
+        },
+        {
+          "name": "Delete News",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/news/{{news_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["news", "{{news_id}}"]
+            },
+            "description": "Soft delete a news article"
+          }
+        },
+        {
+          "name": "Update News Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"published\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/news/{{news_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["news", "{{news_id}}", "status"]
+            },
+            "description": "Update news article status (draft, published, archived)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "Upload Media",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('media_id', jsonData.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "File to upload"
+                },
+                {
+                  "key": "collection",
+                  "value": "default",
+                  "type": "text",
+                  "description": "Collection name (optional, default: default)"
+                },
+                {
+                  "key": "custom_properties",
+                  "value": "{\"alt_text\":\"Featured image\",\"source\":\"user-upload\"}",
+                  "type": "text",
+                  "description": "Custom metadata as JSON (optional)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/models/news/{{news_id}}/media",
+              "host": ["{{base_url}}"],
+              "path": ["models", "news", "{{news_id}}", "media"]
+            },
+            "description": "Upload media to a news article (requires news:upload permission)"
+          }
+        },
+        {
+          "name": "List Media for Model",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/models/news/{{news_id}}/media?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["models", "news", "{{news_id}}", "media"],
+              "query": [
+                {
+                  "key": "collection",
+                  "value": "default",
+                  "disabled": true
+                },
+                {
+                  "key": "mime_type",
+                  "value": "image/jpeg",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List all media for a news article (requires news:view permission)"
+          }
+        },
+        {
+          "name": "Get Media Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["media", "{{media_id}}"]
+            },
+            "description": "Get media details by ID (requires media:view permission or owner)"
+          }
+        },
+        {
+          "name": "Update Media Metadata",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"custom_properties\": {\n    \"alt_text\": \"Updated alt text\",\n    \"tags\": [\"updated\", \"media\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["media", "{{media_id}}"]
+            },
+            "description": "Update media custom properties (requires media:manage permission or owner)"
+          }
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["media", "{{media_id}}"]
+            },
+            "description": "Soft delete media (requires media:delete permission or owner)"
+          }
+        },
+        {
+          "name": "Get Media Signed URL",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/media/{{media_id}}/url?expires_in=3600",
+              "host": ["{{base_url}}"],
+              "path": ["media", "{{media_id}}", "url"],
+              "query": [
+                {
+                  "key": "conversion",
+                  "value": "thumbnail",
+                  "disabled": true
+                },
+                {
+                  "key": "expires_in",
+                  "value": "3600"
+                }
+              ]
+            },
+            "description": "Get a signed download URL for media (requires media:download permission or owner)"
+          }
+        },
+        {
+          "name": "Download Media",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/media/{{media_id}}/download",
+              "host": ["{{base_url}}"],
+              "path": ["media", "{{media_id}}", "download"],
+              "query": [
+                {
+                  "key": "conversion",
+                  "value": "thumbnail",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Download media directly (supports signed URLs without auth)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Media",
+      "item": [
+        {
+          "name": "List All Media (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/media?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "media"],
+              "query": [
+                {
+                  "key": "model_type",
+                  "value": "news",
+                  "disabled": true
+                },
+                {
+                  "key": "model_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "include_deleted",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List all media with filters (requires media:admin permission)"
+          }
+        },
+        {
+          "name": "Media Cleanup (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "cutoff_hours",
+                  "value": "24",
+                  "type": "text",
+                  "description": "Delete media older than this many hours"
+                },
+                {
+                  "key": "dry_run",
+                  "value": "true",
+                  "type": "text",
+                  "description": "If true, only report what would be deleted"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/media/cleanup",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "media", "cleanup"]
+            },
+            "description": "Clean up orphaned or deleted media (requires media:admin permission)"
+          }
+        },
+        {
+          "name": "Storage Stats (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/media/stats",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "media", "stats"],
+              "query": [
+                {
+                  "key": "model_type",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "groupby",
+                  "value": "model_type",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get storage statistics (requires media:admin permission)"
           }
         }
       ]

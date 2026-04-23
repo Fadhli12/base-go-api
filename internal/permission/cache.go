@@ -5,17 +5,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/example/go-api-base/internal/cache"
 )
 
 // CacheKeyPrefix is the prefix for all permission cache keys.
 const CacheKeyPrefix = "perm:"
 
-// Cache provides Redis-based caching for permission decisions.
+// Cache provides cache-based caching for permission decisions.
 type Cache struct {
-	client *redis.Client
+	driver cache.Driver
 	ttl    time.Duration
 }
 
@@ -24,17 +25,17 @@ type Cache struct {
 //
 // Performance Note:
 //   - Expected latency: <10ms p99 for permission check operations
-//   - Redis GET/SET operations are O(1) time complexity
-//   - Cache invalidation uses SCAN (non-blocking) to avoid production impact
+//   - Cache GET/SET operations are O(1) time complexity
+//   - Cache invalidation uses driver-specific Clear for bulk operations
 //   - Recommended TTL: 5 minutes (default) - balances security and performance
-//     - Shorter TTL = more DB queries but faster permission propagation
-//     - Longer TTL = fewer DB queries but slower permission propagation
-func NewCache(client *redis.Client, ttl time.Duration) *Cache {
+//   - Shorter TTL = more DB queries but faster permission propagation
+//   - Longer TTL = fewer DB queries but slower permission propagation
+func NewCache(driver cache.Driver, ttl time.Duration) *Cache {
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
 	return &Cache{
-		client: client,
+		driver: driver,
 		ttl:    ttl,
 	}
 }
@@ -42,17 +43,18 @@ func NewCache(client *redis.Client, ttl time.Duration) *Cache {
 // Get retrieves a cached permission decision.
 // Returns the decision and true if found, false and error if not found or on error.
 func (c *Cache) Get(ctx context.Context, key string) (bool, error) {
-	result, err := c.client.Get(ctx, key).Result()
+	result, err := c.driver.Get(ctx, key)
 	if err != nil {
-		if err == redis.Nil {
-			// Cache miss
-			return false, nil
-		}
 		return false, fmt.Errorf("failed to get cached permission: %w", err)
 	}
 
+	if result == nil {
+		// Cache miss
+		return false, nil
+	}
+
 	// Parse the result
-	allowed := result == "1"
+	allowed := string(result) == "1"
 	return allowed, nil
 }
 
@@ -65,7 +67,8 @@ func (c *Cache) Set(ctx context.Context, key string, allowed bool) error {
 		value = "0"
 	}
 
-	if err := c.client.Set(ctx, key, value, c.ttl).Err(); err != nil {
+	ttlSeconds := int(c.ttl.Seconds())
+	if err := c.driver.Set(ctx, key, []byte(value), ttlSeconds); err != nil {
 		return fmt.Errorf("failed to cache permission: %w", err)
 	}
 
@@ -79,7 +82,7 @@ func (c *Cache) Set(ctx context.Context, key string, allowed bool) error {
 
 // Invalidate removes a specific cached permission decision.
 func (c *Cache) Invalidate(ctx context.Context, key string) error {
-	if err := c.client.Del(ctx, key).Err(); err != nil {
+	if err := c.driver.Delete(ctx, key); err != nil {
 		return fmt.Errorf("failed to invalidate cached permission: %w", err)
 	}
 	slog.Debug("Permission cache invalidated", "key", key)
@@ -87,37 +90,15 @@ func (c *Cache) Invalidate(ctx context.Context, key string) error {
 }
 
 // InvalidateAll removes all permission cache entries.
-// Uses SCAN to avoid blocking on large keyspaces.
+// Uses driver-specific Clear method for bulk deletion.
 func (c *Cache) InvalidateAll(ctx context.Context) error {
 	pattern := CacheKeyPrefix + "*"
-	var cursor uint64
-	var deletedCount int64
 
-	for {
-		// Scan for keys matching the pattern
-		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
-		if err != nil {
-			return fmt.Errorf("failed to scan permission cache keys: %w", err)
-		}
-
-		// Delete found keys
-		if len(keys) > 0 {
-			deleted, err := c.client.Del(ctx, keys...).Result()
-			if err != nil {
-				return fmt.Errorf("failed to delete permission cache keys: %w", err)
-			}
-			deletedCount += deleted
-		}
-
-		// Move to next cursor
-		cursor = nextCursor
-		if cursor == 0 {
-			break
-		}
+	if err := c.driver.Clear(ctx, pattern); err != nil {
+		return fmt.Errorf("failed to clear permission cache: %w", err)
 	}
 
 	slog.Info("Permission cache invalidated",
-		"deleted_count", deletedCount,
 		"pattern", pattern)
 
 	return nil
@@ -127,32 +108,14 @@ func (c *Cache) InvalidateAll(ctx context.Context) error {
 // This is useful when user roles or permissions are changed.
 func (c *Cache) InvalidateForUser(ctx context.Context, userID string) error {
 	pattern := CacheKeyPrefix + userID + ":*"
-	var cursor uint64
-	var deletedCount int64
 
-	for {
-		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
-		if err != nil {
-			return fmt.Errorf("failed to scan user permission cache keys: %w", err)
-		}
-
-		if len(keys) > 0 {
-			deleted, err := c.client.Del(ctx, keys...).Result()
-			if err != nil {
-				return fmt.Errorf("failed to delete user permission cache keys: %w", err)
-			}
-			deletedCount += deleted
-		}
-
-		cursor = nextCursor
-		if cursor == 0 {
-			break
-		}
+	if err := c.driver.Clear(ctx, pattern); err != nil {
+		return fmt.Errorf("failed to clear user permission cache: %w", err)
 	}
 
 	slog.Debug("User permission cache invalidated",
 		"user_id", userID,
-		"deleted_count", deletedCount)
+		"pattern", pattern)
 
 	return nil
 }
@@ -160,32 +123,14 @@ func (c *Cache) InvalidateForUser(ctx context.Context, userID string) error {
 // InvalidateForDomain invalidates all cached permissions for a specific domain/tenant.
 func (c *Cache) InvalidateForDomain(ctx context.Context, domain string) error {
 	pattern := CacheKeyPrefix + "*:" + domain + ":*"
-	var cursor uint64
-	var deletedCount int64
 
-	for {
-		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
-		if err != nil {
-			return fmt.Errorf("failed to scan domain permission cache keys: %w", err)
-		}
-
-		if len(keys) > 0 {
-			deleted, err := c.client.Del(ctx, keys...).Result()
-			if err != nil {
-				return fmt.Errorf("failed to delete domain permission cache keys: %w", err)
-			}
-			deletedCount += deleted
-		}
-
-		cursor = nextCursor
-		if cursor == 0 {
-			break
-		}
+	if err := c.driver.Clear(ctx, pattern); err != nil {
+		return fmt.Errorf("failed to clear domain permission cache: %w", err)
 	}
 
 	slog.Debug("Domain permission cache invalidated",
 		"domain", domain,
-		"deleted_count", deletedCount)
+		"pattern", pattern)
 
 	return nil
 }
@@ -207,7 +152,16 @@ func (c *Cache) SetTTL(ttl time.Duration) {
 	}
 }
 
-// Client returns the underlying Redis client.
-func (c *Cache) Client() *redis.Client {
-	return c.client
+// Driver returns the underlying cache driver.
+func (c *Cache) Driver() cache.Driver {
+	return c.driver
+}
+
+// Helper function to parse TTL from Redis driver
+func parseTTL(val []byte) (time.Duration, error) {
+	seconds, err := strconv.Atoi(string(val))
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(seconds) * time.Second, nil
 }

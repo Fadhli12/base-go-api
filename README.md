@@ -108,6 +108,29 @@ go-api-base/
 
 See `.env.example` for full configuration options.
 
+## Dynamic Configuration
+
+This project supports dynamic configuration via environment variables. Copy `.env.example` to `.env` and configure:
+
+### Storage Configuration
+- `STORAGE_DRIVER` - Storage backend: `local`, `s3`, or `minio`
+- `STORAGE_LOCAL_PATH` - Local storage path (default: ./storage/uploads)
+- `STORAGE_BASE_URL` - Public URL for storage (default: http://localhost:8080/storage)
+- S3/MinIO: Set `STORAGE_S3_BUCKET`, `STORAGE_S3_ACCESS_KEY`, `STORAGE_S3_SECRET_KEY`
+
+### Image Compression
+- `IMAGE_COMPRESSION_ENABLED` - Enable/disable compression (default: true)
+- `IMAGE_COMPRESSION_THUMBNAIL_QUALITY` - Thumbnail quality 1-100 (default: 85)
+- `IMAGE_COMPRESSION_THUMBNAIL_WIDTH/HEIGHT` - Thumbnail dimensions (default: 300x300)
+
+### Cache Configuration
+- `CACHE_DRIVER` - Cache backend: `redis`, `memory`, or `none`
+- `CACHE_PERMISSION_TTL` - Permission cache TTL in seconds (default: 300)
+
+### Swagger
+- `SWAGGER_ENABLED` - Enable Swagger UI (default: true)
+- `SWAGGER_PATH` - Path for Swagger UI (default: /swagger)
+
 ## Available Make Commands
 
 ```bash

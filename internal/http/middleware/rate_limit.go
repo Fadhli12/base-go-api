@@ -5,38 +5,42 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
+	"github.com/example/go-api-base/internal/cache"
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 )
 
 const (
 	// DefaultRequestsPerMinute is the default rate limit
 	DefaultRequestsPerMinute = 100
-	// RateLimitWindow is the time window for rate limiting
-	RateLimitWindow = 60 * time.Second
-	// RateLimitKeyPrefix is the Redis key prefix for rate limiting
+	// RateLimitWindow is the time window for rate limiting in seconds
+	RateLimitWindow = 60
+	// RateLimitKeyPrefix is the cache key prefix for rate limiting
 	RateLimitKeyPrefix = "ratelimit:"
 	// RateLimitRemainingHeader is the header for remaining requests
 	RateLimitRemainingHeader = "X-RateLimit-Remaining"
 )
 
-// RateLimiter holds the Redis client and rate limit settings
+// RateLimiter holds the cache driver and rate limit settings
 type RateLimiter struct {
-	redisClient        *redis.Client
-	requestsPerMinute  int
+	driver            cache.Driver
+	requestsPerMinute int
+	ttlSeconds        int
 }
 
-// NewRateLimiter creates a new rate limiter
-func NewRateLimiter(redisClient *redis.Client, requestsPerMinute int) *RateLimiter {
+// NewRateLimiter creates a new rate limiter with the given cache driver
+func NewRateLimiter(driver cache.Driver, requestsPerMinute int, ttlSeconds int) *RateLimiter {
 	if requestsPerMinute <= 0 {
 		requestsPerMinute = DefaultRequestsPerMinute
 	}
+	if ttlSeconds <= 0 {
+		ttlSeconds = RateLimitWindow
+	}
 
 	return &RateLimiter{
-		redisClient:       redisClient,
+		driver:            driver,
 		requestsPerMinute: requestsPerMinute,
+		ttlSeconds:        ttlSeconds,
 	}
 }
 
@@ -44,18 +48,29 @@ func NewRateLimiter(redisClient *redis.Client, requestsPerMinute int) *RateLimit
 func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// For no-op cache, allow all requests through (fail open)
+			if rl.driver == nil {
+				return next(c)
+			}
+
 			clientIP := c.RealIP()
 			key := fmt.Sprintf("%s%s", RateLimitKeyPrefix, clientIP)
+			ctx := c.Request().Context()
 
 			// Get current count
-			ctx := c.Request().Context()
-			count, err := rl.redisClient.Get(ctx, key).Int()
-			if err == redis.Nil {
-				count = 0
-			} else if err != nil {
-				slog.Error("rate limit redis error", slog.String("error", err.Error()))
-				// Fail open - allow request through on Redis error
+			count := 0
+			val, err := rl.driver.Get(ctx, key)
+			if err != nil {
+				slog.Error("rate limit cache error", slog.String("error", err.Error()))
+				// Fail open - allow request through on cache error
 				return next(c)
+			}
+
+			if val != nil {
+				parsed, err := strconv.Atoi(string(val))
+				if err == nil {
+					count = parsed
+				}
 			}
 
 			// Check if limit exceeded
@@ -70,24 +85,16 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 				})
 			}
 
-			// Increment counter and set TTL if new
-			pipe := rl.redisClient.Pipeline()
-			pipe.Incr(ctx, key)
-			pipe.TTL(ctx, key)
-			results, err := pipe.Exec(ctx)
-			if err != nil {
-				slog.Error("rate limit pipeline error", slog.String("error", err.Error()))
-			} else {
-				// Set expiry if this is the first request (TTL will be -1)
-				ttlCmd := results[1].(*redis.Cmd)
-				ttl, _ := ttlCmd.Result()
-				if ttl == -1 {
-					rl.redisClient.Expire(ctx, key, RateLimitWindow)
-				}
+			// Increment counter
+			newCount := count + 1
+			if err := rl.driver.Set(ctx, key, []byte(strconv.Itoa(newCount)), rl.ttlSeconds); err != nil {
+				slog.Error("rate limit set error", slog.String("error", err.Error()))
+				// Fail open - allow request through
+				return next(c)
 			}
 
 			// Calculate remaining
-			remaining := rl.requestsPerMinute - count - 1
+			remaining := rl.requestsPerMinute - newCount
 			if remaining < 0 {
 				remaining = 0
 			}
@@ -99,6 +106,12 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 }
 
 // RateLimit returns a rate limiting middleware with default settings
-func RateLimit(redisClient *redis.Client) echo.MiddlewareFunc {
-	return NewRateLimiter(redisClient, DefaultRequestsPerMinute).Middleware()
+// This function is kept for backward compatibility but now requires a cache driver
+func RateLimit(driver cache.Driver) echo.MiddlewareFunc {
+	return NewRateLimiter(driver, DefaultRequestsPerMinute, RateLimitWindow).Middleware()
+}
+
+// RateLimitWithConfig returns a rate limiting middleware with custom configuration
+func RateLimitWithConfig(driver cache.Driver, requestsPerMinute int, ttlSeconds int) echo.MiddlewareFunc {
+	return NewRateLimiter(driver, requestsPerMinute, ttlSeconds).Middleware()
 }
