@@ -23,20 +23,51 @@
     ],
     "frameworks": [],
     "packageManager": "go",
-    "runtime": null
+    "runtime": null,
+    "auth": "JWT + Casbin RBAC + API Key (new)",
+    "cache": "Redis",
+    "database": "PostgreSQL + GORM",
+    "framework": "Echo v4",
+    "language": "Go 1.22+"
   },
   "build": {
     "buildCommand": "make build",
     "testCommand": "make test",
     "lintCommand": null,
     "devCommand": null,
-    "scripts": {}
+    "scripts": {},
+    "commands": {
+      "lint": "make lint",
+      "migrate": "make migrate",
+      "seed": "make seed",
+      "serve": "make serve",
+      "test": "make test",
+      "testIntegration": "make test-integration"
+    },
+    "structures": [
+      "cmd/api/main.go - Entry point",
+      "internal/http/ - HTTP layer",
+      "internal/service/ - Business logic",
+      "internal/repository/ - Data access",
+      "internal/module/ - Domain modules",
+      "internal/permission/ - Casbin RBAC"
+    ]
   },
   "conventions": {
     "namingStyle": null,
     "importStyle": null,
     "testPattern": null,
-    "fileOrganization": null
+    "fileOrganization": null,
+    "entityPattern": "UUID primary key + soft delete (gorm.DeletedAt) + ToResponse()",
+    "handlerPattern": "Parse → Validate → Service → Map errors → Response envelope",
+    "repositoryPattern": "Context-first parameter, GORM with soft delete scopes",
+    "responseFormat": "Envelope{data, error, meta} with request_id and timestamp",
+    "servicePattern": "Business logic + permission checks + audit logging",
+    "apiKeyFormat": "ak_{env}_{random32} - Generated keys with prefix for identification",
+    "lastUsedAt": "Atomic UPDATE, skip if updated within 1 minute to avoid race conditions",
+    "migrationNumber": "000005_api_keys (after news 000003 and media 000004)",
+    "scopeFormat": "resource:action or resource:write (covers create/update/delete)",
+    "scopeValidation": "Validate at creation time against user permissions, check at request time"
   },
   "structure": {
     "isMonorepo": false,
@@ -49,7 +80,10 @@
     "gitBranches": {
       "defaultBranch": "master",
       "branchingStrategy": null
-    }
+    },
+    "migrations": "migrations/{N}_name.up.sql + {N}_name.down.sql",
+    "modules": "internal/module/{module}/ - entity.go, service.go, repository.go, handler.go",
+    "tests": "tests/unit/ and tests/integration/ with testcontainers"
   },
   "customNotes": [
     {
@@ -163,5 +197,19 @@
     }
   },
   "hotPaths": [],
-  "userDirectives": []
+  "userDirectives": [],
+  "notes": [
+    "Permission scope: resource:action with optional 'own' scope",
+    "Audit: Before/after JSONB for mutations",
+    "Storage: Factory pattern (local, S3, MinIO)",
+    "Cache: Driver interface (redis, memory, none)",
+    "Dynamic config: Environment-based configuration",
+    "FEATURE_RECOMMENDATIONS.md created - comprehensive catalog of buildable features",
+    "API Key Auth plan reviewed by Momus (Plan Critic)",
+    "Key: atomic last_used_at update to prevent race conditions",
+    "Key: scope validation flow documented in research.md",
+    "Key: 000005 migration number (after news/media)",
+    "Key: test case examples added to plan.md",
+    "Next: Generate tasks with /speckit.tasks"
+  ]
 }
