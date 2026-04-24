@@ -1,6 +1,12 @@
 # Go API Base - Agent Instructions
 
-**Generated:** 2026-04-23 | **Commit:** HEAD | **Branch:** 002-api-key-auth
+**Generated:** 2026-04-24 | **Commit:** HEAD | **Branch:** 003-organization-support
+
+---
+
+<!-- SPECKIT START -->
+**Current Feature**: [specs/go-api-base/plan.md](specs/go-api-base/plan.md) - Team/Organization Support
+<!-- SPECKIT END -->
 
 ---
 
@@ -174,37 +180,73 @@ From `.specify/memory/constitution.md`:
 | Integration tests timeout | `-timeout 10m` |
 | Missing JWT_SECRET | Set in `.env` (32+ chars) |
 
-## FILES
+## ORGANIZATION FEATURE
 
-- **Migrations**: `migrations/000001_init.up.sql`, `migrations/000002_audit_logs.up.sql`
-- **Config**: `.env.example` → copy to `.env`
-- **Constitution**: `.specify/memory/constitution.md`
-- **Implementation**: `IMPLEMENTATION_PLAN.md` (10 phases)
-- **Specs**: `specs/go-api-base/`
-- **Config Docs**: `docs/configuration.md`
-- **Current Feature**: `specs/go-api-base/plan.md` - Dynamic Configuration (storage, image, cache, swagger)
+### Multi-tenant RBAC with Organization Scoping
 
-## CURRENT FEATURE
+The organization feature adds team/organization support with Casbin domain-based permissions.
 
-### Branch: `001-dynamic-config`
+**Key Components:**
+- **Domain Entities**: `internal/domain/organization.go`, `internal/domain/organization_member.go`
+- **Repository**: `internal/repository/organization.go` - CRUD operations with soft delete
+- **Service**: `internal/service/organization.go` - Business logic, permission checks, audit logging
+- **Handler**: `internal/http/handler/organization.go` - HTTP endpoints with validation
+- **Middleware**: `internal/http/middleware/organization.go` - X-Organization-ID context extraction
+- **Migrations**: `migrations/000006_organizations.up.sql` - Organizations and members tables
 
-**Dynamic Configuration System** - Runtime-configurable subsystems via environment variables.
+**Casbin Domain Model:**
+```go
+// Organization ID as domain parameter
+enforcer.Enforce(userID, orgID, "organization", "view")
 
-**Modules:**
-- **Storage**: `internal/storage/` - Local, S3, MinIO backends
-- **Image Compression**: `internal/conversion/config.go` - Configurable quality/dimensions
-- **Cache**: `internal/cache/` - Redis, memory, none drivers
-- **Swagger**: `internal/http/server.go` - Toggle Swagger UI
+// Role assignments by organization
+g = _, _, _  // role with domain
+r = sub, dom, obj, act  // request with domain
+p = sub, dom, obj, act  // policy with domain
+```
 
-**Files Changed:**
-- `internal/config/*.go` - Config structs for all subsystems
-- `internal/storage/*.go` - Storage factory pattern
-- `internal/cache/*.go` - Cache driver interface
-- `internal/conversion/config.go` - Image compression config
-- `.env.example` - All new config variables
-- `docs/configuration.md` - Detailed configuration guide
+**Usage Pattern:**
+```go
+// Extract org context from header
+orgID, ok := middleware.GetOrganizationID(c)
+if !ok {
+    // No org context - treat as global (backward compatible)
+    orgID = uuid.Nil
+}
 
-**Default Behavior:**
-- All configs match existing hardcoded values (backward compatible)
-- Existing `.env` files work without modification
-- No mandatory variables for local storage (uses defaults)
+// Permission check with domain
+allowed, err := enforcer.Enforce(userID.String(), orgID.String(), "organization", "manage")
+
+// Repository scoping (future)
+query := r.db.WithContext(ctx)
+if orgID != uuid.Nil {
+    query = query.Where("organization_id = ?", orgID)
+}
+```
+
+**Organization Roles:**
+- `owner` - Full organization access (manage, invite, remove)
+- `admin` - Management access (manage, invite)
+- `member` - View access only
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/organizations` | Create organization |
+| GET | `/api/v1/organizations` | List organizations |
+| GET | `/api/v1/organizations/:id` | Get organization by ID |
+| PUT | `/api/v1/organizations/:id` | Update organization |
+| DELETE | `/api/v1/organizations/:id` | Delete organization |
+| POST | `/api/v1/organizations/:id/members` | Add member |
+| GET | `/api/v1/organizations/:id/members` | List members |
+| DELETE | `/api/v1/organizations/:id/members/:user_id` | Remove member |
+
+**Middleware Chain:**
+1. JWT authentication (required for all org endpoints)
+2. X-Organization-ID extraction (optional, for resource scoping)
+3. Permission check (in service layer)
+
+**Backward Compatibility:**
+- Organization context is optional (NULL = global resources)
+- X-Organization-ID header is not required for global context
+- Existing resources remain accessible without organization scoping

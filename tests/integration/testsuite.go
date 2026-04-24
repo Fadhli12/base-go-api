@@ -132,10 +132,12 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 		"user_permissions",
 		"role_permissions",
 		"user_roles",
+		"organization_members",
 		"refresh_tokens",
 		"audit_logs",
 		"news",
 		"invoices",
+		"organizations",
 		"permissions",
 		"roles",
 		"users",
@@ -390,6 +392,69 @@ CREATE TRIGGER update_news_updated_at BEFORE UPDATE ON news
 
 	result = s.DB.Exec(migration003)
 	require.NoError(t, result.Error, "Failed to run migration 000003")
+
+	// Migration 000006: Organizations and organization_members
+	migration006 := `
+-- Create organizations table
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    settings JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Create organization_members table
+CREATE TABLE IF NOT EXISTS organization_members (
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+    joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    PRIMARY KEY (organization_id, user_id)
+);
+
+-- Create indexes for organizations table
+CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
+CREATE INDEX IF NOT EXISTS idx_organizations_owner_id ON organizations(owner_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_deleted_at ON organizations(deleted_at) 
+    WHERE deleted_at IS NOT NULL;
+
+-- Create indexes for organization_members table
+CREATE INDEX IF NOT EXISTS idx_organization_members_user_id ON organization_members(user_id);
+
+-- Add trigger for organizations updated_at
+CREATE TRIGGER update_organizations_updated_at 
+    BEFORE UPDATE ON organizations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+`
+
+	result = s.DB.Exec(migration006)
+	require.NoError(t, result.Error, "Failed to run migration 000006")
+
+	// Create casbin_rule table for permission testing
+	migrationCasbin := `
+CREATE TABLE IF NOT EXISTS casbin_rule (
+    id SERIAL PRIMARY KEY,
+    ptype VARCHAR(255) NOT NULL,
+    v0 VARCHAR(255),
+    v1 VARCHAR(255),
+    v2 VARCHAR(255),
+    v3 VARCHAR(255),
+    v4 VARCHAR(255),
+    v5 VARCHAR(255)
+);
+
+CREATE INDEX IF NOT EXISTS idx_casbin_rule_ptype ON casbin_rule(ptype);
+CREATE INDEX IF NOT EXISTS idx_casbin_rule_v0 ON casbin_rule(v0);
+CREATE INDEX IF NOT EXISTS idx_casbin_rule_v1 ON casbin_rule(v1);
+CREATE INDEX IF NOT EXISTS idx_casbin_rule_v2 ON casbin_rule(v2);
+`
+
+	result = s.DB.Exec(migrationCasbin)
+	require.NoError(t, result.Error, "Failed to create casbin_rule table")
 
 	t.Logf("Migrations completed successfully")
 }

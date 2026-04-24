@@ -69,7 +69,8 @@ var seedCmd = &cobra.Command{
 - SuperAdmin role (system role with all permissions)
 - Admin role (system role with management permissions)  
 - Viewer role (system role with read-only permissions)
-- Default permissions for users, roles, permissions, and invoices`,
+- Organization roles: owner, org_admin, member
+- Default permissions for users, roles, permissions, invoices, organizations`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSeed()
 	},
@@ -576,6 +577,12 @@ func runSeed() error {
 		{"api_keys:view", "api_keys", "view", "own", "View own API keys", false},
 		{"api_keys:revoke", "api_keys", "revoke", "own", "Revoke own API keys", false},
 		{"api_keys:manage", "api_keys", "manage", "all", "Manage all API keys", false},
+
+		// Organization permissions
+		{"organization:view", "organizations", "view", "all", "View organization details", false},
+		{"organization:manage", "organizations", "manage", "all", "Manage organization settings", false},
+		{"organization:invite", "organizations", "invite", "all", "Invite members to organization", false},
+		{"organization:remove", "organizations", "remove", "all", "Remove members from organization", false},
 	}
 
 	slog.Info("Seeding permissions", "count", len(permissions))
@@ -604,6 +611,10 @@ func runSeed() error {
 		{"superadmin", "Super Administrator with full system access", true},
 		{"admin", "Administrator with management access", true},
 		{"viewer", "Read-only access viewer", true},
+		// Organization roles
+		{"owner", "Organization owner with full organization access", false},
+		{"org_admin", "Organization admin with management permissions", false},
+		{"member", "Organization member with view access", false},
 	}
 
 	slog.Info("Seeding roles", "count", len(roles))
@@ -624,7 +635,7 @@ func runSeed() error {
 	}
 
 	// Get role IDs for role-permission assignment
-	var superadminRoleID, adminRoleID, viewerRoleID string
+	var superadminRoleID, adminRoleID, viewerRoleID, ownerRoleID, orgAdminRoleID, memberRoleID string
 	err = sqlDB.QueryRow(`SELECT id FROM roles WHERE name = 'superadmin'`).Scan(&superadminRoleID)
 	if err != nil {
 		return fmt.Errorf("failed to get superadmin role ID: %w", err)
@@ -636,6 +647,18 @@ func runSeed() error {
 	err = sqlDB.QueryRow(`SELECT id FROM roles WHERE name = 'viewer'`).Scan(&viewerRoleID)
 	if err != nil {
 		return fmt.Errorf("failed to get viewer role ID: %w", err)
+	}
+	err = sqlDB.QueryRow(`SELECT id FROM roles WHERE name = 'owner'`).Scan(&ownerRoleID)
+	if err != nil {
+		return fmt.Errorf("failed to get owner role ID: %w", err)
+	}
+	err = sqlDB.QueryRow(`SELECT id FROM roles WHERE name = 'org_admin'`).Scan(&orgAdminRoleID)
+	if err != nil {
+		return fmt.Errorf("failed to get org_admin role ID: %w", err)
+	}
+	err = sqlDB.QueryRow(`SELECT id FROM roles WHERE name = 'member'`).Scan(&memberRoleID)
+	if err != nil {
+		return fmt.Errorf("failed to get member role ID: %w", err)
 	}
 
 	// Get permission IDs
@@ -709,6 +732,56 @@ func runSeed() error {
 		}
 	}
 
+	// Organization permission names (for role assignment)
+	orgViewPerms := []string{"organization:view"}
+	orgManagePerms := []string{"organization:view", "organization:manage", "organization:invite"}
+	orgAllPerms := []string{"organization:view", "organization:manage", "organization:invite", "organization:remove"}
+
+	// Assign all organization permissions to owner
+	slog.Info("Assigning permissions to owner role")
+	for _, permName := range orgAllPerms {
+		if permID, ok := permissionIDs[permName]; ok {
+			_, err := sqlDB.Exec(`
+				INSERT INTO role_permissions (role_id, permission_id, assigned_at)
+				VALUES ($1, $2, NOW())
+				ON CONFLICT DO NOTHING
+			`, ownerRoleID, permID)
+			if err != nil {
+				slog.Debug("Permission already assigned or failed", "permission", permName, "error", err)
+			}
+		}
+	}
+
+	// Assign view, manage, invite to org_admin
+	slog.Info("Assigning permissions to org_admin role")
+	for _, permName := range orgManagePerms {
+		if permID, ok := permissionIDs[permName]; ok {
+			_, err := sqlDB.Exec(`
+				INSERT INTO role_permissions (role_id, permission_id, assigned_at)
+				VALUES ($1, $2, NOW())
+				ON CONFLICT DO NOTHING
+			`, orgAdminRoleID, permID)
+			if err != nil {
+				slog.Debug("Permission already assigned or failed", "permission", permName, "error", err)
+			}
+		}
+	}
+
+	// Assign view only to member
+	slog.Info("Assigning permissions to member role")
+	for _, permName := range orgViewPerms {
+		if permID, ok := permissionIDs[permName]; ok {
+			_, err := sqlDB.Exec(`
+				INSERT INTO role_permissions (role_id, permission_id, assigned_at)
+				VALUES ($1, $2, NOW())
+				ON CONFLICT DO NOTHING
+			`, memberRoleID, permID)
+			if err != nil {
+				slog.Debug("Permission already assigned or failed", "permission", permName, "error", err)
+			}
+		}
+	}
+
 	// Initialize Casbin enforcer to sync policies
 	enforcer, err := permission.NewEnforcer(db)
 	if err != nil {
@@ -740,6 +813,34 @@ func runSeed() error {
 		if p := findPermission(permissions, permName); p != nil {
 			if err := enforcer.AddPolicy("viewer", domain, p.Resource, p.Action); err != nil {
 				slog.Debug("Policy exists or failed", "role", "viewer", "resource", p.Resource, "action", p.Action)
+			}
+		}
+	}
+
+	// Organization roles - sync to Casbin
+	// Owner - all organization permissions
+	for _, permName := range orgAllPerms {
+		if p := findPermission(permissions, permName); p != nil {
+			if err := enforcer.AddPolicy("owner", domain, p.Resource, p.Action); err != nil {
+				slog.Debug("Policy exists or failed", "role", "owner", "resource", p.Resource, "action", p.Action)
+			}
+		}
+	}
+
+	// Org admin - view, manage, invite
+	for _, permName := range orgManagePerms {
+		if p := findPermission(permissions, permName); p != nil {
+			if err := enforcer.AddPolicy("org_admin", domain, p.Resource, p.Action); err != nil {
+				slog.Debug("Policy exists or failed", "role", "org_admin", "resource", p.Resource, "action", p.Action)
+			}
+		}
+	}
+
+	// Member - view only
+	for _, permName := range orgViewPerms {
+		if p := findPermission(permissions, permName); p != nil {
+			if err := enforcer.AddPolicy("member", domain, p.Resource, p.Action); err != nil {
+				slog.Debug("Policy exists or failed", "role", "member", "resource", p.Resource, "action", p.Action)
 			}
 		}
 	}

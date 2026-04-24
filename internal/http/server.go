@@ -252,6 +252,7 @@ func (s *Server) RegisterRoutes() {
 	auditLogRepo := repository.NewAuditLogRepository(s.db)
 	mediaRepo := repository.NewMediaRepository(s.db)
 	apiKeyRepo := repository.NewAPIKeyRepository(s.db)
+	organizationRepo := repository.NewOrganizationRepository(s.db)
 
 	// Initialize services
 	tokenService := service.NewTokenService(s.config.JWT.Secret, s.config.JWT.AccessExpiry, s.config.JWT.RefreshExpiry)
@@ -264,6 +265,9 @@ func (s *Server) RegisterRoutes() {
 	// Initialize audit service with async processing
 	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
 	s.SetAuditService(auditService)
+	
+	// Initialize organization service
+	orgService := service.NewOrganizationService(organizationRepo, s.enforcer, auditService, slog.Default())
 
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
@@ -292,6 +296,7 @@ func (s *Server) RegisterRoutes() {
 	userHandler := handler.NewUserHandler(userService)
 	permissionHandler := handler.NewPermissionHandler(permissionService)
 	roleHandler := handler.NewRoleHandler(roleService)
+	orgHandler := handler.NewOrganizationHandler(orgService)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)
@@ -352,6 +357,9 @@ func (s *Server) RegisterRoutes() {
 
 	// User admin routes
 	s.RegisterUserRoutes(v1, userHandler)
+
+	// Organization routes
+	s.RegisterOrganizationRoutes(v1, orgHandler)
 }
 
 // RegisterPermissionRoutes registers permission-related routes
@@ -507,6 +515,36 @@ func (s *Server) RegisterInvoiceRoutes(api *echo.Group, invoiceHandler *invoice.
 	invoices.GET("/:id", invoiceHandler.GetByID)   // invoice:view checked via ownership
 	invoices.PUT("/:id", invoiceHandler.Update)    // invoice:update checked via ownership
 	invoices.DELETE("/:id", invoiceHandler.Delete) // invoice:delete checked via ownership
+}
+
+// RegisterOrganizationRoutes registers organization-related routes
+// Requires JWT authentication. Write operations require specific permissions.
+func (s *Server) RegisterOrganizationRoutes(api *echo.Group, orgHandler *handler.OrganizationHandler) {
+	orgs := api.Group("/organizations")
+
+	// All organization routes require JWT authentication
+	orgs.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// Apply audit middleware to mutating routes
+	if s.auditSvc != nil {
+		orgs.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	// CRUD routes - permission checks handled in handler (organization scope)
+	orgs.POST("", orgHandler.Create)                       // Create organization (auth required)
+	orgs.GET("", orgHandler.List)                          // List user's organizations (auth required)
+	orgs.GET("/:id", orgHandler.GetByID)                   // Get organization (auth + membership check)
+	orgs.PUT("/:id", orgHandler.Update)                    // Update organization (auth + manage permission)
+	orgs.DELETE("/:id", orgHandler.Delete)                 // Delete organization (auth + manage permission)
+	orgs.POST("/:id/members", orgHandler.AddMember)        // Add member (auth + invite permission)
+	orgs.GET("/:id/members", orgHandler.GetMembers)         // Get members (auth + membership check)
+	orgs.DELETE("/:id/members/:user_id", orgHandler.RemoveMember) // Remove member (auth + remove permission)
 }
 
 // HealthCheck performs health checks on dependencies
