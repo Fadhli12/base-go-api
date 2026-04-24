@@ -90,6 +90,7 @@ type AuthService struct {
 	tokenRepo      repository.RefreshTokenRepository
 	tokenService   *TokenService
 	passwordHasher PasswordHasher
+	emailService   *EmailService // Email service for transactional emails
 }
 
 // NewAuthService creates a new AuthService instance
@@ -98,12 +99,14 @@ func NewAuthService(
 	tokenRepo repository.RefreshTokenRepository,
 	tokenService *TokenService,
 	passwordHasher PasswordHasher,
+	emailService *EmailService,
 ) *AuthService {
 	return &AuthService{
 		userRepo:       userRepo,
 		tokenRepo:      tokenRepo,
 		tokenService:   tokenService,
 		passwordHasher: passwordHasher,
+		emailService:   emailService,
 	}
 }
 
@@ -132,6 +135,26 @@ func (s *AuthService) Register(ctx context.Context, req *request.RegisterRequest
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
+	}
+
+	// Queue welcome email (non-blocking, fire-and-forget)
+	// Email failures should NOT block registration
+	if s.emailService != nil {
+		go func() {
+			bgCtx := context.Background()
+			err := s.emailService.QueueEmail(bgCtx, &EmailRequest{
+				To:       user.Email,
+				Template: "welcome",
+				Data: map[string]any{
+					"UserEmail": user.Email,
+					"UserID":    user.ID.String(),
+				},
+			})
+			if err != nil {
+				// Log error but don't fail registration
+				// Email delivery is best-effort
+			}
+		}()
 	}
 
 	return user, nil
@@ -247,4 +270,43 @@ func (s *AuthService) Refresh(ctx context.Context, refreshTokenString string) (*
 	}
 
 	return user, accessToken, newRefreshToken, nil
+}
+
+// RequestPasswordReset generates a password reset token and queues a reset email
+func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) (string, error) {
+	// Find user by email
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNotFound) {
+			// Don't reveal if email exists or not - security best practice
+			return "", nil
+		}
+		return "", err
+	}
+
+	// Generate a reset token (for now, using a random string)
+	// In production, this should be a secure token stored in DB with expiry
+	resetTokenBytes := make([]byte, 32)
+	if _, err := rand.Read(resetTokenBytes); err != nil {
+		return "", apperrors.WrapInternal(err)
+	}
+	resetToken := hex.EncodeToString(resetTokenBytes)
+
+	// Queue password reset email
+	if s.emailService != nil {
+		err := s.emailService.QueueEmail(ctx, &EmailRequest{
+			To:       user.Email,
+			Template: "password-reset",
+			Data: map[string]any{
+				"UserEmail":  user.Email,
+				"ResetToken": resetToken,
+				"UserID":     user.ID.String(),
+			},
+		})
+		if err != nil {
+			return "", apperrors.NewAppError("EMAIL_ERROR", "Failed to queue password reset email", 500)
+		}
+	}
+
+	return resetToken, nil
 }

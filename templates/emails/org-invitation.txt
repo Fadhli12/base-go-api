@@ -1,0 +1,18 @@
+You've Been Invited to Join {{.OrgName}}
+
+Hello,
+
+{{.InviterName}} has invited you to join {{.OrgName}} as a {{.Role}}.
+
+Join {{.OrgName}} to collaborate with your team, access shared resources, and stay connected.
+
+Accept your invitation here: {{.AcceptURL}}
+
+This invitation will expire in {{.ExpiresIn}}.
+
+If you already have an account, you'll be signed in automatically. If not, you'll be prompted to create one.
+
+If you were not expecting this invitation, you can safely ignore this email.
+
+Best regards,
+The {{.AppName}} Team

@@ -2,11 +2,11 @@ package unit
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/service"
+	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -87,7 +87,7 @@ func TestRoleService_Create_Success(t *testing.T) {
 	permRepo := new(MockPermissionRepository)
 
 	// Mock FindByName to return not found (role doesn't exist)
-	roleRepo.On("FindByName", ctx, "admin").Return(nil, errors.ErrNotFound)
+	roleRepo.On("FindByName", ctx, "admin").Return(nil, apperrors.ErrNotFound)
 
 	// Mock Create to succeed
 	roleRepo.On("Create", ctx, mock.AnythingOfType("*domain.Role")).Return(nil)

@@ -1,11 +1,11 @@
 # Go API Base - Agent Instructions
 
-**Generated:** 2026-04-24 | **Commit:** HEAD | **Branch:** 003-organization-support
+**Generated:** 2026-04-24 | **Commit:** HEAD | **Branch:** 004-email-service
 
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/go-api-base/plan.md](specs/go-api-base/plan.md) - Team/Organization Support
+**Current Feature**: [specs/004-email-service/plan.md](specs/004-email-service/plan.md) - Email Service
 <!-- SPECKIT END -->
 
 ---

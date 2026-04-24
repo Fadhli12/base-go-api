@@ -18,6 +18,7 @@ type OrganizationService struct {
 	repo        repository.OrganizationRepository
 	enforcer    *permission.Enforcer
 	audit       *AuditService
+	emailService *EmailService // Email service for invitation emails
 	log         *slog.Logger
 }
 
@@ -26,12 +27,14 @@ func NewOrganizationService(
 	repo repository.OrganizationRepository,
 	enforcer *permission.Enforcer,
 	audit *AuditService,
+	emailService *EmailService,
 	log *slog.Logger,
 ) *OrganizationService {
 	return &OrganizationService{
 		repo:        repo,
 		enforcer:    enforcer,
 		audit:       audit,
+		emailService: emailService,
 		log:         log,
 	}
 }
@@ -323,7 +326,8 @@ func (s *OrganizationService) AddMember(
 	}
 
 	// 3. Check if organization exists
-	if _, err := s.repo.FindByID(ctx, orgID); err != nil {
+	org, err := s.repo.FindByID(ctx, orgID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -365,6 +369,32 @@ func (s *OrganizationService) AddMember(
 
 	// 7. Audit log
 	s.audit.LogAction(ctx, userID, domain.AuditActionCreate, "organization_member", newMemberID.String(), nil, member, ipAddress, userAgent)
+
+	// 8. Send invitation email (non-blocking, fire-and-forget)
+	if s.emailService != nil {
+		go func() {
+			bgCtx := context.Background()
+			err := s.emailService.QueueEmail(bgCtx, &EmailRequest{
+				To:       "", // Will be filled by worker from newMemberID lookup
+				Template: "org-invitation",
+				Data: map[string]any{
+					"OrgID":      orgID.String(),
+					"OrgName":    org.Name,
+					"OrgSlug":    org.Slug,
+					"Role":       role,
+					"InviterID":  userID.String(),
+					"MemberID":   newMemberID.String(),
+				},
+			})
+			if err != nil {
+				s.log.Warn("failed to queue invitation email",
+					slog.String("error", err.Error()),
+					slog.String("org_id", orgID.String()),
+					slog.String("user_id", newMemberID.String()),
+				)
+			}
+		}()
+	}
 
 	s.log.Info("member added",
 		slog.String("org_id", orgID.String()),

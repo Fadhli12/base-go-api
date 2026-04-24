@@ -1,0 +1,14 @@
+Welcome to {{.AppName}}!
+
+Hi {{.UserEmail}},
+
+Thank you for creating an account with us. We're excited to have you on board!
+
+Your account has been successfully created. You can now sign in and start exploring all the features available to you.
+
+Sign in here: {{.LoginURL}}
+
+If you did not create this account, please ignore this email or contact support.
+
+Best regards,
+The {{.AppName}} Team

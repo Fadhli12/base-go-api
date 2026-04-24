@@ -129,6 +129,9 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 
 	// Clean all tables (order matters due to foreign key constraints)
 	tables := []string{
+		"email_bounces",
+		"email_queue",
+		"email_templates",
 		"user_permissions",
 		"role_permissions",
 		"user_roles",
@@ -455,6 +458,82 @@ CREATE INDEX IF NOT EXISTS idx_casbin_rule_v2 ON casbin_rule(v2);
 
 	result = s.DB.Exec(migrationCasbin)
 	require.NoError(t, result.Error, "Failed to create casbin_rule table")
+
+	// Migration 000008: Email service tables
+	migration008 := `
+-- Create email_templates table
+CREATE TABLE IF NOT EXISTS email_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) UNIQUE NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    html_content TEXT,
+    text_content TEXT,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Create email_queue table (NO soft delete - permanent audit trail)
+CREATE TABLE IF NOT EXISTS email_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    to_address VARCHAR(255) NOT NULL,
+    subject VARCHAR(255),
+    template VARCHAR(100),
+    html_content TEXT,
+    text_content TEXT,
+    template_data JSONB,
+    status VARCHAR(20) NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'sent', 'delivered', 'bounced', 'failed')),
+    priority INTEGER DEFAULT 0,
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 5,
+    sent_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    bounced_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+    bounce_reason TEXT,
+    provider VARCHAR(50),
+    provider_message_id VARCHAR(255),
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Create email_bounces table (insert-only for compliance)
+CREATE TABLE IF NOT EXISTS email_bounces (
+    id VARCHAR(36) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    bounce_type VARCHAR(20) NOT NULL CHECK (bounce_type IN ('hard', 'soft', 'spam', 'technical')),
+    bounce_reason TEXT,
+    message_id VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- Create indexes for email tables
+CREATE INDEX IF NOT EXISTS idx_email_templates_name ON email_templates(name);
+CREATE INDEX IF NOT EXISTS idx_email_templates_is_active ON email_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_email_templates_deleted_at ON email_templates(deleted_at) WHERE deleted_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
+CREATE INDEX IF NOT EXISTS idx_email_queue_to_address ON email_queue(to_address);
+CREATE INDEX IF NOT EXISTS idx_email_queue_created_at ON email_queue(created_at);
+CREATE INDEX IF NOT EXISTS idx_email_queue_status_created_at ON email_queue(status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_email_bounces_email ON email_bounces(email);
+CREATE INDEX IF NOT EXISTS idx_email_bounces_created_at ON email_bounces(created_at);
+CREATE INDEX IF NOT EXISTS idx_email_bounces_type ON email_bounces(bounce_type);
+
+-- Add trigger for email_templates updated_at
+CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_templates
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Add trigger for email_queue updated_at
+CREATE TRIGGER update_email_queue_updated_at BEFORE UPDATE ON email_queue
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+`
+
+	result = s.DB.Exec(migration008)
+	require.NoError(t, result.Error, "Failed to run migration 000008")
 
 	t.Logf("Migrations completed successfully")
 }

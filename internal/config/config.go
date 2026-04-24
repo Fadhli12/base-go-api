@@ -83,6 +83,7 @@ type Config struct {
 	Image    ImageConfig    `mapstructure:"image"`
 	Swagger  SwaggerConfig  `mapstructure:"swagger"`
 	Cache    CacheConfig    `mapstructure:"cache"`
+	Email    EmailConfig    `mapstructure:"email"`
 }
 
 var (
@@ -157,6 +158,9 @@ func loadConfig() (*Config, error) {
 	}
 	if err := parseCacheConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse cache config: %w", err)
+	}
+	if err := parseEmailConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse email config: %w", err)
 	}
 
 	// Validate required fields
@@ -238,6 +242,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.default_ttl", 300)
 	v.SetDefault("cache.permission_ttl", 300)
 	v.SetDefault("cache.rate_limit_ttl", 60)
+
+	// Email defaults
+	v.SetDefault("email.provider", "smtp")
+	v.SetDefault("email.smtp_host", "localhost")
+	v.SetDefault("email.smtp_port", 587)
+	v.SetDefault("email.worker_concurrency", 10)
+	v.SetDefault("email.retry_max", 5)
+	v.SetDefault("email.rate_limit_per_hour", 100)
 }
 
 // loadYAMLConfig attempts to load configuration from YAML files.
@@ -571,6 +583,21 @@ func parseCacheConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Cache.DefaultTTL = getEnvIntOrDefault("CACHE_DEFAULT_TTL", v.GetInt("cache.default_ttl"))
 	cfg.Cache.PermissionTTL = getEnvIntOrDefault("CACHE_PERMISSION_TTL", v.GetInt("cache.permission_ttl"))
 	cfg.Cache.RateLimitTTL = getEnvIntOrDefault("CACHE_RATE_LIMIT_TTL", v.GetInt("cache.rate_limit_ttl"))
+	return nil
+}
+
+// parseEmailConfig parses email configuration from environment.
+func parseEmailConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Email.Provider = getEnvOrDefault("EMAIL_PROVIDER", v.GetString("email.provider"))
+	cfg.Email.SMTPHost = getEnvOrDefault("EMAIL_SMTP_HOST", v.GetString("email.smtp_host"))
+	cfg.Email.SMTPPort = getEnvIntOrDefault("EMAIL_SMTP_PORT", v.GetInt("email.smtp_port"))
+	cfg.Email.SMTPUser = getEnvOrDefault("EMAIL_SMTP_USER", v.GetString("email.smtp_user"))
+	cfg.Email.SMTPPassword = getEnvOrDefault("EMAIL_SMTP_PASSWORD", v.GetString("email.smtp_password"))
+	cfg.Email.SMTPFromAddress = getEnvOrDefault("EMAIL_SMTP_FROM_ADDRESS", v.GetString("email.smtp_from_address"))
+	cfg.Email.SMTPFromName = getEnvOrDefault("EMAIL_SMTP_FROM_NAME", v.GetString("email.smtp_from_name"))
+	cfg.Email.WorkerConcurrency = getEnvIntOrDefault("EMAIL_WORKER_CONCURRENCY", v.GetInt("email.worker_concurrency"))
+	cfg.Email.RetryMax = getEnvIntOrDefault("EMAIL_RETRY_MAX", v.GetInt("email.retry_max"))
+	cfg.Email.RateLimitPerHour = getEnvIntOrDefault("EMAIL_RATE_LIMIT_PER_HOUR", v.GetInt("email.rate_limit_per_hour"))
 	return nil
 }
 

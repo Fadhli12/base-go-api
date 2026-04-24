@@ -37,8 +37,12 @@ import (
 	"github.com/example/go-api-base/internal/database"
 	apphttp "github.com/example/go-api-base/internal/http"
 	"github.com/example/go-api-base/internal/permission"
+	"github.com/example/go-api-base/internal/repository"
+	"github.com/example/go-api-base/internal/service"
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
+	"gorm.io/gorm"
 )
 
 var rootCmd = &cobra.Command{
@@ -181,6 +185,12 @@ func runServer() error {
 	// Configure routes
 	server.RegisterRoutes()
 
+	// Initialize EmailWorker for background email processing
+	emailWorker := initEmailWorker(cfg, db, redisClient, enforcer, server)
+	if emailWorker != nil {
+		server.SetEmailWorker(emailWorker)
+	}
+
 	// Add health check routes (using the server's Echo instance)
 	e := server.Echo()
 	e.GET("/healthz", func(c echo.Context) error {
@@ -214,6 +224,14 @@ func runServer() error {
 		}
 	}()
 
+	// Start email worker in background (if initialized)
+	if emailWorker := server.EmailWorker(); emailWorker != nil {
+		slog.Info("Starting email worker...")
+		if err := emailWorker.Start(ctx); err != nil {
+			slog.Error("Failed to start email worker", "error", err)
+		}
+	}
+
 	// Start server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
@@ -234,6 +252,14 @@ func runServer() error {
 
 	// Cancel the invalidation listener context
 	cancel()
+
+	// Stop email worker gracefully
+	if emailWorker := server.EmailWorker(); emailWorker != nil {
+		slog.Info("Stopping email worker...")
+		if err := emailWorker.Stop(); err != nil {
+			slog.Error("Failed to stop email worker", "error", err)
+		}
+	}
 
 	// Create a deadline to wait for (30 seconds as per constitution)
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -291,6 +317,43 @@ func setLogLevel(level string) {
 	slog.SetDefault(logger)
 }
 
+// initEmailWorker initializes the email worker for background email processing.
+func initEmailWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, enforcer *permission.Enforcer, server *apphttp.Server) *service.EmailWorker {
+	slog.Info("Initializing email worker...")
+
+	// Initialize email repositories
+	emailTemplateRepo := repository.NewEmailTemplateRepository(db)
+	emailQueueRepo := repository.NewEmailQueueRepository(db)
+	emailBounceRepo := repository.NewEmailBounceRepository(db)
+
+	// Initialize email queue (Redis)
+	redisQueue := service.NewRedisEmailQueue(redisClient)
+
+	// Initialize email provider (SMTP baseline)
+	smtpProvider := service.NewSMTPProvider(&cfg.Email)
+
+	// Initialize template engine
+	templateEngine := service.NewTemplateEngine(emailTemplateRepo)
+
+	// Initialize email worker
+	emailWorker := service.NewEmailWorker(
+		&cfg.Email,
+		emailQueueRepo,
+		emailBounceRepo,
+		redisQueue,
+		smtpProvider,
+		templateEngine,
+	)
+
+	slog.Info("Email worker initialized",
+		"provider", smtpProvider.Name(),
+		"worker_concurrency", cfg.Email.WorkerConcurrency,
+		"retry_max", cfg.Email.RetryMax,
+	)
+
+	return emailWorker
+}
+
 // PermissionManifest defines the structure of the permissions.yaml file.
 type PermissionManifest struct {
 	Permissions []PermissionEntry `yaml:"permissions"`
@@ -319,12 +382,17 @@ func DefaultPermissions() *PermissionManifest {
 			{Name: "users:manage", Description: "Manage users", Resource: "users", Action: "manage"},
 			{Name: "roles:manage", Description: "Manage roles", Resource: "roles", Action: "manage"},
 			{Name: "permissions:manage", Description: "Manage permissions", Resource: "permissions", Action: "manage"},
+			{Name: "email_templates:read", Description: "View email templates", Resource: "email_templates", Action: "read"},
+			{Name: "email_templates:manage", Description: "Manage email templates", Resource: "email_templates", Action: "manage"},
+			{Name: "email_queue:read", Description: "View email queue status", Resource: "email_queue", Action: "read"},
+			{Name: "email_queue:manage", Description: "Manage email queue", Resource: "email_queue", Action: "manage"},
+			{Name: "email_bounces:read", Description: "View bounce history", Resource: "email_bounces", Action: "read"},
 		},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read"},
 			},
 		},
 	}

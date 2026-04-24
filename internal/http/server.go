@@ -36,6 +36,7 @@ type Server struct {
 	permCache   *permission.Cache
 	invalidator *permission.Invalidator
 	auditSvc    *service.AuditService
+	emailWorker *service.EmailWorker
 }
 
 // ServerConfig holds Echo server configuration.
@@ -226,6 +227,16 @@ func (s *Server) SetAuditService(auditSvc *service.AuditService) {
 	s.auditSvc = auditSvc
 }
 
+// SetEmailWorker sets the email worker
+func (s *Server) SetEmailWorker(emailWorker *service.EmailWorker) {
+	s.emailWorker = emailWorker
+}
+
+// EmailWorker returns the email worker
+func (s *Server) EmailWorker() *service.EmailWorker {
+	return s.emailWorker
+}
+
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	address := fmt.Sprintf(":%d", s.config.Server.Port)
@@ -253,11 +264,26 @@ func (s *Server) RegisterRoutes() {
 	mediaRepo := repository.NewMediaRepository(s.db)
 	apiKeyRepo := repository.NewAPIKeyRepository(s.db)
 	organizationRepo := repository.NewOrganizationRepository(s.db)
+	emailTemplateRepo := repository.NewEmailTemplateRepository(s.db)
+	emailQueueRepo := repository.NewEmailQueueRepository(s.db)
+	emailBounceRepo := repository.NewEmailBounceRepository(s.db)
+
+	// Initialize email services (needed for auth and org services)
+	smtpProvider := service.NewSMTPProvider(&s.config.Email)
+	templateEngine := service.NewTemplateEngine(emailTemplateRepo)
+	emailService := service.NewEmailService(
+		&s.config.Email,
+		emailTemplateRepo,
+		emailQueueRepo,
+		emailBounceRepo,
+		templateEngine,
+		smtpProvider,
+	)
 
 	// Initialize services
 	tokenService := service.NewTokenService(s.config.JWT.Secret, s.config.JWT.AccessExpiry, s.config.JWT.RefreshExpiry)
 	passwordHasher := service.NewPasswordHasher()
-	authService := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher)
+	authService := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, emailService)
 	userService := service.NewUserService(userRepo, userRoleRepo, userPermissionRepo)
 	permissionService := service.NewPermissionService(permissionRepo)
 	roleService := service.NewRoleService(roleRepo, rolePermissionRepo, permissionRepo)
@@ -267,7 +293,7 @@ func (s *Server) RegisterRoutes() {
 	s.SetAuditService(auditService)
 	
 	// Initialize organization service
-	orgService := service.NewOrganizationService(organizationRepo, s.enforcer, auditService, slog.Default())
+	orgService := service.NewOrganizationService(organizationRepo, s.enforcer, auditService, emailService, slog.Default())
 
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
@@ -360,6 +386,83 @@ func (s *Server) RegisterRoutes() {
 
 	// Organization routes
 	s.RegisterOrganizationRoutes(v1, orgHandler)
+
+	// Email routes
+	s.RegisterEmailRoutes(v1)
+}
+
+// RegisterEmailRoutes registers email-related routes
+// Requires JWT authentication and permission checks
+func (s *Server) RegisterEmailRoutes(api *echo.Group) {
+	// Initialize email repositories
+	emailTemplateRepo := repository.NewEmailTemplateRepository(s.db)
+	emailQueueRepo := repository.NewEmailQueueRepository(s.db)
+	emailBounceRepo := repository.NewEmailBounceRepository(s.db)
+
+	// Initialize email services
+	smtpProvider := service.NewSMTPProvider(&s.config.Email)
+	templateEngine := service.NewTemplateEngine(emailTemplateRepo)
+	emailService := service.NewEmailService(
+		&s.config.Email,
+		emailTemplateRepo,
+		emailQueueRepo,
+		emailBounceRepo,
+		templateEngine,
+		smtpProvider,
+	)
+
+	// Initialize handlers
+	emailTemplateHandler := handler.NewEmailTemplateHandler(emailService, emailTemplateRepo)
+	emailHandler := handler.NewEmailHandler(emailService, emailQueueRepo)
+
+	// Email template routes (require JWT + permissions)
+	templates := api.Group("/email-templates")
+	templates.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// Permission check for template management
+	if s.enforcer != nil {
+		templates.Use(middleware.RequirePermission(s.enforcer, "email_templates", "manage"))
+	}
+
+	// Apply audit middleware
+	if s.auditSvc != nil {
+		templates.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	templates.POST("", emailTemplateHandler.Create)
+	templates.GET("", emailTemplateHandler.GetAll)
+	templates.GET("/:id", emailTemplateHandler.GetByID)
+	templates.PUT("/:id", emailTemplateHandler.Update)
+	templates.DELETE("/:id", emailTemplateHandler.Delete)
+
+	// Email sending routes (require JWT)
+	emails := api.Group("/emails")
+	emails.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// Apply audit middleware for email operations
+	if s.auditSvc != nil {
+		emails.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	emails.POST("", emailHandler.SendEmail)
+	emails.GET("/:id", emailHandler.GetStatus)
+
+	// Webhook routes (public - no auth required)
+	webhooks := api.Group("/webhooks")
+	webhooks.POST("/:provider/delivery", emailHandler.WebhookDelivery)
+	webhooks.POST("/:provider/bounce", emailHandler.WebhookBounce)
 }
 
 // RegisterPermissionRoutes registers permission-related routes
