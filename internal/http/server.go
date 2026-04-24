@@ -251,6 +251,7 @@ func (s *Server) RegisterRoutes() {
 	userPermissionRepo := repository.NewUserPermissionRepository(s.db)
 	auditLogRepo := repository.NewAuditLogRepository(s.db)
 	mediaRepo := repository.NewMediaRepository(s.db)
+	apiKeyRepo := repository.NewAPIKeyRepository(s.db)
 
 	// Initialize services
 	tokenService := service.NewTokenService(s.config.JWT.Secret, s.config.JWT.AccessExpiry, s.config.JWT.RefreshExpiry)
@@ -263,6 +264,10 @@ func (s *Server) RegisterRoutes() {
 	// Initialize audit service with async processing
 	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
 	s.SetAuditService(auditService)
+
+	// Initialize API key service
+	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
+	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 
 	// Initialize storage driver
 	storageDriver, err := storage.NewDriver(storage.Config{
@@ -331,6 +336,9 @@ func (s *Server) RegisterRoutes() {
 	if mediaHandler != nil {
 		mediaHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 	}
+
+	// API Key routes
+	s.RegisterAPIKeyRoutes(v1, apiKeyHandler)
 
 	// Protected routes (require JWT authentication)
 	protected := v1.Group("")
@@ -439,6 +447,32 @@ func (s *Server) RegisterUserRoutes(api *echo.Group, userHandler *handler.UserHa
 	users.POST("/:id/permissions", userHandler.GrantPermission)
 	users.DELETE("/:id/permissions/:permId", userHandler.RemovePermission)
 	users.GET("/:id/effective-permissions", userHandler.GetEffectivePermissions)
+}
+
+// RegisterAPIKeyRoutes registers API key management routes
+// Requires JWT authentication. Users can only manage their own API keys.
+func (s *Server) RegisterAPIKeyRoutes(api *echo.Group, apiKeyHandler *handler.APIKeyHandler) {
+	apiKeys := api.Group("/api-keys")
+
+	// All API key routes require JWT authentication
+	apiKeys.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// Apply audit middleware for mutating operations
+	if s.auditSvc != nil {
+		apiKeys.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	// CRUD routes - ownership is checked in handlers
+	apiKeys.POST("", apiKeyHandler.Create)
+	apiKeys.GET("", apiKeyHandler.List)
+	apiKeys.GET("/:id", apiKeyHandler.GetByID)
+	apiKeys.DELETE("/:id", apiKeyHandler.Revoke)
 }
 
 // RegisterInvoiceRoutes registers invoice-related routes

@@ -57,9 +57,8 @@ var serveCmd = &cobra.Command{
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Run database migrations",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Running migrations... (implementation pending)")
-		// TODO: Wire up golang-migrate
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runMigrations()
 	},
 }
 
@@ -437,6 +436,68 @@ func runPermissionSync() error {
 	return nil
 }
 
+// runMigrations runs all pending database migrations.
+func runMigrations() error {
+	slog.Info("Starting database migrations")
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Set log level
+	setLogLevel(cfg.Log.Level)
+
+	// Initialize database
+	db, err := database.NewPostgresDB(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() {
+		if closeErr := database.Close(db); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
+	}()
+
+	// Create migration handler
+	m, err := database.NewMigrate(db, "file://migrations")
+	if err != nil {
+		return fmt.Errorf("failed to create migration handler: %w", err)
+	}
+	defer func() {
+		if closeErr := m.Close(); closeErr != nil {
+			slog.Error("Failed to close migration handler", "error", closeErr)
+		}
+	}()
+
+	// Get current version before migration
+	version, dirty, err := m.Version()
+	if err != nil {
+		slog.Info("No migrations applied yet, starting fresh")
+	} else {
+		slog.Info("Current migration state", "version", version, "dirty", dirty)
+		if dirty {
+			return fmt.Errorf("database is in dirty state, please resolve and force to version %d", version)
+		}
+	}
+
+	// Run migrations
+	if err := m.Up(); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	// Get new version after migration
+	newVersion, _, err := m.Version()
+	if err != nil {
+		slog.Info("Migrations completed")
+	} else {
+		slog.Info("Migrations completed successfully", "version", newVersion)
+	}
+
+	return nil
+}
+
 // runSeed seeds the database with initial roles and permissions.
 func runSeed() error {
 	slog.Info("Starting database seeding")
@@ -509,6 +570,12 @@ func runSeed() error {
 
 		// Audit permissions
 		{"audit:view", "audit", "view", "all", "View audit logs", false},
+
+		// API Key permissions
+		{"api_keys:create", "api_keys", "create", "own", "Create own API keys", false},
+		{"api_keys:view", "api_keys", "view", "own", "View own API keys", false},
+		{"api_keys:revoke", "api_keys", "revoke", "own", "Revoke own API keys", false},
+		{"api_keys:manage", "api_keys", "manage", "all", "Manage all API keys", false},
 	}
 
 	slog.Info("Seeding permissions", "count", len(permissions))

@@ -139,3 +139,23 @@ func WrapValidation(err error, message string) *AppError {
 	}
 	return NewAppErrorWithCause("VALIDATION_ERROR", message, http.StatusUnprocessableEntity, err)
 }
+
+// IsNotFound checks if an error is ErrNotFound
+func IsNotFound(err error) bool {
+	return errors.Is(err, ErrNotFound)
+}
+
+// IsConflict checks if an error is ErrConflict
+func IsConflict(err error) bool {
+	return errors.Is(err, ErrConflict)
+}
+
+// IsUnauthorized checks if an error is ErrUnauthorized
+func IsUnauthorized(err error) bool {
+	return errors.Is(err, ErrUnauthorized)
+}
+
+// IsForbidden checks if an error is ErrForbidden
+func IsForbidden(err error) bool {
+	return errors.Is(err, ErrForbidden)
+}
