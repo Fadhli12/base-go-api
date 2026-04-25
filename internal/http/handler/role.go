@@ -4,8 +4,10 @@ import (
 	"net/http"
 
 	"github.com/example/go-api-base/internal/domain"
+	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -81,22 +83,43 @@ func mapRoleToResponse(r domain.Role) RoleResponse {
 //	@Failure	409	{object}	response.Envelope	"Role already exists"
 //	@Router		/api/v1/roles [post]
 func (h *RoleHandler) Create(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	var req request.CreateRoleRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	role, err := h.roleService.Create(c.Request().Context(), req.Name, req.Description)
+	log.Info(ctx, "creating role", log.String("name", req.Name))
+
+	role, err := h.roleService.Create(ctx, req.Name, req.Description)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "role creation failed",
+				log.String("name", req.Name),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "role creation failed",
+			log.String("name", req.Name),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to create role"))
 	}
+
+	log.Info(ctx, "role created successfully",
+		log.String("role_id", role.ID.String()),
+		log.String("name", role.Name),
+	)
 
 	resp := mapRoleToResponse(*role)
 
@@ -114,8 +137,14 @@ func (h *RoleHandler) Create(c echo.Context) error {
 //	@Failure	500	{object}	response.Envelope	"Internal server error"
 //	@Router		/api/v1/roles [get]
 func (h *RoleHandler) GetAll(c echo.Context) error {
-	roles, err := h.roleService.GetAll(c.Request().Context())
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
+	log.Info(ctx, "listing roles")
+
+	roles, err := h.roleService.GetAll(ctx)
 	if err != nil {
+		log.Error(ctx, "failed to retrieve roles", logger.Err(err))
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve roles"))
 	}
 
@@ -151,31 +180,56 @@ func (h *RoleHandler) GetAll(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Role not found"
 //	@Router		/api/v1/roles/{id} [put]
 func (h *RoleHandler) Update(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid role ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid role ID"))
 	}
 
 	var req request.UpdateRoleRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	role, err := h.roleService.Update(c.Request().Context(), id, req.Name, req.Description)
+	log.Info(ctx, "updating role",
+		log.String("role_id", id.String()),
+		log.String("name", req.Name),
+	)
+
+	role, err := h.roleService.Update(ctx, id, req.Name, req.Description)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "role update failed",
+				log.String("role_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "role not found", log.String("role_id", id.String()))
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role not found"))
 		}
+		log.Error(ctx, "role update failed",
+			log.String("role_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to update role"))
 	}
+
+	log.Info(ctx, "role updated successfully",
+		log.String("role_id", role.ID.String()),
+	)
 
 	resp := mapRoleToResponse(*role)
 
@@ -196,31 +250,56 @@ func (h *RoleHandler) Update(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Role not found"
 //	@Router		/api/v1/roles/{id} [delete]
 func (h *RoleHandler) SoftDelete(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid role ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid role ID"))
 	}
 
 	// Get role to check if it's a system role
-	role, err := h.roleService.GetByID(c.Request().Context(), id)
+	role, err := h.roleService.GetByID(ctx, id)
 	if err != nil {
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "role not found", log.String("role_id", id.String()))
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role not found"))
 		}
+		log.Error(ctx, "failed to retrieve role",
+			log.String("role_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve role"))
 	}
 
 	if role.IsSystem {
+		log.Warn(ctx, "attempted to delete system role",
+			log.String("role_id", id.String()),
+			log.String("role_name", role.Name),
+		)
 		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Cannot delete system role"))
 	}
 
-	if err := h.roleService.Delete(c.Request().Context(), id); err != nil {
+	log.Info(ctx, "deleting role",
+		log.String("role_id", id.String()),
+		log.String("role_name", role.Name),
+	)
+
+	if err := h.roleService.Delete(ctx, id); err != nil {
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "role not found", log.String("role_id", id.String()))
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role not found"))
 		}
+		log.Error(ctx, "role deletion failed",
+			log.String("role_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to delete role"))
 	}
+
+	log.Info(ctx, "role deleted successfully", log.String("role_id", id.String()))
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Role deleted successfully"}))
 }

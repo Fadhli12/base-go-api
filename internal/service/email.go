@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/mail"
+	"strings"
 
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/domain"
@@ -205,10 +207,40 @@ func (s *EmailService) validateRequest(req *EmailRequest) error {
 		return errors.NewAppError("VALIDATION_ERROR", "recipient email address is required", 400)
 	}
 
+	// Validate email format
+	if !isValidEmail(req.To) {
+		return errors.NewAppError("VALIDATION_ERROR", "invalid email address format", 400)
+	}
+
 	// Either template or direct content must be provided
 	if req.Template == "" && req.HTMLContent == "" && req.TextContent == "" {
 		return errors.NewAppError("VALIDATION_ERROR", "template name or content must be provided", 400)
 	}
 
 	return nil
+}
+
+// isValidEmail validates email address format
+func isValidEmail(email string) bool {
+	// Use Go's standard library for email parsing
+	// mail.ParseAddress handles most edge cases correctly
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return false
+	}
+	// Ensure the address has a valid format (local@domain)
+	// ParseAddress allows "Name <email>" format, we want the email part
+	parts := strings.Split(addr.Address, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	// Basic validation: local and domain parts must be non-empty
+	if parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	// Domain must contain at least one dot
+	if !strings.Contains(parts[1], ".") {
+		return false
+	}
+	return true
 }

@@ -1,88 +1,84 @@
-// Package logger provides structured logging configuration using slog.
 package logger
 
 import (
+	"context"
 	"log/slog"
-	"os"
-
-	"github.com/lmittmann/tint"
 )
 
-// NewLogger creates a new structured logger based on the log level.
-// In development, it uses tint handler for colored, readable output.
-// In production, it uses JSON handler for log aggregation systems.
-func NewLogger(level string) *slog.Logger {
-	return slog.New(NewHandler(level))
+// Logger wraps slog.Logger with context awareness for structured logging
+type Logger struct {
+	*slog.Logger
+	ctx context.Context
 }
 
-// NewHandler creates a slog.Handler based on the log level.
-// Uses tint for colored output in development, JSON for production.
-func NewHandler(level string) slog.Handler {
-	logLevel := parseLevel(level)
-
-	// Check if we're in production mode
-	if isProduction() {
-		return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: logLevel,
-		})
-	}
-
-	// Use tint for development - colored, readable output
-	return tint.NewHandler(os.Stdout, &tint.Options{
-		Level:      logLevel,
-		TimeFormat: "15:04:05.000",
-	})
-}
-
-// parseLevel converts a log level string to slog.Level.
-func parseLevel(level string) slog.Level {
-	switch level {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
+// New creates a new Logger with the given handler
+func New(handler slog.Handler) *Logger {
+	return &Logger{
+		Logger: slog.New(handler),
+		ctx:    context.Background(),
 	}
 }
 
-// isProduction checks if we're running in production mode.
-// This can be determined by LOG_FORMAT=json or an environment variable.
-func isProduction() bool {
-	format := os.Getenv("LOG_FORMAT")
-	return format == "json" || format == "JSON"
+// WithContext returns a new Logger with the given context
+func (l *Logger) WithContext(ctx context.Context) *Logger {
+	return &Logger{
+		Logger: l.Logger,
+		ctx:    ctx,
+	}
 }
 
-// SetDefault sets the default logger for the application.
-func SetDefault(level string) {
-	slog.SetDefault(NewLogger(level))
+// WithRequest returns a new Logger with request_id field
+func (l *Logger) WithRequest(requestID string) *Logger {
+	return l.with(slog.String("request_id", requestID))
 }
 
-// With returns a logger with additional context.
-func With(args ...any) *slog.Logger {
-	return slog.With(args...)
+// WithUser returns a new Logger with user_id field
+func (l *Logger) WithUser(userID string) *Logger {
+	return l.with(slog.String("user_id", userID))
 }
 
-// Debug logs a debug message.
-func Debug(msg string, args ...any) {
-	slog.Debug(msg, args...)
+// WithOrg returns a new Logger with org_id field
+func (l *Logger) WithOrg(orgID string) *Logger {
+	return l.with(slog.String("org_id", orgID))
 }
 
-// Info logs an info message.
-func Info(msg string, args ...any) {
-	slog.Info(msg, args...)
+// WithFields returns a new Logger with additional attributes
+func (l *Logger) WithFields(attrs ...slog.Attr) *Logger {
+	return l.with(attrs...)
 }
 
-// Warn logs a warning message.
-func Warn(msg string, args ...any) {
-	slog.Warn(msg, args...)
+// with is the internal method that creates a new Logger with attributes
+func (l *Logger) with(attrs ...slog.Attr) *Logger {
+	// Convert slog.Attr to any for Logger.With()
+	args := make([]any, len(attrs))
+	for i, attr := range attrs {
+		args[i] = attr
+	}
+	return &Logger{
+		Logger: l.Logger.With(args...),
+		ctx:    l.ctx,
+	}
 }
 
-// Error logs an error message.
-func Error(msg string, args ...any) {
-	slog.Error(msg, args...)
+// FromContext retrieves the Logger from context, or returns the default logger
+func FromContext(ctx context.Context) *Logger {
+	if log, ok := ctx.Value(loggerContextKey).(*Logger); ok {
+		return log
+	}
+	return defaultLogger
+}
+
+// WithLoggerContext stores the Logger in the context
+func WithLoggerContext(ctx context.Context, log *Logger) context.Context {
+	return context.WithValue(ctx, loggerContextKey, log)
+}
+
+var (
+	defaultLogger     *Logger
+	loggerContextKey  contextKey = "logger"
+)
+
+// Init initializes the default logger - call this once at startup
+func Init(log *Logger) {
+	defaultLogger = log
 }

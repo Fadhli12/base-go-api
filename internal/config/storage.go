@@ -4,9 +4,10 @@ package config
 // StorageConfig holds media storage configuration.
 // Supports local filesystem and S3/MinIO object storage backends.
 type StorageConfig struct {
-	Driver    string `mapstructure:"driver"`    // local, s3, minio
-	LocalPath string `mapstructure:"local_path"` // ./storage/uploads
-	BaseURL   string `mapstructure:"base_url"`   // http://localhost:8080/storage
+	Driver       string `mapstructure:"driver"`        // local, s3, minio
+	LocalPath    string `mapstructure:"local_path"`    // ./storage/uploads
+	BaseURL      string `mapstructure:"base_url"`      // http://localhost:8080/storage
+	SigningKey   string `mapstructure:"signing_key"`   // secret for signed URLs (default: 32-char random)
 	// S3/MinIO fields
 	S3Endpoint  string `mapstructure:"s3_endpoint"`   // empty for AWS S3, set for MinIO
 	S3Region    string `mapstructure:"s3_region"`     // us-east-1

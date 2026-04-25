@@ -78,28 +78,35 @@ func (r *roleRepository) Update(ctx context.Context, role *domain.Role) error {
 }
 
 // SoftDelete performs a soft delete on a role by its ID
-// Returns ErrSystemRoleProtected if the role is a system role
+// Note: Atomic operation that checks IsSystem in the DELETE WHERE clause
+// to prevent TOCTOU race conditions
 func (r *roleRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
-	// First check if the role is a system role
-	var role domain.Role
-	if err := r.db.WithContext(ctx).First(&role, "id = ?", id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return apperrors.ErrNotFound
-		}
-		return apperrors.WrapInternal(err)
-	}
+	// Atomic delete with IsSystem check in WHERE clause
+	// This prevents TOCTOU race between check + delete
+	result := r.db.WithContext(ctx).
+		Where("id = ? AND is_system = ?", id, false).
+		Delete(&domain.Role{})
 
-	if role.IsSystem {
-		return ErrSystemRoleProtected
-	}
-
-	result := r.db.WithContext(ctx).Delete(&domain.Role{}, "id = ?", id)
 	if result.Error != nil {
 		return apperrors.WrapInternal(result.Error)
 	}
+
 	if result.RowsAffected == 0 {
+		// Either not found (ErrNotFound) or is a system role (ErrSystemRoleProtected)
+		// Check if role exists to determine which error
+		var role domain.Role
+		if err := r.db.WithContext(ctx).Select("is_system").First(&role, "id = ?", id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return apperrors.ErrNotFound
+			}
+			return apperrors.WrapInternal(err)
+		}
+		if role.IsSystem {
+			return ErrSystemRoleProtected
+		}
 		return apperrors.ErrNotFound
 	}
+
 	return nil
 }
 

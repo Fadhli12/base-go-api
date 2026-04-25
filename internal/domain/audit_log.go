@@ -30,15 +30,19 @@ func (AuditLog) TableName() string {
 
 // AuditAction constants define standard audit action types
 const (
-	AuditActionCreate   = "create"
-	AuditActionUpdate    = "update"
-	AuditActionDelete    = "delete"
-	AuditActionLogin     = "login"
-	AuditActionLogout    = "logout"
-	AuditActionAssign    = "assign"
-	AuditActionRevoke    = "revoke"
-	AuditActionGrant     = "grant"
-	AuditActionDeny      = "deny"
+	AuditActionCreate         = "create"
+	AuditActionUpdate         = "update"
+	AuditActionDelete         = "delete"
+	AuditActionLogin          = "login"
+	AuditActionLogout         = "logout"
+	AuditActionAssign         = "assign"
+	AuditActionRevoke         = "revoke"
+	AuditActionGrant          = "grant"
+	AuditActionDeny           = "deny"
+	AuditActionLoginFailed    = "login_failed"
+	AuditActionPasswordReset  = "password_reset"
+	AuditActionPasswordChange = "password_change"
+	AuditActionTokenReuse     = "token_reuse" // MED-004: Token reuse attack detected
 )
 
 // AuditResource constants define standard resource types

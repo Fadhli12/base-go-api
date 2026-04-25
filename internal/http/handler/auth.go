@@ -3,11 +3,12 @@ package handler
 import (
 	"net/http"
 
+	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -55,20 +56,46 @@ type UserResponse struct {
 //	@Failure	409	{object}	response.Envelope	"Email already exists"
 //	@Router		/api/v1/auth/register [post]
 func (h *AuthHandler) Register(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	var req request.RegisterRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	user, err := h.authService.Register(c.Request().Context(), &req)
+	log.Info(ctx, "registering user", log.String("email", req.Email))
+
+	user, err := h.authService.Register(ctx, &req)
 	if err != nil {
-		// Error is already an AppError from the service layer
-		return c.JSON(http.StatusConflict, response.ErrorWithContext(c, "EMAIL_EXISTS", "Email already registered"))
+		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "user registration failed",
+				log.String("email", req.Email),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
+			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
+		}
+		log.Error(ctx, "user registration failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
+		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to register user"))
 	}
+
+	log.Info(ctx, "user registered successfully",
+		log.String("user_id", user.ID.String()),
+		log.String("email", user.Email),
+	)
 
 	resp := RegisterRequestResponse{
 		ID:    user.ID.String(),
@@ -91,19 +118,46 @@ func (h *AuthHandler) Register(c echo.Context) error {
 //	@Failure	401	{object}	response.Envelope	"Invalid credentials"
 //	@Router		/api/v1/auth/login [post]
 func (h *AuthHandler) Login(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	var req request.LoginRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	user, accessToken, refreshToken, err := h.authService.Login(c.Request().Context(), &req)
+	log.Info(ctx, "user login attempt", log.String("email", req.Email))
+
+	user, accessToken, refreshToken, err := h.authService.Login(ctx, &req)
 	if err != nil {
+		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Warn(ctx, "authentication failed",
+				log.String("email", req.Email),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
+			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
+		}
+		log.Warn(ctx, "authentication failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "INVALID_CREDENTIALS", "Invalid email or password"))
 	}
+
+	log.Info(ctx, "user logged in successfully",
+		log.String("user_id", user.ID.String()),
+		log.String("email", user.Email),
+	)
 
 	resp := LoginResponse{
 		User: UserResponse{
@@ -136,24 +190,40 @@ type RefreshResponse struct {
 //	@Failure	401	{object}	response.Envelope	"Invalid refresh token"
 //	@Router		/api/v1/auth/refresh [post]
 func (h *AuthHandler) Refresh(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	var req request.RefreshRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	user, accessToken, refreshToken, err := h.authService.Refresh(c.Request().Context(), req.RefreshToken)
+	log.Info(ctx, "token refresh attempt")
+
+	user, accessToken, refreshToken, err := h.authService.Refresh(ctx, req.RefreshToken)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Warn(ctx, "token refresh failed",
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Warn(ctx, "token refresh failed", logger.Err(err))
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "INVALID_REFRESH_TOKEN", "Invalid refresh token"))
 	}
 
 	_ = user // User is available but not included in refresh response for security
+
+	log.Info(ctx, "token refreshed successfully",
+		log.String("user_id", user.ID.String()),
+	)
 
 	resp := RefreshResponse{
 		AccessToken:  accessToken,
@@ -175,28 +245,150 @@ type LogoutResponse struct {
 //	@Tags		auth
 //	@Accept		json
 //	@Produce	json
-//	@Param		X-User-ID	header	string	true	"User ID"
+//	@Security	BearerAuth
 //	@Success	200	{object}	response.Envelope{data=handler.LogoutResponse}
-//	@Failure	400	{object}	response.Envelope	"Missing user ID"
+//	@Failure	401	{object}	response.Envelope	"Unauthorized"
 //	@Router		/api/v1/auth/logout [post]
 func (h *AuthHandler) Logout(c echo.Context) error {
-	// Get user ID from header (will be set by auth middleware in future)
-	userIDStr := c.Request().Header.Get("X-User-ID")
-	if userIDStr == "" {
-		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Missing user ID"))
-	}
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
 
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
+		log.Warn(ctx, "logout attempt without authentication")
+		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
 
-	if err := h.authService.Logout(c.Request().Context(), userID); err != nil {
+	log.Info(ctx, "user logout attempt", log.String("user_id", userID.String()))
+
+	if err := h.authService.Logout(ctx, userID); err != nil {
+		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "logout failed",
+				log.String("user_id", userID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
+			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
+		}
+		log.Error(ctx, "logout failed",
+			log.String("user_id", userID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to logout"))
 	}
 
+	log.Info(ctx, "user logged out successfully", log.String("user_id", userID.String()))
+
 	resp := LogoutResponse{
 		Message: "Successfully logged out",
+	}
+
+	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))
+}
+
+// PasswordResetRequestResponse represents the response for a password reset request
+type PasswordResetRequestResponse struct {
+	Message string `json:"message"`
+}
+
+// RequestPasswordReset handles password reset requests
+//
+//	@Summary	Request password reset
+//	@Description	Send a password reset email to the user
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body	request.PasswordResetRequest	true	"Email address"
+//	@Success	200	{object}	response.Envelope{data=handler.PasswordResetRequestResponse}
+//	@Failure	400	{object}	response.Envelope	"Invalid request"
+//	@Router		/api/v1/auth/password-reset [post]
+func (h *AuthHandler) RequestPasswordReset(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
+	var req request.PasswordResetRequest
+	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
+	}
+
+	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
+	}
+
+	// Always return success to prevent email enumeration
+	log.Info(ctx, "password reset requested", log.String("email", req.Email))
+
+	_, err := h.authService.RequestPasswordReset(ctx, req.Email)
+	if err != nil {
+		// Log the error but don't reveal it to the user
+		log.Error(ctx, "password reset request failed",
+			log.String("email", req.Email),
+			logger.Err(err),
+		)
+		// Note: We still return success to prevent email enumeration
+	}
+
+	resp := PasswordResetRequestResponse{
+		Message: "If the email exists in our system, a password reset link has been sent.",
+	}
+
+	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))
+}
+
+// PasswordResetConfirmResponse represents the response for password reset confirmation
+type PasswordResetConfirmResponse struct {
+	Message string `json:"message"`
+}
+
+// ResetPassword handles password reset confirmation
+//
+//	@Summary	Reset password
+//	@Description	Reset user password using the token from email
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		request	body	request.PasswordResetConfirmRequest	true	"Reset token and new password"
+//	@Success	200	{object}	response.Envelope{data=handler.PasswordResetConfirmResponse}
+//	@Failure	400	{object}	response.Envelope	"Invalid request or expired token"
+//	@Router		/api/v1/auth/password-reset/confirm [post]
+func (h *AuthHandler) ResetPassword(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
+	var req request.PasswordResetConfirmRequest
+	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
+	}
+
+	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
+	}
+
+	log.Info(ctx, "password reset attempt")
+
+	if err := h.authService.ResetPassword(ctx, req.Token, req.Password); err != nil {
+		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Warn(ctx, "password reset failed",
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
+			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
+		}
+		log.Warn(ctx, "password reset failed", logger.Err(err))
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "INVALID_RESET_TOKEN", "Invalid or expired password reset token"))
+	}
+
+	log.Info(ctx, "password reset successful")
+
+	resp := PasswordResetConfirmResponse{
+		Message: "Password has been reset successfully. Please log in with your new password.",
 	}
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))

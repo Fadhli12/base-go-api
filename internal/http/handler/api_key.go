@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/example/go-api-base/internal/domain"
+	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
 	"github.com/example/go-api-base/internal/service"
@@ -82,7 +83,7 @@ type RevokeAPIKeyResponse struct {
 //	@Router			/api/v1/api-keys [post]
 func (h *APIKeyHandler) Create(c echo.Context) error {
 	// Get user ID from context (set by JWT middleware)
-	userID, err := getUserIDFromContext(c)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
@@ -134,7 +135,7 @@ func (h *APIKeyHandler) Create(c echo.Context) error {
 //	@Router			/api/v1/api-keys [get]
 func (h *APIKeyHandler) List(c echo.Context) error {
 	// Get user ID from context (set by JWT middleware)
-	userID, err := getUserIDFromContext(c)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
@@ -207,7 +208,7 @@ func (h *APIKeyHandler) List(c echo.Context) error {
 //	@Router			/api/v1/api-keys/{id} [get]
 func (h *APIKeyHandler) GetByID(c echo.Context) error {
 	// Get user ID from context (set by JWT middleware)
-	userID, err := getUserIDFromContext(c)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
@@ -263,7 +264,7 @@ func (h *APIKeyHandler) GetByID(c echo.Context) error {
 //	@Router			/api/v1/api-keys/{id} [delete]
 func (h *APIKeyHandler) Revoke(c echo.Context) error {
 	// Get user ID from context (set by JWT middleware)
-	userID, err := getUserIDFromContext(c)
+	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
@@ -288,26 +289,6 @@ func (h *APIKeyHandler) Revoke(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))
-}
-
-// getUserIDFromContext extracts user ID from echo context
-func getUserIDFromContext(c echo.Context) (uuid.UUID, error) {
-	userIDStr := c.Get("user_id")
-	if userIDStr == nil {
-		return uuid.Nil, echo.NewHTTPError(http.StatusUnauthorized, "User not authenticated")
-	}
-
-	userID, ok := userIDStr.(uuid.UUID)
-	if !ok {
-		// Try string conversion
-		userIDStrTyped, ok := userIDStr.(string)
-		if !ok {
-			return uuid.Nil, echo.NewHTTPError(http.StatusUnauthorized, "Invalid user ID in context")
-		}
-		return uuid.Parse(userIDStrTyped)
-	}
-
-	return userID, nil
 }
 
 // mapAPIKeyToResponse converts a domain.APIKey to APIKeyListItem

@@ -15,27 +15,30 @@ import (
 
 // OrganizationService handles organization-related business logic
 type OrganizationService struct {
-	repo        repository.OrganizationRepository
-	enforcer    *permission.Enforcer
-	audit       *AuditService
+	repo         repository.OrganizationRepository
+	userRepo     repository.UserRepository // Added to resolve member emails
+	enforcer     *permission.Enforcer
+	audit        *AuditService
 	emailService *EmailService // Email service for invitation emails
-	log         *slog.Logger
+	log          *slog.Logger
 }
 
 // NewOrganizationService creates a new OrganizationService instance
 func NewOrganizationService(
 	repo repository.OrganizationRepository,
+	userRepo repository.UserRepository,
 	enforcer *permission.Enforcer,
 	audit *AuditService,
 	emailService *EmailService,
 	log *slog.Logger,
 ) *OrganizationService {
 	return &OrganizationService{
-		repo:        repo,
-		enforcer:    enforcer,
-		audit:       audit,
+		repo:         repo,
+		userRepo:     userRepo,
+		enforcer:     enforcer,
+		audit:        audit,
 		emailService: emailService,
-		log:         log,
+		log:          log,
 	}
 }
 
@@ -174,15 +177,15 @@ func (s *OrganizationService) GetOrganization(
 }
 
 // ListOrganizations lists organizations where user is a member
+// Note: Returns organizations where user has any role (owner, admin, member)
+// This ensures users can only see organizations they belong to
 func (s *OrganizationService) ListOrganizations(
 	ctx context.Context,
 	userID uuid.UUID,
 	limit, offset int,
 ) ([]*domain.Organization, int64, error) {
-	// TODO: Implement user-specific organization list
-	// For now, return all organizations (global admin scenario)
-	// Future: Query based on membership
-	return s.repo.FindAll(ctx, limit, offset)
+	// Query organizations where user is a member
+	return s.repo.FindByUserID(ctx, userID, limit, offset)
 }
 
 // UpdateOrganization updates organization details
@@ -372,28 +375,37 @@ func (s *OrganizationService) AddMember(
 
 	// 8. Send invitation email (non-blocking, fire-and-forget)
 	if s.emailService != nil {
-		go func() {
-			bgCtx := context.Background()
-			err := s.emailService.QueueEmail(bgCtx, &EmailRequest{
-				To:       "", // Will be filled by worker from newMemberID lookup
-				Template: "org-invitation",
-				Data: map[string]any{
-					"OrgID":      orgID.String(),
-					"OrgName":    org.Name,
-					"OrgSlug":    org.Slug,
-					"Role":       role,
-					"InviterID":  userID.String(),
-					"MemberID":   newMemberID.String(),
-				},
-			})
-			if err != nil {
-				s.log.Warn("failed to queue invitation email",
-					slog.String("error", err.Error()),
-					slog.String("org_id", orgID.String()),
-					slog.String("user_id", newMemberID.String()),
-				)
-			}
-		}()
+		// Resolve member's email address before queueing
+		memberUser, err := s.userRepo.FindByID(ctx, newMemberID)
+		if err != nil {
+			s.log.Warn("failed to resolve member email for invitation",
+				slog.String("error", err.Error()),
+				slog.String("user_id", newMemberID.String()),
+			)
+		} else {
+			go func() {
+				bgCtx := context.Background()
+				err := s.emailService.QueueEmail(bgCtx, &EmailRequest{
+					To:       memberUser.Email, // Resolved from user repository
+					Template: "org-invitation",
+					Data: map[string]any{
+						"OrgID":      orgID.String(),
+						"OrgName":    org.Name,
+						"OrgSlug":    org.Slug,
+						"Role":       role,
+						"InviterID":  userID.String(),
+						"MemberID":   newMemberID.String(),
+					},
+				})
+				if err != nil {
+					s.log.Warn("failed to queue invitation email",
+						slog.String("error", err.Error()),
+						slog.String("org_id", orgID.String()),
+						slog.String("user_id", newMemberID.String()),
+					)
+				}
+			}()
+		}
 	}
 
 	s.log.Info("member added",

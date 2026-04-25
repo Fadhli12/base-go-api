@@ -16,6 +16,11 @@ type Claims struct {
 
 // GenerateAccessToken generates a new JWT access token
 func GenerateAccessToken(userID, email string, secret string, expiry time.Duration) (string, error) {
+	return GenerateAccessTokenWithClaims(userID, email, secret, expiry, "", "")
+}
+
+// GenerateAccessTokenWithClaims generates a new JWT access token with issuer and audience claims
+func GenerateAccessTokenWithClaims(userID, email, secret string, expiry time.Duration, issuer, audience string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -26,6 +31,16 @@ func GenerateAccessToken(userID, email string, secret string, expiry time.Durati
 		},
 		Email:  email,
 		UserID: userID,
+	}
+
+	// Add issuer claim if configured (HIGH-003)
+	if issuer != "" {
+		claims.Issuer = issuer
+	}
+
+	// Add audience claim if configured (HIGH-003)
+	if audience != "" {
+		claims.Audience = []string{audience}
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

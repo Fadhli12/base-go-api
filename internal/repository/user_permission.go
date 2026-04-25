@@ -52,7 +52,7 @@ func (r *userPermissionRepository) Grant(ctx context.Context, userID, permission
 	userPerm := &domain.UserPermission{
 		UserID:       userID,
 		PermissionID: permissionID,
-		Effect:       "allow",
+		Effect:       domain.EffectAllow,
 		AssignedBy:   assignedBy,
 	}
 
@@ -74,7 +74,7 @@ func (r *userPermissionRepository) Deny(ctx context.Context, userID, permissionI
 	userPerm := &domain.UserPermission{
 		UserID:       userID,
 		PermissionID: permissionID,
-		Effect:       "deny",
+		Effect:       domain.EffectDeny,
 		AssignedBy:   assignedBy,
 	}
 
@@ -82,7 +82,7 @@ func (r *userPermissionRepository) Deny(ctx context.Context, userID, permissionI
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND permission_id = ?", userID, permissionID).
 		Assign(map[string]interface{}{
-			"effect":      "deny",
+			"effect":      domain.EffectDeny,
 			"assigned_by": assignedBy,
 		}).
 		FirstOrCreate(userPerm).Error; err != nil {
@@ -135,6 +135,11 @@ func (r *userPermissionRepository) FindByUserIDWithDetails(ctx context.Context, 
 		})
 	}
 
+	// Check for errors that occurred during iteration
+	if err := rows.Err(); err != nil {
+		return nil, apperrors.WrapInternal(err)
+	}
+
 	return results, nil
 }
 
@@ -144,6 +149,9 @@ func (r *userPermissionRepository) Remove(ctx context.Context, userID, permissio
 		Delete(&domain.UserPermission{}, "user_id = ? AND permission_id = ?", userID, permissionID)
 	if result.Error != nil {
 		return apperrors.WrapInternal(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return apperrors.ErrNotFound
 	}
 	return nil
 }

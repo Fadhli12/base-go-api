@@ -51,8 +51,15 @@ func (r RedisConfig) Addr() string {
 // JWTConfig holds JWT token configuration.
 type JWTConfig struct {
 	Secret        string        `mapstructure:"secret"`
+	Issuer        string        `mapstructure:"issuer"`
+	Audience      string        `mapstructure:"audience"`
 	AccessExpiry  time.Duration `mapstructure:"access_expiry"`
 	RefreshExpiry time.Duration `mapstructure:"refresh_expiry"`
+}
+
+// PasswordResetConfig holds password reset token configuration.
+type PasswordResetConfig struct {
+	TokenExpiry time.Duration `mapstructure:"token_expiry"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -62,7 +69,18 @@ type ServerConfig struct {
 
 // LogConfig holds logging configuration.
 type LogConfig struct {
-	Level string `mapstructure:"level"`
+	Level       string `mapstructure:"level"`
+	Format      string `mapstructure:"format"`
+	Outputs     string `mapstructure:"outputs"`
+	FilePath    string `mapstructure:"file_path"`
+	MaxSize     int    `mapstructure:"max_size"`
+	MaxBackups  int    `mapstructure:"max_backups"`
+	MaxAge      int    `mapstructure:"max_age"`
+	Compress    bool   `mapstructure:"compress"`
+	SyslogNetwork string `mapstructure:"syslog_network"`
+	SyslogAddress string `mapstructure:"syslog_address"`
+	SyslogTag   string `mapstructure:"syslog_tag"`
+	AddSource   bool   `mapstructure:"add_source"`
 }
 
 // CORSConfig holds CORS settings.
@@ -73,17 +91,18 @@ type CORSConfig struct {
 // Config is the top-level application configuration.
 // It aggregates all configuration sections for different components.
 type Config struct {
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Log      LogConfig      `mapstructure:"log"`
-	CORS     CORSConfig     `mapstructure:"cors"`
-	Storage  StorageConfig  `mapstructure:"storage"`
-	Image    ImageConfig    `mapstructure:"image"`
-	Swagger  SwaggerConfig  `mapstructure:"swagger"`
-	Cache    CacheConfig    `mapstructure:"cache"`
-	Email    EmailConfig    `mapstructure:"email"`
+	Database      DatabaseConfig      `mapstructure:"database"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	JWT           JWTConfig           `mapstructure:"jwt"`
+	PasswordReset PasswordResetConfig `mapstructure:"password_reset"`
+	Server        ServerConfig        `mapstructure:"server"`
+	Log           LogConfig           `mapstructure:"log"`
+	CORS          CORSConfig          `mapstructure:"cors"`
+	Storage       StorageConfig       `mapstructure:"storage"`
+	Image         ImageConfig         `mapstructure:"image"`
+	Swagger       SwaggerConfig      `mapstructure:"swagger"`
+	Cache         CacheConfig         `mapstructure:"cache"`
+	Email         EmailConfig         `mapstructure:"email"`
 }
 
 var (
@@ -162,9 +181,12 @@ func loadConfig() (*Config, error) {
 	if err := parseEmailConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse email config: %w", err)
 	}
+	if err := parsePasswordResetConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse password reset config: %w", err)
+	}
 
 	// Validate required fields
-	if err := Validate(cfg); err != nil {
+	if err := validate(cfg); err != nil {
 		return nil, err
 	}
 
@@ -209,12 +231,28 @@ func setDefaults(v *viper.Viper) {
 	// JWT defaults
 	v.SetDefault("jwt.access_expiry", "15m")
 	v.SetDefault("jwt.refresh_expiry", "720h")
+	v.SetDefault("jwt.issuer", "go-api-base")
+	v.SetDefault("jwt.audience", "api")
+
+	// Password reset defaults
+	v.SetDefault("password_reset.token_expiry", "1h")
 
 	// Server defaults
 	v.SetDefault("server.port", 8080)
 
 	// Log defaults
 	v.SetDefault("log.level", "info")
+	v.SetDefault("log.format", "json")
+	v.SetDefault("log.outputs", "stdout")
+	v.SetDefault("log.file_path", "/var/log/api.log")
+	v.SetDefault("log.max_size", 100)
+	v.SetDefault("log.max_backups", 10)
+	v.SetDefault("log.max_age", 30)
+	v.SetDefault("log.compress", true)
+	v.SetDefault("log.syslog_network", "")
+	v.SetDefault("log.syslog_address", "")
+	v.SetDefault("log.syslog_tag", "go-api")
+	v.SetDefault("log.add_source", false)
 
 	// CORS defaults
 	v.SetDefault("cors.allowed_origins", "http://localhost:3000")
@@ -223,6 +261,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("storage.driver", "local")
 	v.SetDefault("storage.local_path", "./storage/uploads")
 	v.SetDefault("storage.base_url", "http://localhost:8080/storage")
+	// Note: storage.signing_key has no default - must be set via STORAGE_SIGNING_KEY env var
 
 	// Image defaults
 	v.SetDefault("image.compression_enabled", true)
@@ -448,7 +487,13 @@ func parseRedisURL(url string) (*RedisConfig, error) {
 
 // parseJWTConfig parses JWT configuration from environment.
 func parseJWTConfig(v *viper.Viper, cfg *Config) error {
-	cfg.JWT.Secret = getEnvOrDefault("JWT_SECRET", "change-me-in-production")
+	// JWT_SECRET is required - no default for security
+	// Application will fail to start if not set
+	cfg.JWT.Secret = os.Getenv("JWT_SECRET")
+
+	// Issuer and audience for JWT claims (HIGH-003)
+	cfg.JWT.Issuer = getEnvOrDefault("JWT_ISSUER", v.GetString("jwt.issuer"))
+	cfg.JWT.Audience = getEnvOrDefault("JWT_AUDIENCE", v.GetString("jwt.audience"))
 
 	accessExpiry := getEnvOrDefault("JWT_ACCESS_EXPIRY", v.GetString("jwt.access_expiry"))
 	duration, err := time.ParseDuration(accessExpiry)
@@ -467,6 +512,17 @@ func parseJWTConfig(v *viper.Viper, cfg *Config) error {
 	return nil
 }
 
+// parsePasswordResetConfig parses password reset token configuration from environment.
+func parsePasswordResetConfig(v *viper.Viper, cfg *Config) error {
+	tokenExpiry := getEnvOrDefault("PASSWORD_RESET_TOKEN_EXPIRY", v.GetString("password_reset.token_expiry"))
+	duration, err := time.ParseDuration(tokenExpiry)
+	if err != nil {
+		return fmt.Errorf("invalid PASSWORD_RESET_TOKEN_EXPIRY: %w", err)
+	}
+	cfg.PasswordReset.TokenExpiry = duration
+	return nil
+}
+
 // parseServerConfig parses server configuration from environment.
 func parseServerConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Server.Port = getEnvIntOrDefault("SERVER_PORT", v.GetInt("server.port"))
@@ -476,6 +532,20 @@ func parseServerConfig(v *viper.Viper, cfg *Config) error {
 // parseLogConfig parses logging configuration from environment.
 func parseLogConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Log.Level = getEnvOrDefault("LOG_LEVEL", v.GetString("log.level"))
+	cfg.Log.Format = getEnvOrDefault("LOG_FORMAT", v.GetString("log.format"))
+	cfg.Log.Outputs = getEnvOrDefault("LOG_OUTPUTS", v.GetString("log.outputs"))
+	cfg.Log.FilePath = getEnvOrDefault("LOG_FILE_PATH", v.GetString("log.file_path"))
+	cfg.Log.SyslogNetwork = getEnvOrDefault("LOG_SYSLOG_NETWORK", v.GetString("log.syslog_network"))
+	cfg.Log.SyslogAddress = getEnvOrDefault("LOG_SYSLOG_ADDRESS", v.GetString("log.syslog_address"))
+	cfg.Log.SyslogTag = getEnvOrDefault("LOG_SYSLOG_TAG", v.GetString("log.syslog_tag"))
+
+	cfg.Log.MaxSize = getEnvIntOrDefault("LOG_FILE_MAX_SIZE", v.GetInt("log.max_size"))
+	cfg.Log.MaxBackups = getEnvIntOrDefault("LOG_FILE_MAX_BACKUPS", v.GetInt("log.max_backups"))
+	cfg.Log.MaxAge = getEnvIntOrDefault("LOG_FILE_MAX_AGE", v.GetInt("log.max_age"))
+
+	cfg.Log.Compress = getEnvBoolOrDefault("LOG_FILE_COMPRESS", v.GetBool("log.compress"))
+	cfg.Log.AddSource = getEnvBoolOrDefault("LOG_ADD_SOURCE", v.GetBool("log.add_source"))
+
 	return nil
 }
 
@@ -490,8 +560,11 @@ func parseCORSConfig(v *viper.Viper, cfg *Config) error {
 }
 
 // validate checks that all required configuration fields are set.
+// It returns an error if any required fields are missing, and logs warnings
+// for security concerns that don't block startup.
 func validate(cfg *Config) error {
 	var missing []string
+	var weak []string
 
 	if cfg.Database.Host == "" {
 		missing = append(missing, "DATABASE_HOST")
@@ -505,12 +578,21 @@ func validate(cfg *Config) error {
 	if cfg.Redis.Host == "" {
 		missing = append(missing, "REDIS_HOST")
 	}
-	if cfg.JWT.Secret == "" || cfg.JWT.Secret == "change-me-in-production" {
-		missing = append(missing, "JWT_SECRET")
+
+	// JWT_SECRET is required for security - no default allowed
+	if cfg.JWT.Secret == "" {
+		missing = append(missing, "JWT_SECRET (set a secure random string of at least 32 characters)")
+	} else if len(cfg.JWT.Secret) < 32 {
+		// HS256 requires a minimum secret length for security
+		weak = append(weak, "JWT_SECRET must be at least 32 characters for security (current: "+fmt.Sprintf("%d", len(cfg.JWT.Secret))+")")
 	}
 
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required configuration: %v", missing)
+	}
+
+	if len(weak) > 0 {
+		slog.Warn("Security warnings", "issues", weak)
 	}
 
 	return nil
@@ -547,6 +629,7 @@ func parseStorageConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Storage.Driver = getEnvOrDefault("STORAGE_DRIVER", v.GetString("storage.driver"))
 	cfg.Storage.LocalPath = getEnvOrDefault("STORAGE_LOCAL_PATH", v.GetString("storage.local_path"))
 	cfg.Storage.BaseURL = getEnvOrDefault("STORAGE_BASE_URL", v.GetString("storage.base_url"))
+	cfg.Storage.SigningKey = getEnvOrDefault("STORAGE_SIGNING_KEY", v.GetString("storage.signing_key"))
 	// S3/MinIO fields
 	cfg.Storage.S3Endpoint = getEnvOrDefault("STORAGE_S3_ENDPOINT", v.GetString("storage.s3_endpoint"))
 	cfg.Storage.S3Region = getEnvOrDefault("STORAGE_S3_REGION", v.GetString("storage.s3_region"))

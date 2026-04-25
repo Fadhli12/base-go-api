@@ -82,17 +82,19 @@ type CleanupResponse struct {
 
 // MediaHandler handles media-related HTTP endpoints
 type MediaHandler struct {
-	service   service.MediaService
-	auditSvc  *service.AuditService
-	enforcer  *permission.Enforcer
+	service    service.MediaService
+	auditSvc   *service.AuditService
+	enforcer   *permission.Enforcer
+	signingKey string // Secret for signed URL validation
 }
 
 // NewMediaHandler creates a new MediaHandler instance
-func NewMediaHandler(service service.MediaService, auditSvc *service.AuditService, enforcer *permission.Enforcer) *MediaHandler {
+func NewMediaHandler(service service.MediaService, auditSvc *service.AuditService, enforcer *permission.Enforcer, signingKey string) *MediaHandler {
 	return &MediaHandler{
-		service:   service,
-		auditSvc:  auditSvc,
-		enforcer:  enforcer,
+		service:    service,
+		auditSvc:   auditSvc,
+		enforcer:   enforcer,
+		signingKey: signingKey,
 	}
 }
 
@@ -593,9 +595,7 @@ func (h *MediaHandler) Download(c echo.Context) error {
 		}
 
 		// Validate signed URL
-		// Note: In production, signingSecret should come from config
-		signingSecret := "change-me-in-production"
-		if !h.service.ValidateSignedURL(mediaID, query.Signature, query.Expires, signingSecret) {
+		if !h.service.ValidateSignedURL(mediaID, query.Signature, query.Expires, h.signingKey) {
 			return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Invalid or expired signature"))
 		}
 	} else {

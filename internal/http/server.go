@@ -14,6 +14,7 @@ import (
 	"github.com/example/go-api-base/internal/http/handler"
 	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/response"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/module/invoice"
 	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
@@ -32,6 +33,7 @@ type Server struct {
 	config      *config.Config
 	db          *gorm.DB
 	redis       *redis.Client
+	logger      logger.Logger
 	enforcer    *permission.Enforcer
 	permCache   *permission.Cache
 	invalidator *permission.Invalidator
@@ -50,7 +52,7 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new HTTP server with middleware chain
-func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, cacheDriver cache.Driver) *Server {
+func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, cacheDriver cache.Driver, log logger.Logger) *Server {
 	e := echo.New()
 
 	// Configure Echo settings
@@ -63,15 +65,22 @@ func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, cache
 		config: cfg,
 		db:     db,
 		redis:  redisClient,
+		logger: log,
 	}
 
 	// Set custom error handler
 	e.HTTPErrorHandler = s.HTTPErrorHandler
 
-	// Set up middleware chain: recover -> request_id -> cors -> rate_limit
+	// Set up middleware chain: recover -> request_id -> structured_logging -> cors -> rate_limit
 	// Order matters: recover should be first to catch all panics
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
+
+	// Add StructuredLogging middleware if logger is provided
+	if log != nil {
+		e.Use(middleware.StructuredLogging(middleware.DefaultLoggingMiddlewareConfig(log)))
+	}
+
 	e.Use(middleware.CORS(cfg))
 
 	// Apply rate limiting with cache driver
@@ -187,6 +196,16 @@ func (s *Server) Config() *config.Config {
 	return s.config
 }
 
+// Logger returns the logger
+func (s *Server) Logger() logger.Logger {
+	return s.logger
+}
+
+// SetLogger sets the logger
+func (s *Server) SetLogger(log logger.Logger) {
+	s.logger = log
+}
+
 // Enforcer returns the permission enforcer
 func (s *Server) Enforcer() *permission.Enforcer {
 	return s.enforcer
@@ -255,6 +274,7 @@ func (s *Server) RegisterRoutes() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(s.db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(s.db)
+	passwordResetTokenRepo := repository.NewPasswordResetTokenRepository(s.db)
 	permissionRepo := repository.NewPermissionRepository(s.db)
 	roleRepo := repository.NewRoleRepository(s.db)
 	rolePermissionRepo := repository.NewRolePermissionRepository(s.db)
@@ -281,19 +301,39 @@ func (s *Server) RegisterRoutes() {
 	)
 
 	// Initialize services
-	tokenService := service.NewTokenService(s.config.JWT.Secret, s.config.JWT.AccessExpiry, s.config.JWT.RefreshExpiry)
+	// HIGH-003: Token service now includes issuer/audience claims
+	tokenService := service.NewTokenService(
+		s.config.JWT.Secret,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+		s.config.JWT.AccessExpiry,
+		s.config.JWT.RefreshExpiry,
+	)
 	passwordHasher := service.NewPasswordHasher()
-	authService := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, emailService)
+	
+	// HIGH-002: Audit service for auth events
+	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
+	s.SetAuditService(auditService)
+	
+	// CRIT-002: Auth service now includes password reset token repository
+	authService := service.NewAuthService(
+		userRepo,
+		refreshTokenRepo,
+		passwordResetTokenRepo,
+		tokenService,
+		passwordHasher,
+		emailService,
+		auditService,
+		s.config.PasswordReset.TokenExpiry,
+		roleRepo,
+		userRoleRepo,
+	)
 	userService := service.NewUserService(userRepo, userRoleRepo, userPermissionRepo)
 	permissionService := service.NewPermissionService(permissionRepo)
 	roleService := service.NewRoleService(roleRepo, rolePermissionRepo, permissionRepo)
 	
-	// Initialize audit service with async processing
-	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
-	s.SetAuditService(auditService)
-	
 	// Initialize organization service
-	orgService := service.NewOrganizationService(organizationRepo, s.enforcer, auditService, emailService, slog.Default())
+	orgService := service.NewOrganizationService(organizationRepo, userRepo, s.enforcer, auditService, emailService, slog.Default())
 
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
@@ -332,7 +372,12 @@ func (s *Server) RegisterRoutes() {
 	// Initialize media handler if media service is available
 	var mediaHandler *handler.MediaHandler
 	if mediaService != nil {
-		mediaHandler = handler.NewMediaHandler(mediaService, auditService, s.enforcer)
+		// Use configured signing key or fallback to JWT secret for backwards compatibility
+		signingKey := s.config.Storage.SigningKey
+		if signingKey == "" {
+			signingKey = s.config.JWT.Secret // Fallback to JWT secret
+		}
+		mediaHandler = handler.NewMediaHandler(mediaService, auditService, s.enforcer, signingKey)
 	}
 
 	// Swagger documentation (conditional based on config)
@@ -353,6 +398,25 @@ func (s *Server) RegisterRoutes() {
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/refresh", authHandler.Refresh)
 	auth.POST("/logout", authHandler.Logout)
+	auth.POST("/password-reset", authHandler.RequestPasswordReset)
+	auth.POST("/password-reset/confirm", authHandler.ResetPassword)
+
+	// MED-005: Session management routes (protected)
+	sessions := v1.Group("/sessions")
+	sessions.Use(middleware.JWT(middleware.JWTConfig{
+		Secret: s.config.JWT.Secret,
+	}))
+	sessions.GET("", authHandler.ListSessions)
+	sessions.DELETE("/:id", authHandler.RevokeSession)
+	sessions.DELETE("/others", authHandler.RevokeAllOtherSessions)
+
+	// MED-006: Auth metrics endpoint (protected, admin-only in production)
+	metricsHandler := handler.NewMetricsHandler()
+	metrics := v1.Group("/metrics")
+	metrics.Use(middleware.JWT(middleware.JWTConfig{
+		Secret: s.config.JWT.Secret,
+	}))
+	metrics.GET("/auth", metricsHandler.GetAuthMetrics)
 
 	// Permission routes
 	s.RegisterPermissionRoutes(v1, permissionHandler)

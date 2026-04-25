@@ -36,6 +36,7 @@ import (
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/database"
 	apphttp "github.com/example/go-api-base/internal/http"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
@@ -134,6 +135,27 @@ func runServer() error {
 		"server_port", cfg.Server.Port,
 	)
 
+	// Initialize logger from configuration
+	log, err := logger.NewLogger(logger.Config{
+		Level:          cfg.Log.Level,
+		Format:         cfg.Log.Format,
+		Outputs:        cfg.Log.Outputs,
+		FilePath:       cfg.Log.FilePath,
+		FileMaxSize:    cfg.Log.MaxSize,
+		FileMaxBackups: cfg.Log.MaxBackups,
+		FileMaxAge:     cfg.Log.MaxAge,
+		FileCompress:   cfg.Log.Compress,
+		SyslogNetwork:  cfg.Log.SyslogNetwork,
+		SyslogAddress:  cfg.Log.SyslogAddress,
+		SyslogTag:      cfg.Log.SyslogTag,
+		AddSource:      cfg.Log.AddSource,
+	})
+	if err != nil {
+		slog.Error("Failed to initialize logger", "error", err)
+		return fmt.Errorf("logger initialization failed: %w", err)
+	}
+	defer log.Info(context.Background(), "logger shutdown")
+
 	// Initialize database connections
 	db, err := database.NewPostgresDB(cfg)
 	if err != nil {
@@ -175,7 +197,7 @@ func runServer() error {
 	invalidator := permission.NewInvalidator(redisClient)
 
 	// Create server with Echo and dependencies
-	server := apphttp.NewServer(cfg, db, redisClient, cacheDriver)
+	server := apphttp.NewServer(cfg, db, redisClient, cacheDriver, log)
 
 	// Set permission-related dependencies
 	server.SetEnforcer(enforcer)

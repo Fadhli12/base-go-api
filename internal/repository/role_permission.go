@@ -59,6 +59,7 @@ func (r *rolePermissionRepository) FindByRoleID(ctx context.Context, roleID uuid
 		Table("permissions").
 		Joins("JOIN role_permissions ON permissions.id = role_permissions.permission_id").
 		Where("role_permissions.role_id = ?", roleID).
+		Where("permissions.deleted_at IS NULL"). // Filter soft-deleted permissions
 		Find(&permissions).Error; err != nil {
 		return nil, errors.WrapInternal(err)
 	}

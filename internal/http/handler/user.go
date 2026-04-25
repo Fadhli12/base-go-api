@@ -7,6 +7,7 @@ import (
 	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -81,22 +82,32 @@ type EffectivePermissionResponse struct {
 //	@Failure	404	{object}	response.Envelope	"User not found"
 //	@Router		/api/v1/me [get]
 func (h *UserHandler) GetCurrentUser(c echo.Context) error {
-	// Extract user ID from context using helper
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "get current user failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Authentication required"))
 	}
 
-	// Fetch user from database
-	user, err := h.userService.FindByID(c.Request().Context(), userID)
+	log.Info(ctx, "fetching current user", log.String("user_id", userID.String()))
+
+	user, err := h.userService.FindByID(ctx, userID)
 	if err != nil {
 		if apperrors.IsAppError(err) && apperrors.GetAppError(err).Code == "NOT_FOUND" {
+			log.Warn(ctx, "current user not found",
+				log.String("user_id", userID.String()),
+			)
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "USER_NOT_FOUND", "User not found"))
 		}
+		log.Error(ctx, "failed to fetch current user",
+			log.String("user_id", userID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to fetch user"))
 	}
 
-	// Convert to response format
 	resp := userToResponse(user)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))
@@ -116,8 +127,14 @@ func (h *UserHandler) GetCurrentUser(c echo.Context) error {
 //	@Failure	500	{object}	response.Envelope	"Internal server error"
 //	@Router		/api/v1/users [get]
 func (h *UserHandler) ListUsers(c echo.Context) error {
-	users, err := h.userService.FindAll(c.Request().Context())
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
+	log.Info(ctx, "listing users")
+
+	users, err := h.userService.FindAll(ctx)
 	if err != nil {
+		log.Error(ctx, "failed to retrieve users", logger.Err(err))
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve users"))
 	}
 
@@ -150,20 +167,36 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User not found"
 //	@Router		/api/v1/users/{id} [get]
 func (h *UserHandler) GetUserByID(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
-	user, err := h.userService.FindByID(c.Request().Context(), id)
+	log.Info(ctx, "fetching user by ID", log.String("user_id", id.String()))
+
+	user, err := h.userService.FindByID(ctx, id)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to fetch user",
+				log.String("user_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "user not found", log.String("user_id", id.String()))
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "User not found"))
 		}
+		log.Error(ctx, "failed to fetch user",
+			log.String("user_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to fetch user"))
 	}
 
@@ -193,21 +226,39 @@ func (h *UserHandler) GetUserByID(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User not found"
 //	@Router		/api/v1/users/{id} [delete]
 func (h *UserHandler) SoftDelete(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
-	if err := h.userService.SoftDelete(c.Request().Context(), id); err != nil {
+	log.Info(ctx, "deleting user", log.String("user_id", id.String()))
+
+	if err := h.userService.SoftDelete(ctx, id); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "user deletion failed",
+				log.String("user_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "user not found", log.String("user_id", id.String()))
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "User not found"))
 		}
+		log.Error(ctx, "user deletion failed",
+			log.String("user_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to delete user"))
 	}
+
+	log.Info(ctx, "user deleted successfully", log.String("user_id", id.String()))
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "User deleted successfully"}))
 }
@@ -229,38 +280,67 @@ func (h *UserHandler) SoftDelete(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User or role not found"
 //	@Router		/api/v1/users/{id}/roles [post]
 func (h *UserHandler) AssignRole(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
 	var req request.CreateUserRoleRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
+		log.Warn(ctx, "invalid role ID", log.String("role_id", req.RoleID))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid role ID"))
 	}
 
-	// Get the current user ID for tracking who assigned the role
 	assignedBy, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "assign role failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Authentication required"))
 	}
 
-	if err := h.userService.AssignRole(c.Request().Context(), userID, roleID, assignedBy); err != nil {
+	log.Info(ctx, "assigning role",
+		log.String("user_id", userID.String()),
+		log.String("role_id", roleID.String()),
+		log.String("assigned_by", assignedBy.String()),
+	)
+
+	if err := h.userService.AssignRole(ctx, userID, roleID, assignedBy); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "role assignment failed",
+				log.String("user_id", userID.String()),
+				log.String("role_id", roleID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "role assignment failed",
+			log.String("user_id", userID.String()),
+			log.String("role_id", roleID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to assign role"))
 	}
+
+	log.Info(ctx, "role assigned successfully",
+		log.String("user_id", userID.String()),
+		log.String("role_id", roleID.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Role assigned successfully"}))
 }
@@ -282,27 +362,57 @@ func (h *UserHandler) AssignRole(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User or role not found"
 //	@Router		/api/v1/users/{id}/roles/{roleId} [delete]
 func (h *UserHandler) RemoveRole(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
 	roleIDStr := c.Param("roleId")
 	roleID, err := uuid.Parse(roleIDStr)
 	if err != nil {
+		log.Warn(ctx, "invalid role ID", log.String("id", roleIDStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid role ID"))
 	}
 
-	if err := h.userService.RemoveRole(c.Request().Context(), userID, roleID); err != nil {
+	log.Info(ctx, "removing role",
+		log.String("user_id", userID.String()),
+		log.String("role_id", roleID.String()),
+	)
+
+	if err := h.userService.RemoveRole(ctx, userID, roleID); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "role removal failed",
+				log.String("user_id", userID.String()),
+				log.String("role_id", roleID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
 		if err == apperrors.ErrNotFound {
+			log.Warn(ctx, "role assignment not found",
+				log.String("user_id", userID.String()),
+				log.String("role_id", roleID.String()),
+			)
 			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role assignment not found"))
 		}
+		log.Error(ctx, "role removal failed",
+			log.String("user_id", userID.String()),
+			log.String("role_id", roleID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to remove role"))
 	}
+
+	log.Info(ctx, "role removed successfully",
+		log.String("user_id", userID.String()),
+		log.String("role_id", roleID.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Role removed successfully"}))
 }
@@ -324,48 +434,98 @@ func (h *UserHandler) RemoveRole(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User or permission not found"
 //	@Router		/api/v1/users/{id}/permissions [post]
 func (h *UserHandler) GrantPermission(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
 	var req request.CreateUserPermissionRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	permissionID, err := uuid.Parse(req.PermissionID)
 	if err != nil {
+		log.Warn(ctx, "invalid permission ID", log.String("permission_id", req.PermissionID))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid permission ID"))
 	}
 
-	// Get the current user ID for tracking who granted the permission
 	assignedBy, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "grant permission failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Authentication required"))
 	}
 
+	action := "grant"
 	if req.Effect == "deny" {
-		if err := h.userService.DenyPermission(c.Request().Context(), userID, permissionID, assignedBy); err != nil {
+		action = "deny"
+	}
+
+	log.Info(ctx, "modifying user permission",
+		log.String("action", action),
+		log.String("user_id", userID.String()),
+		log.String("permission_id", permissionID.String()),
+		log.String("assigned_by", assignedBy.String()),
+	)
+
+	if req.Effect == "deny" {
+		if err := h.userService.DenyPermission(ctx, userID, permissionID, assignedBy); err != nil {
 			if appErr := apperrors.GetAppError(err); appErr != nil {
+				log.Error(ctx, "permission deny failed",
+					log.String("user_id", userID.String()),
+					log.String("permission_id", permissionID.String()),
+					log.String("error_code", appErr.Code),
+					logger.Err(err),
+				)
 				return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 			}
+			log.Error(ctx, "permission deny failed",
+				log.String("user_id", userID.String()),
+				log.String("permission_id", permissionID.String()),
+				logger.Err(err),
+			)
 			return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to deny permission"))
 		}
+		log.Info(ctx, "permission denied successfully",
+			log.String("user_id", userID.String()),
+			log.String("permission_id", permissionID.String()),
+		)
 		return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Permission denied successfully"}))
 	}
 
-	if err := h.userService.GrantPermission(c.Request().Context(), userID, permissionID, assignedBy); err != nil {
+	if err := h.userService.GrantPermission(ctx, userID, permissionID, assignedBy); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "permission grant failed",
+				log.String("user_id", userID.String()),
+				log.String("permission_id", permissionID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "permission grant failed",
+			log.String("user_id", userID.String()),
+			log.String("permission_id", permissionID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to grant permission"))
 	}
+
+	log.Info(ctx, "permission granted successfully",
+		log.String("user_id", userID.String()),
+		log.String("permission_id", permissionID.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Permission granted successfully"}))
 }
@@ -387,24 +547,50 @@ func (h *UserHandler) GrantPermission(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Permission assignment not found"
 //	@Router		/api/v1/users/{id}/permissions/{permId} [delete]
 func (h *UserHandler) RemovePermission(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
 	permIDStr := c.Param("permId")
 	permissionID, err := uuid.Parse(permIDStr)
 	if err != nil {
+		log.Warn(ctx, "invalid permission ID", log.String("id", permIDStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid permission ID"))
 	}
 
-	if err := h.userService.RemovePermission(c.Request().Context(), userID, permissionID); err != nil {
+	log.Info(ctx, "removing permission",
+		log.String("user_id", userID.String()),
+		log.String("permission_id", permissionID.String()),
+	)
+
+	if err := h.userService.RemovePermission(ctx, userID, permissionID); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "permission removal failed",
+				log.String("user_id", userID.String()),
+				log.String("permission_id", permissionID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "permission removal failed",
+			log.String("user_id", userID.String()),
+			log.String("permission_id", permissionID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to remove permission"))
 	}
+
+	log.Info(ctx, "permission removed successfully",
+		log.String("user_id", userID.String()),
+		log.String("permission_id", permissionID.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Permission removed successfully"}))
 }
@@ -425,17 +611,32 @@ func (h *UserHandler) RemovePermission(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User not found"
 //	@Router		/api/v1/users/{id}/effective-permissions [get]
 func (h *UserHandler) GetEffectivePermissions(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
-	permissions, err := h.userService.GetEffectivePermissions(c.Request().Context(), userID)
+	log.Info(ctx, "fetching effective permissions", log.String("user_id", userID.String()))
+
+	permissions, err := h.userService.GetEffectivePermissions(ctx, userID)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to get effective permissions",
+				log.String("user_id", userID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "failed to get effective permissions",
+			log.String("user_id", userID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to get effective permissions"))
 	}
 
@@ -469,17 +670,32 @@ func (h *UserHandler) GetEffectivePermissions(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"User not found"
 //	@Router		/api/v1/users/{id}/roles [get]
 func (h *UserHandler) GetUserRoles(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	userID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
-	roles, err := h.userService.GetUserRoles(c.Request().Context(), userID)
+	log.Info(ctx, "fetching user roles", log.String("user_id", userID.String()))
+
+	roles, err := h.userService.GetUserRoles(ctx, userID)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to get user roles",
+				log.String("user_id", userID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "failed to get user roles",
+			log.String("user_id", userID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to get user roles"))
 	}
 

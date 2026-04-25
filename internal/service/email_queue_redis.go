@@ -11,9 +11,10 @@ import (
 
 const (
 	// Redis key prefixes for email queue
-	EmailQueueKey      = "email:queue"
-	EmailProcessingKey = "email:processing"
-	EmailDeadLetterKey = "email:dead_letter"
+	EmailQueueKey       = "email:queue"
+	EmailProcessingKey  = "email:processing"
+	EmailDeadLetterKey  = "email:dead_letter"
+	EmailProcessingSet   = "email:processing:set" // SET to track processing email IDs for efficient enumeration
 )
 
 // EmailQueueMessage represents a message in the Redis queue
@@ -86,14 +87,29 @@ func (q *RedisEmailQueue) MoveToProcessing(ctx context.Context, emailID string, 
 		"started_at": time.Now().Unix(),
 	}
 
-	jsonData, _ := json.Marshal(data)
-	return q.client.Set(ctx, key, jsonData, timeout).Err()
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal processing data: %w", err)
+	}
+
+	// Use pipeline to set processing key AND add to tracking set
+	pipe := q.client.Pipeline()
+	pipe.Set(ctx, key, jsonData, timeout)
+	pipe.SAdd(ctx, EmailProcessingSet, emailID)
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 // RemoveFromProcessing removes an email from the processing set
 func (q *RedisEmailQueue) RemoveFromProcessing(ctx context.Context, emailID string) error {
 	key := fmt.Sprintf("%s:%s", EmailProcessingKey, emailID)
-	return q.client.Del(ctx, key).Err()
+
+	// Use pipeline to remove processing key AND remove from tracking set
+	pipe := q.client.Pipeline()
+	pipe.Del(ctx, key)
+	pipe.SRem(ctx, EmailProcessingSet, emailID)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // MoveToDeadLetter moves a failed email to the dead letter queue
@@ -115,11 +131,8 @@ func (q *RedisEmailQueue) GetQueueLength(ctx context.Context) (int64, error) {
 
 // GetProcessingLength returns the number of emails being processed
 func (q *RedisEmailQueue) GetProcessingLength(ctx context.Context) (int64, error) {
-	keys, err := q.client.Keys(ctx, EmailProcessingKey+":*").Result()
-	if err != nil {
-		return 0, err
-	}
-	return int64(len(keys)), nil
+	// Use SCARD on tracking set instead of KEYS command (O(1) instead of O(N))
+	return q.client.SCard(ctx, EmailProcessingSet).Result()
 }
 
 // GetDeadLetterLength returns the number of emails in dead letter queue
@@ -129,7 +142,8 @@ func (q *RedisEmailQueue) GetDeadLetterLength(ctx context.Context) (int64, error
 
 // RequeueTimedOut finds processing emails that have timed out and requeues them
 func (q *RedisEmailQueue) RequeueTimedOut(ctx context.Context, timeout time.Duration) (int64, error) {
-	keys, err := q.client.Keys(ctx, EmailProcessingKey+":*").Result()
+	// Use SMEMBERS on tracking set instead of KEYS (more efficient)
+	emailIDs, err := q.client.SMembers(ctx, EmailProcessingSet).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -137,9 +151,12 @@ func (q *RedisEmailQueue) RequeueTimedOut(ctx context.Context, timeout time.Dura
 	var requeued int64
 	cutoff := time.Now().Add(-timeout).Unix()
 
-	for _, key := range keys {
+	for _, emailID := range emailIDs {
+		key := fmt.Sprintf("%s:%s", EmailProcessingKey, emailID)
 		data, err := q.client.Get(ctx, key).Result()
 		if err != nil {
+			// Key might have expired or been removed, clean up set
+			q.client.SRem(ctx, EmailProcessingSet, emailID)
 			continue
 		}
 
@@ -154,11 +171,14 @@ func (q *RedisEmailQueue) RequeueTimedOut(ctx context.Context, timeout time.Dura
 
 		if processing.StartedAt < cutoff {
 			// Requeue the email
-			emailID := key[len(EmailProcessingKey)+1:]
 			if err := q.Enqueue(ctx, emailID, 1); err != nil {
 				continue
 			}
-			_ = q.client.Del(ctx, key).Err()
+			// Remove from processing set and individual key
+			pipe := q.client.Pipeline()
+			pipe.Del(ctx, key)
+			pipe.SRem(ctx, EmailProcessingSet, emailID)
+			pipe.Exec(ctx)
 			requeued++
 		}
 	}

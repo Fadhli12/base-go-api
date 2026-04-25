@@ -1,0 +1,1110 @@
+{
+	"info": {
+		"_postman_id": "go-api-auth-collection",
+		"name": "Go API - Auth & RBAC",
+		"description": "Postman collection for testing authentication and RBAC features in Go API Base project.\n\n**Authentication:**\n- Public endpoints (register, login, password reset) require no auth\n- Protected endpoints require `Authorization: Bearer {{access_token}}`\n\n**Password Requirements:**\n- 8-72 characters\n- At least 1 uppercase letter\n- At least 1 lowercase letter\n- At least 1 number\n- At least 1 special character (!@#$%^&*(),.?\\\":{}|<>)\n\n**Response Format:**\nAll responses wrapped in `{\"data\": {...}, \"error\": {...}, \"meta\": {...}}`",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-save access_token from login/refresh responses",
+					"if (pm.response.code === 200) {",
+					"    const json = pm.response.json();",
+					"    if (json.data && json.data.access_token) {",
+					"        pm.collectionVariables.set('access_token', json.data.access_token);",
+					"        if (json.data.refresh_token) {",
+					"            pm.collectionVariables.set('refresh_token', json.data.refresh_token);",
+					"        }",
+					"    }",
+					"    if (json.data && json.data.user && json.data.user.id) {",
+					"        pm.collectionVariables.set('user_id', json.data.user.id);",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/healthz",
+							"host": ["{{base_url}}"],
+							"path": ["healthz"]
+						},
+						"description": "Simple health check - returns OK status"
+					},
+					"response": []
+				},
+				{
+					"name": "Readiness Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/readyz",
+							"host": ["{{base_url}}"],
+							"path": ["readyz"]
+						},
+						"description": "Checks database and Redis connectivity"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Auth - Public",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has user ID and email', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.expect(json.data).to.have.property('email');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "register"]
+						},
+						"description": "Register a new user. Password must meet complexity requirements."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has tokens', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('access_token');",
+									"    pm.expect(json.data).to.have.property('refresh_token');",
+									"    pm.expect(json.data.user).to.have.property('id');",
+									"});",
+									"",
+									"// Auto-save tokens",
+									"const json = pm.response.json();",
+									"pm.collectionVariables.set('access_token', json.data.access_token);",
+									"pm.collectionVariables.set('refresh_token', json.data.refresh_token);",
+									"pm.collectionVariables.set('user_id', json.data.user.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Authenticate user and receive access/refresh tokens. Access token expires in 15 minutes, refresh token in 30 days."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has new tokens', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('access_token');",
+									"    pm.expect(json.data).to.have.property('refresh_token');",
+									"});",
+									"",
+									"// Auto-save new tokens",
+									"const json = pm.response.json();",
+									"pm.collectionVariables.set('access_token', json.data.access_token);",
+									"pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "refresh"]
+						},
+						"description": "Exchange refresh token for new access/refresh tokens. Refresh tokens rotate after use."
+					},
+					"response": []
+				},
+				{
+					"name": "Request Password Reset",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response message is generic', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data.message).to.include('reset link has been sent');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/password-reset",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "password-reset"]
+						},
+						"description": "Request password reset email. Always returns success to prevent email enumeration. In development, check logs for reset token."
+					},
+					"response": []
+				},
+				{
+					"name": "Confirm Password Reset",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response confirms password reset', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data.message).to.include('reset successfully');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"paste-reset-token-here\",\n  \"password\": \"NewPassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/password-reset/confirm",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "password-reset", "confirm"]
+						},
+						"description": "Reset password using token from email. Token is single-use."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Auth - Protected",
+			"item": [
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response confirms logout', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data.message).to.include('logged out');",
+									"});",
+									"",
+									"// Clear saved tokens",
+									"pm.collectionVariables.set('access_token', '');",
+									"pm.collectionVariables.set('refresh_token', '');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "logout"]
+						},
+						"description": "Invalidate current session. Requires Bearer token."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sessions",
+			"item": [
+				{
+					"name": "List Sessions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is array of sessions', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sessions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "sessions"]
+						},
+						"description": "List all active sessions for current user. Shows device name, user agent, IP, creation time, expiration, and current session flag."
+					},
+					"response": []
+				},
+				{
+					"name": "Revoke Session",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sessions/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "sessions", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-session-id"
+								}
+							]
+						},
+						"description": "Revoke a specific session by ID. Cannot revoke current session (use logout instead)."
+					},
+					"response": []
+				},
+				{
+					"name": "Revoke All Other Sessions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response shows revoked count', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('revoked_count');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/sessions/others",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "sessions", "others"]
+						},
+						"description": "Revoke all sessions except the current one. Returns count of revoked sessions."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Current User",
+			"item": [
+				{
+					"name": "Get Current User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has user object', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.expect(json.data).to.have.property('email');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "me"]
+						},
+						"description": "Get current authenticated user's profile."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users (manage permission)",
+			"item": [
+				{
+					"name": "List Users",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						},
+						"description": "List all users. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Get user details by ID. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User (Soft)",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-user-id"
+								}
+							]
+						},
+						"description": "Soft delete a user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Assign Role to User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role_id\": \"paste-role-id\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "roles"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Assign a role to a user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Role from User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/roles/:roleId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "roles", ":roleId"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								},
+								{
+									"key": "roleId",
+									"value": "paste-role-id"
+								}
+							]
+						},
+						"description": "Remove a role from a user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Roles",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "roles"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Get all roles assigned to a user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Grant Permission to User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"permission_id\": \"paste-permission-id\",\n  \"effect\": \"allow\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "permissions"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Grant a direct permission to a user. Effect can be 'allow' or 'deny'. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Permission from User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/permissions/:permId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "permissions", ":permId"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								},
+								{
+									"key": "permId",
+									"value": "paste-permission-id"
+								}
+							]
+						},
+						"description": "Remove a direct permission from a user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Effective Permissions",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id/effective-permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id", "effective-permissions"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Get all effective permissions for a user (from roles + direct grants). Requires 'users:manage' permission."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Roles (manage permission)",
+			"item": [
+				{
+					"name": "Create Role",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"editor\",\n  \"description\": \"Content editor role\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles"]
+						},
+						"description": "Create a new role. Requires 'roles:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "List Roles",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles"]
+						},
+						"description": "List all roles with their permissions. Requires 'roles:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Role",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"editor\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-role-id"
+								}
+							]
+						},
+						"description": "Update a role. Cannot modify system roles (is_system=true). Requires 'roles:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Role",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-role-id"
+								}
+							]
+						},
+						"description": "Soft delete a role. Cannot delete system roles. Requires 'roles:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Attach Permission to Role",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles/:id/permissions/:pid",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles", ":id", "permissions", ":pid"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-role-id"
+								},
+								{
+									"key": "pid",
+									"value": "paste-permission-id"
+								}
+							]
+						},
+						"description": "Attach a permission to a role. Requires 'roles:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Detach Permission from Role",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles/:id/permissions/:pid",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles", ":id", "permissions", ":pid"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "paste-role-id"
+								},
+								{
+									"key": "pid",
+									"value": "paste-permission-id"
+								}
+							]
+						},
+						"description": "Detach a permission from a role. Requires 'roles:manage' permission."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Permissions (manage permission)",
+			"item": [
+				{
+					"name": "Create Permission",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"posts:create\",\n  \"resource\": \"posts\",\n  \"action\": \"create\",\n  \"scope\": \"own\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "permissions"]
+						},
+						"description": "Create a new permission. Requires 'permissions:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "List Permissions",
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{access_token}}",
+								"type": "string"
+							}
+						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "permissions"]
+						},
+						"description": "List all permissions. Requires 'permissions:manage' permission."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

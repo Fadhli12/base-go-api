@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
+	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -41,31 +41,56 @@ func NewOrganizationHandler(orgService *service.OrganizationService) *Organizati
 //	@Failure	409	{object}	response.Envelope	"Organization slug already exists"
 //	@Router		/api/v1/organizations [post]
 func (h *OrganizationHandler) Create(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	var req request.CreateOrganizationRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "create organization failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
 
-	// Get client IP and user agent for audit
+	log.Info(ctx, "creating organization",
+		log.String("name", req.Name),
+		log.String("slug", req.Slug),
+		log.String("user_id", userID.String()),
+	)
+
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	org, err := h.orgService.CreateOrganization(c.Request().Context(), userID, req.Name, req.Slug, req.Settings, ipAddress, userAgent)
+	org, err := h.orgService.CreateOrganization(ctx, userID, req.Name, req.Slug, req.Settings, ipAddress, userAgent)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "organization creation failed",
+				log.String("name", req.Name),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "organization creation failed",
+			log.String("name", req.Name),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to create organization"))
 	}
+
+	log.Info(ctx, "organization created successfully",
+		log.String("org_id", org.ID.String()),
+		log.String("name", org.Name),
+	)
 
 	return c.JSON(http.StatusCreated, response.SuccessWithContext(c, org.ToResponse()))
 }
@@ -86,22 +111,41 @@ func (h *OrganizationHandler) Create(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Organization not found"
 //	@Router		/api/v1/organizations/{id} [get]
 func (h *OrganizationHandler) GetByID(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "get organization failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
 
-	org, err := h.orgService.GetOrganization(c.Request().Context(), userID, id)
+	log.Info(ctx, "fetching organization",
+		log.String("org_id", id.String()),
+		log.String("user_id", userID.String()),
+	)
+
+	org, err := h.orgService.GetOrganization(ctx, userID, id)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to retrieve organization",
+				log.String("org_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "failed to retrieve organization",
+			log.String("org_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve organization"))
 	}
 
@@ -123,31 +167,37 @@ func (h *OrganizationHandler) GetByID(c echo.Context) error {
 //	@Failure	500	{object}	response.Envelope	"Internal server error"
 //	@Router		/api/v1/organizations [get]
 func (h *OrganizationHandler) List(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "list organizations failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
 
-	limit := 20
-	offset := 0
+	pagination := ParsePagination(c)
 
-	if l := c.QueryParam("limit"); l != "" {
-		if parsed, err := parseIntParam(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
+	log.Info(ctx, "listing organizations",
+		log.String("user_id", userID.String()),
+		log.Int("limit", pagination.Limit),
+		log.Int("offset", pagination.Offset),
+	)
 
-	if o := c.QueryParam("offset"); o != "" {
-		if parsed, err := parseIntParam(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
-
-	orgs, total, err := h.orgService.ListOrganizations(c.Request().Context(), userID, limit, offset)
+	orgs, total, err := h.orgService.ListOrganizations(ctx, userID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to retrieve organizations",
+				log.String("user_id", userID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "failed to retrieve organizations",
+			log.String("user_id", userID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve organizations"))
 	}
 
@@ -159,8 +209,8 @@ func (h *OrganizationHandler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]interface{}{
 		"organizations": resp,
 		"total":        total,
-		"limit":         limit,
-		"offset":        offset,
+		"limit":         pagination.Limit,
+		"offset":        pagination.Offset,
 	}))
 }
 
@@ -181,36 +231,61 @@ func (h *OrganizationHandler) List(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Organization not found"
 //	@Router		/api/v1/organizations/{id} [put]
 func (h *OrganizationHandler) Update(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	var req request.UpdateOrganizationRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "update organization failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
+
+	log.Info(ctx, "updating organization",
+		log.String("org_id", id.String()),
+		log.String("user_id", userID.String()),
+	)
 
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	org, err := h.orgService.UpdateOrganization(c.Request().Context(), userID, id, req.Name, req.Slug, req.Settings, ipAddress, userAgent)
+	org, err := h.orgService.UpdateOrganization(ctx, userID, id, req.Name, req.Slug, req.Settings, ipAddress, userAgent)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "organization update failed",
+				log.String("org_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "organization update failed",
+			log.String("org_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to update organization"))
 	}
+
+	log.Info(ctx, "organization updated successfully",
+		log.String("org_id", org.ID.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, org.ToResponse()))
 }
@@ -231,26 +306,49 @@ func (h *OrganizationHandler) Update(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Organization not found"
 //	@Router		/api/v1/organizations/{id} [delete]
 func (h *OrganizationHandler) Delete(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "delete organization failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
+
+	log.Info(ctx, "deleting organization",
+		log.String("org_id", id.String()),
+		log.String("user_id", userID.String()),
+	)
 
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	if err := h.orgService.DeleteOrganization(c.Request().Context(), userID, id, ipAddress, userAgent); err != nil {
+	if err := h.orgService.DeleteOrganization(ctx, userID, id, ipAddress, userAgent); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "organization deletion failed",
+				log.String("org_id", id.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "organization deletion failed",
+			log.String("org_id", id.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to delete organization"))
 	}
+
+	log.Info(ctx, "organization deleted successfully",
+		log.String("org_id", id.String()),
+	)
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Organization deleted successfully"}))
 }
@@ -272,36 +370,64 @@ func (h *OrganizationHandler) Delete(c echo.Context) error {
 //	@Failure	409	{object}	response.Envelope	"User is already a member"
 //	@Router		/api/v1/organizations/{id}/members [post]
 func (h *OrganizationHandler) AddMember(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	orgID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	var req request.AddMemberRequest
 	if err := c.Bind(&req); err != nil {
+		log.Error(ctx, "failed to bind request", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid request body"))
 	}
 
 	if err := req.Validate(); err != nil {
+		log.Warn(ctx, "validation failed", logger.Err(err))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "add member failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
+
+	log.Info(ctx, "adding member to organization",
+		log.String("org_id", orgID.String()),
+		log.String("user_id", userID.String()),
+		log.String("member_id", req.UserID.String()),
+		log.String("role", req.Role),
+	)
 
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	member, err := h.orgService.AddMember(c.Request().Context(), userID, orgID, req.UserID, req.Role, ipAddress, userAgent)
+	member, err := h.orgService.AddMember(ctx, userID, orgID, req.UserID, req.Role, ipAddress, userAgent)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "add member failed",
+				log.String("org_id", orgID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "add member failed",
+			log.String("org_id", orgID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to add member"))
 	}
+
+	log.Info(ctx, "member added successfully",
+		log.String("org_id", orgID.String()),
+		log.String("member_id", req.UserID.String()),
+	)
 
 	return c.JSON(http.StatusCreated, response.SuccessWithContext(c, member.ToResponse()))
 }
@@ -323,37 +449,43 @@ func (h *OrganizationHandler) AddMember(c echo.Context) error {
 //	@Failure	403	{object}	response.Envelope	"Access denied"
 //	@Router		/api/v1/organizations/{id}/members [get]
 func (h *OrganizationHandler) GetMembers(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	idStr := c.Param("id")
 	orgID, err := uuid.Parse(idStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", idStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "get members failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
 
-	limit := 20
-	offset := 0
+	pagination := ParsePagination(c)
 
-	if l := c.QueryParam("limit"); l != "" {
-		if parsed, err := parseIntParam(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
+	log.Info(ctx, "fetching organization members",
+		log.String("org_id", orgID.String()),
+		log.String("user_id", userID.String()),
+	)
 
-	if o := c.QueryParam("offset"); o != "" {
-		if parsed, err := parseIntParam(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
-
-	members, total, err := h.orgService.GetMembers(c.Request().Context(), userID, orgID, limit, offset)
+	members, total, err := h.orgService.GetMembers(ctx, userID, orgID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "failed to retrieve members",
+				log.String("org_id", orgID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "failed to retrieve members",
+			log.String("org_id", orgID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve members"))
 	}
 
@@ -365,8 +497,8 @@ func (h *OrganizationHandler) GetMembers(c echo.Context) error {
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]interface{}{
 		"members": resp,
 		"total":   total,
-		"limit":   limit,
-		"offset":  offset,
+		"limit":   pagination.Limit,
+		"offset":  pagination.Offset,
 	}))
 }
 
@@ -387,39 +519,60 @@ func (h *OrganizationHandler) GetMembers(c echo.Context) error {
 //	@Failure	404	{object}	response.Envelope	"Member not found"
 //	@Router		/api/v1/organizations/{id}/members/{user_id} [delete]
 func (h *OrganizationHandler) RemoveMember(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
 	orgIDStr := c.Param("id")
 	orgID, err := uuid.Parse(orgIDStr)
 	if err != nil {
+		log.Warn(ctx, "invalid organization ID", log.String("id", orgIDStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid organization ID"))
 	}
 
 	memberIDStr := c.Param("user_id")
 	memberID, err := uuid.Parse(memberIDStr)
 	if err != nil {
+		log.Warn(ctx, "invalid user ID", log.String("id", memberIDStr))
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid user ID"))
 	}
 
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Warn(ctx, "remove member failed - not authenticated")
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
 	}
+
+	log.Info(ctx, "removing member from organization",
+		log.String("org_id", orgID.String()),
+		log.String("user_id", userID.String()),
+		log.String("member_id", memberID.String()),
+	)
 
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
-	if err := h.orgService.RemoveMember(c.Request().Context(), userID, orgID, memberID, ipAddress, userAgent); err != nil {
+	if err := h.orgService.RemoveMember(ctx, userID, orgID, memberID, ipAddress, userAgent); err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
+			log.Error(ctx, "remove member failed",
+				log.String("org_id", orgID.String()),
+				log.String("member_id", memberID.String()),
+				log.String("error_code", appErr.Code),
+				logger.Err(err),
+			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
+		log.Error(ctx, "remove member failed",
+			log.String("org_id", orgID.String()),
+			log.String("member_id", memberID.String()),
+			logger.Err(err),
+		)
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to remove member"))
 	}
 
-	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Member removed successfully"}))
-}
+	log.Info(ctx, "member removed successfully",
+		log.String("org_id", orgID.String()),
+		log.String("member_id", memberID.String()),
+	)
 
-// parseIntParam parses an integer query parameter
-func parseIntParam(s string) (int, error) {
-	var result int
-	_, err := fmt.Sscanf(s, "%d", &result)
-	return result, err
+	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Member removed successfully"}))
 }

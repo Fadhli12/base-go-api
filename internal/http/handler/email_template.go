@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/example/go-api-base/internal/domain"
@@ -117,24 +116,9 @@ func (h *EmailTemplateHandler) Create(c echo.Context) error {
 //	@Failure		500		{object}	response.Envelope	"Internal server error"
 //	@Router			/api/v1/email-templates [get]
 func (h *EmailTemplateHandler) GetAll(c echo.Context) error {
-	limit := 20
-	offset := 0
+	pagination := ParsePagination(c)
 
-	if l := c.QueryParam("limit"); l != "" {
-		var parsed int
-		if _, err := fmt.Sscanf(l, "%d", &parsed); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-
-	if o := c.QueryParam("offset"); o != "" {
-		var parsed int
-		if _, err := fmt.Sscanf(o, "%d", &parsed); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
-
-	templates, total, err := h.templateRepo.FindAll(c.Request().Context(), limit, offset)
+	templates, total, err := h.templateRepo.FindAll(c.Request().Context(), pagination.Limit, pagination.Offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve templates"))
 	}

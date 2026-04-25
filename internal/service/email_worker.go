@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/example/go-api-base/internal/config"
@@ -27,9 +29,9 @@ type EmailWorker struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	// Metrics
-	processedCount int64
-	errorCount     int64
+	// Metrics (thread-safe using atomic)
+	processedCount atomic.Int64
+	errorCount     atomic.Int64
 }
 
 // NewEmailWorker creates a new email worker
@@ -84,8 +86,8 @@ func (w *EmailWorker) Stop() error {
 	select {
 	case <-done:
 		slog.Info("Email worker stopped gracefully",
-			"processed", w.processedCount,
-			"errors", w.errorCount,
+			"processed", w.processedCount.Load(),
+			"errors", w.errorCount.Load(),
 		)
 		return nil
 	case <-time.After(30 * time.Second):
@@ -149,11 +151,11 @@ func (w *EmailWorker) processNextEmail(workerID int) error {
 
 	// Process the email
 	if err := w.sendEmail(ctx, email); err != nil {
-		w.errorCount++
+		w.errorCount.Add(1)
 		return w.handleSendError(ctx, email, err)
 	}
 
-	w.processedCount++
+	w.processedCount.Add(1)
 	return nil
 }
 
@@ -167,8 +169,13 @@ func (w *EmailWorker) sendEmail(ctx context.Context, email *domain.EmailQueue) e
 		// Parse template data (if any)
 		var data map[string]any
 		if email.Data != nil {
-			// Note: Data field needs JSON unmarshaling implementation
-			// For now, assume it's already structured
+			if err := json.Unmarshal(email.Data, &data); err != nil {
+				slog.Warn("Failed to parse template data",
+					"email_id", email.ID,
+					"error", err,
+				)
+				data = make(map[string]any)
+			}
 		}
 
 		// Get template
@@ -199,7 +206,7 @@ func (w *EmailWorker) sendEmail(ctx context.Context, email *domain.EmailQueue) e
 	} else {
 		// Use direct content
 		subject = email.Subject
-		// HTML and text content would come from email.Data
+		// HTML and text content would come from email.Data - not implemented yet
 	}
 
 	// Send via provider
@@ -282,8 +289,8 @@ func (w *EmailWorker) handleSendError(ctx context.Context, email *domain.EmailQu
 // GetMetrics returns current worker metrics
 func (w *EmailWorker) GetMetrics() map[string]int64 {
 	return map[string]int64{
-		"processed": w.processedCount,
-		"errors":    w.errorCount,
+		"processed": w.processedCount.Load(),
+		"errors":    w.errorCount.Load(),
 	}
 }
 

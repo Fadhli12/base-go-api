@@ -38,7 +38,7 @@ func (p *SMTPProvider) Send(ctx context.Context, email *EmailMessage) (string, e
 	// Build email message
 	from := p.config.SMTPFromAddress
 	if p.config.SMTPFromName != "" {
-		from = fmt.Sprintf("%s <%s>", p.config.SMTPFromAddress, p.config.SMTPFromAddress)
+		from = fmt.Sprintf("%s <%s>", p.config.SMTPFromName, p.config.SMTPFromAddress)
 	}
 
 	// Generate unique message ID

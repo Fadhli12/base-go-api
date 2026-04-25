@@ -1,0 +1,728 @@
+=== RUN   TestWithLogger
+=== RUN   TestWithLogger/store_and_retrieve_logger
+=== RUN   TestWithLogger/returns_NopLogger_for_nil_context
+=== RUN   TestWithLogger/returns_NopLogger_when_not_set
+=== RUN   TestWithLogger/context_is_immutable
+--- PASS: TestWithLogger (0.00s)
+    --- PASS: TestWithLogger/store_and_retrieve_logger (0.00s)
+    --- PASS: TestWithLogger/returns_NopLogger_for_nil_context (0.00s)
+    --- PASS: TestWithLogger/returns_NopLogger_when_not_set (0.00s)
+    --- PASS: TestWithLogger/context_is_immutable (0.00s)
+=== RUN   TestRequestID
+=== RUN   TestRequestID/store_and_retrieve
+=== RUN   TestRequestID/returns_empty_for_nil_context
+=== RUN   TestRequestID/returns_empty_when_not_set
+--- PASS: TestRequestID (0.00s)
+    --- PASS: TestRequestID/store_and_retrieve (0.00s)
+    --- PASS: TestRequestID/returns_empty_for_nil_context (0.00s)
+    --- PASS: TestRequestID/returns_empty_when_not_set (0.00s)
+=== RUN   TestUserID
+=== RUN   TestUserID/store_and_retrieve
+=== RUN   TestUserID/returns_empty_for_nil_context
+=== RUN   TestUserID/returns_empty_when_not_set
+--- PASS: TestUserID (0.00s)
+    --- PASS: TestUserID/store_and_retrieve (0.00s)
+    --- PASS: TestUserID/returns_empty_for_nil_context (0.00s)
+    --- PASS: TestUserID/returns_empty_when_not_set (0.00s)
+=== RUN   TestOrgID
+=== RUN   TestOrgID/store_and_retrieve
+=== RUN   TestOrgID/returns_empty_for_nil_context
+=== RUN   TestOrgID/returns_empty_when_not_set
+--- PASS: TestOrgID (0.00s)
+    --- PASS: TestOrgID/store_and_retrieve (0.00s)
+    --- PASS: TestOrgID/returns_empty_for_nil_context (0.00s)
+    --- PASS: TestOrgID/returns_empty_when_not_set (0.00s)
+=== RUN   TestTraceID
+=== RUN   TestTraceID/store_and_retrieve
+=== RUN   TestTraceID/returns_empty_for_nil_context
+=== RUN   TestTraceID/returns_empty_when_not_set
+--- PASS: TestTraceID (0.00s)
+    --- PASS: TestTraceID/store_and_retrieve (0.00s)
+    --- PASS: TestTraceID/returns_empty_for_nil_context (0.00s)
+    --- PASS: TestTraceID/returns_empty_when_not_set (0.00s)
+=== RUN   TestStartTime
+=== RUN   TestStartTime/store_and_retrieve
+=== RUN   TestStartTime/returns_zero_time_for_nil_context
+=== RUN   TestStartTime/returns_zero_time_when_not_set
+--- PASS: TestStartTime (0.00s)
+    --- PASS: TestStartTime/store_and_retrieve (0.00s)
+    --- PASS: TestStartTime/returns_zero_time_for_nil_context (0.00s)
+    --- PASS: TestStartTime/returns_zero_time_when_not_set (0.00s)
+=== RUN   TestExtractContextFields
+=== RUN   TestExtractContextFields/empty_context
+=== RUN   TestExtractContextFields/nil_context
+=== RUN   TestExtractContextFields/single_field
+=== RUN   TestExtractContextFields/all_fields
+=== RUN   TestExtractContextFields/partial_fields
+=== RUN   TestExtractContextFields/empty_values_are_skipped
+--- PASS: TestExtractContextFields (0.00s)
+    --- PASS: TestExtractContextFields/empty_context (0.00s)
+    --- PASS: TestExtractContextFields/nil_context (0.00s)
+    --- PASS: TestExtractContextFields/single_field (0.00s)
+    --- PASS: TestExtractContextFields/all_fields (0.00s)
+    --- PASS: TestExtractContextFields/partial_fields (0.00s)
+    --- PASS: TestExtractContextFields/empty_values_are_skipped (0.00s)
+=== RUN   TestGenerateIDs
+=== RUN   TestGenerateIDs/GenerateRequestID_creates_unique_IDs
+=== RUN   TestGenerateIDs/GenerateTraceID_creates_unique_IDs
+--- PASS: TestGenerateIDs (0.00s)
+    --- PASS: TestGenerateIDs/GenerateRequestID_creates_unique_IDs (0.00s)
+    --- PASS: TestGenerateIDs/GenerateTraceID_creates_unique_IDs (0.00s)
+=== RUN   TestHeaderConstants
+--- PASS: TestHeaderConstants (0.00s)
+=== RUN   TestContextKeyType
+--- PASS: TestContextKeyType (0.00s)
+=== RUN   TestNewLogEntry
+=== RUN   TestNewLogEntry/creates_entry_with_basic_fields
+=== RUN   TestNewLogEntry/handles_empty_fields
+=== RUN   TestNewLogEntry/extracts_error_from_fields
+=== RUN   TestNewLogEntry/handles_nil_error
+--- PASS: TestNewLogEntry (0.00s)
+    --- PASS: TestNewLogEntry/creates_entry_with_basic_fields (0.00s)
+    --- PASS: TestNewLogEntry/handles_empty_fields (0.00s)
+    --- PASS: TestNewLogEntry/extracts_error_from_fields (0.00s)
+    --- PASS: TestNewLogEntry/handles_nil_error (0.00s)
+=== RUN   TestLogEntryAddContextFields
+--- PASS: TestLogEntryAddContextFields (0.00s)
+=== RUN   TestLogEntrySetters
+=== RUN   TestLogEntrySetters/SetError
+=== RUN   TestLogEntrySetters/SetStackTrace
+=== RUN   TestLogEntrySetters/SetSource
+--- PASS: TestLogEntrySetters (0.00s)
+    --- PASS: TestLogEntrySetters/SetError (0.00s)
+    --- PASS: TestLogEntrySetters/SetStackTrace (0.00s)
+    --- PASS: TestLogEntrySetters/SetSource (0.00s)
+=== RUN   TestLogEntryJSONTags
+--- PASS: TestLogEntryJSONTags (0.00s)
+=== RUN   TestLogEntryOmitEmpty
+--- PASS: TestLogEntryOmitEmpty (0.00s)
+=== RUN   TestFieldToSlogAttr
+=== RUN   TestFieldToSlogAttr/string_field
+=== RUN   TestFieldToSlogAttr/int_field
+=== RUN   TestFieldToSlogAttr/int64_field
+=== RUN   TestFieldToSlogAttr/float64_field
+=== RUN   TestFieldToSlogAttr/bool_field_true
+=== RUN   TestFieldToSlogAttr/bool_field_false
+=== RUN   TestFieldToSlogAttr/duration_field
+=== RUN   TestFieldToSlogAttr/time_field
+=== RUN   TestFieldToSlogAttr/error_field
+=== RUN   TestFieldToSlogAttr/nil_error_field
+=== RUN   TestFieldToSlogAttr/any_field
+--- PASS: TestFieldToSlogAttr (0.00s)
+    --- PASS: TestFieldToSlogAttr/string_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/int_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/int64_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/float64_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/bool_field_true (0.00s)
+    --- PASS: TestFieldToSlogAttr/bool_field_false (0.00s)
+    --- PASS: TestFieldToSlogAttr/duration_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/time_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/error_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/nil_error_field (0.00s)
+    --- PASS: TestFieldToSlogAttr/any_field (0.00s)
+=== RUN   TestFieldConstructors
+=== RUN   TestFieldConstructors/String
+=== RUN   TestFieldConstructors/Int
+=== RUN   TestFieldConstructors/Int64
+=== RUN   TestFieldConstructors/Float64
+=== RUN   TestFieldConstructors/Bool
+=== RUN   TestFieldConstructors/Duration
+=== RUN   TestFieldConstructors/Time
+=== RUN   TestFieldConstructors/Any
+=== RUN   TestFieldConstructors/Err_with_error
+=== RUN   TestFieldConstructors/Err_with_nil_error
+--- PASS: TestFieldConstructors (0.00s)
+    --- PASS: TestFieldConstructors/String (0.00s)
+    --- PASS: TestFieldConstructors/Int (0.00s)
+    --- PASS: TestFieldConstructors/Int64 (0.00s)
+    --- PASS: TestFieldConstructors/Float64 (0.00s)
+    --- PASS: TestFieldConstructors/Bool (0.00s)
+    --- PASS: TestFieldConstructors/Duration (0.00s)
+    --- PASS: TestFieldConstructors/Time (0.00s)
+    --- PASS: TestFieldConstructors/Any (0.00s)
+    --- PASS: TestFieldConstructors/Err_with_error (0.00s)
+    --- PASS: TestFieldConstructors/Err_with_nil_error (0.00s)
+=== RUN   TestFieldsToSlogAttrs
+=== RUN   TestFieldsToSlogAttrs/empty_fields
+=== RUN   TestFieldsToSlogAttrs/nil_fields
+=== RUN   TestFieldsToSlogAttrs/multiple_fields
+--- PASS: TestFieldsToSlogAttrs (0.00s)
+    --- PASS: TestFieldsToSlogAttrs/empty_fields (0.00s)
+    --- PASS: TestFieldsToSlogAttrs/nil_fields (0.00s)
+    --- PASS: TestFieldsToSlogAttrs/multiple_fields (0.00s)
+=== RUN   TestMergeFields
+=== RUN   TestMergeFields/both_empty
+=== RUN   TestMergeFields/base_only
+=== RUN   TestMergeFields/additional_only
+=== RUN   TestMergeFields/both_populated
+=== RUN   TestMergeFields/preserves_order
+--- PASS: TestMergeFields (0.00s)
+    --- PASS: TestMergeFields/both_empty (0.00s)
+    --- PASS: TestMergeFields/base_only (0.00s)
+    --- PASS: TestMergeFields/additional_only (0.00s)
+    --- PASS: TestMergeFields/both_populated (0.00s)
+    --- PASS: TestMergeFields/preserves_order (0.00s)
+=== RUN   TestFieldValue
+=== RUN   TestFieldValue/string
+=== RUN   TestFieldValue/int
+=== RUN   TestFieldValue/int64
+=== RUN   TestFieldValue/float64
+=== RUN   TestFieldValue/bool_true
+=== RUN   TestFieldValue/bool_false
+=== RUN   TestFieldValue/duration
+=== RUN   TestFieldValue/nil_error
+--- PASS: TestFieldValue (0.00s)
+    --- PASS: TestFieldValue/string (0.00s)
+    --- PASS: TestFieldValue/int (0.00s)
+    --- PASS: TestFieldValue/int64 (0.00s)
+    --- PASS: TestFieldValue/float64 (0.00s)
+    --- PASS: TestFieldValue/bool_true (0.00s)
+    --- PASS: TestFieldValue/bool_false (0.00s)
+    --- PASS: TestFieldValue/duration (0.00s)
+    --- PASS: TestFieldValue/nil_error (0.00s)
+=== RUN   TestLevelString
+=== RUN   TestLevelString/Debug
+=== RUN   TestLevelString/Info
+=== RUN   TestLevelString/Warn
+=== RUN   TestLevelString/Error
+=== RUN   TestLevelString/Unknown
+--- PASS: TestLevelString (0.00s)
+    --- PASS: TestLevelString/Debug (0.00s)
+    --- PASS: TestLevelString/Info (0.00s)
+    --- PASS: TestLevelString/Warn (0.00s)
+    --- PASS: TestLevelString/Error (0.00s)
+    --- PASS: TestLevelString/Unknown (0.00s)
+=== RUN   TestParseLevel
+=== RUN   TestParseLevel/debug_lowercase
+=== RUN   TestParseLevel/DEBUG_uppercase
+=== RUN   TestParseLevel/info_lowercase
+=== RUN   TestParseLevel/INFO_uppercase
+=== RUN   TestParseLevel/warn_lowercase
+=== RUN   TestParseLevel/WARN_uppercase
+=== RUN   TestParseLevel/warning_variant
+=== RUN   TestParseLevel/WARNING_variant
+=== RUN   TestParseLevel/error_lowercase
+=== RUN   TestParseLevel/ERROR_uppercase
+=== RUN   TestParseLevel/unknown_level
+=== RUN   TestParseLevel/empty_string
+=== RUN   TestParseLevel/random_text
+--- PASS: TestParseLevel (0.00s)
+    --- PASS: TestParseLevel/debug_lowercase (0.00s)
+    --- PASS: TestParseLevel/DEBUG_uppercase (0.00s)
+    --- PASS: TestParseLevel/info_lowercase (0.00s)
+    --- PASS: TestParseLevel/INFO_uppercase (0.00s)
+    --- PASS: TestParseLevel/warn_lowercase (0.00s)
+    --- PASS: TestParseLevel/WARN_uppercase (0.00s)
+    --- PASS: TestParseLevel/warning_variant (0.00s)
+    --- PASS: TestParseLevel/WARNING_variant (0.00s)
+    --- PASS: TestParseLevel/error_lowercase (0.00s)
+    --- PASS: TestParseLevel/ERROR_uppercase (0.00s)
+    --- PASS: TestParseLevel/unknown_level (0.00s)
+    --- PASS: TestParseLevel/empty_string (0.00s)
+    --- PASS: TestParseLevel/random_text (0.00s)
+=== RUN   TestParseLevelCaseInsensitivity
+--- PASS: TestParseLevelCaseInsensitivity (0.00s)
+=== RUN   TestNewMockLogger
+--- PASS: TestNewMockLogger (0.00s)
+=== RUN   TestMockLogger_LoggingMethods
+=== RUN   TestMockLogger_LoggingMethods/Debug_logs_message
+=== RUN   TestMockLogger_LoggingMethods/Info_logs_message
+=== RUN   TestMockLogger_LoggingMethods/Warn_logs_message
+=== RUN   TestMockLogger_LoggingMethods/Error_logs_message
+--- PASS: TestMockLogger_LoggingMethods (0.00s)
+    --- PASS: TestMockLogger_LoggingMethods/Debug_logs_message (0.00s)
+    --- PASS: TestMockLogger_LoggingMethods/Info_logs_message (0.00s)
+    --- PASS: TestMockLogger_LoggingMethods/Warn_logs_message (0.00s)
+    --- PASS: TestMockLogger_LoggingMethods/Error_logs_message (0.00s)
+=== RUN   TestMockLogger_WithFields
+=== RUN   TestMockLogger_WithFields/WithFields_creates_scoped_logger
+=== RUN   TestMockLogger_WithFields/WithFields_does_not_affect_original
+=== RUN   TestMockLogger_WithFields/Chained_WithFields_accumulates_fields
+--- PASS: TestMockLogger_WithFields (0.00s)
+    --- PASS: TestMockLogger_WithFields/WithFields_creates_scoped_logger (0.00s)
+    --- PASS: TestMockLogger_WithFields/WithFields_does_not_affect_original (0.00s)
+    --- PASS: TestMockLogger_WithFields/Chained_WithFields_accumulates_fields (0.00s)
+=== RUN   TestMockLogger_WithError
+=== RUN   TestMockLogger_WithError/WithError_attaches_error
+=== RUN   TestMockLogger_WithError/WithError_nil_does_not_panic
+--- PASS: TestMockLogger_WithError (0.00s)
+    --- PASS: TestMockLogger_WithError/WithError_attaches_error (0.00s)
+    --- PASS: TestMockLogger_WithError/WithError_nil_does_not_panic (0.00s)
+=== RUN   TestMockLogger_AssertLogged
+=== RUN   TestMockLogger_AssertLogged/finds_matching_message
+=== RUN   TestMockLogger_AssertLogged/returns_false_for_non-matching_level
+=== RUN   TestMockLogger_AssertLogged/returns_false_for_non-matching_message
+=== RUN   TestMockLogger_AssertLogged/empty_substring_matches_any
+--- PASS: TestMockLogger_AssertLogged (0.00s)
+    --- PASS: TestMockLogger_AssertLogged/finds_matching_message (0.00s)
+    --- PASS: TestMockLogger_AssertLogged/returns_false_for_non-matching_level (0.00s)
+    --- PASS: TestMockLogger_AssertLogged/returns_false_for_non-matching_message (0.00s)
+    --- PASS: TestMockLogger_AssertLogged/empty_substring_matches_any (0.00s)
+=== RUN   TestMockLogger_AssertLoggedExactly
+=== RUN   TestMockLogger_AssertLoggedExactly/matches_exact_message
+=== RUN   TestMockLogger_AssertLoggedExactly/substring_does_not_match
+--- PASS: TestMockLogger_AssertLoggedExactly (0.00s)
+    --- PASS: TestMockLogger_AssertLoggedExactly/matches_exact_message (0.00s)
+    --- PASS: TestMockLogger_AssertLoggedExactly/substring_does_not_match (0.00s)
+=== RUN   TestMockLogger_AssertField
+=== RUN   TestMockLogger_AssertField/finds_string_field
+=== RUN   TestMockLogger_AssertField/finds_int_field
+=== RUN   TestMockLogger_AssertField/returns_false_for_missing_field
+=== RUN   TestMockLogger_AssertField/returns_false_for_wrong_value
+--- PASS: TestMockLogger_AssertField (0.00s)
+    --- PASS: TestMockLogger_AssertField/finds_string_field (0.00s)
+    --- PASS: TestMockLogger_AssertField/finds_int_field (0.00s)
+    --- PASS: TestMockLogger_AssertField/returns_false_for_missing_field (0.00s)
+    --- PASS: TestMockLogger_AssertField/returns_false_for_wrong_value (0.00s)
+=== RUN   TestMockLogger_AssertFieldInMessage
+=== RUN   TestMockLogger_AssertFieldInMessage/finds_field_in_specific_message_level
+=== RUN   TestMockLogger_AssertFieldInMessage/returns_false_if_field_in_wrong_level
+=== RUN   TestMockLogger_AssertFieldInMessage/returns_false_if_message_not_found
+--- PASS: TestMockLogger_AssertFieldInMessage (0.00s)
+    --- PASS: TestMockLogger_AssertFieldInMessage/finds_field_in_specific_message_level (0.00s)
+    --- PASS: TestMockLogger_AssertFieldInMessage/returns_false_if_field_in_wrong_level (0.00s)
+    --- PASS: TestMockLogger_AssertFieldInMessage/returns_false_if_message_not_found (0.00s)
+=== RUN   TestMockLogger_GetMessages
+--- PASS: TestMockLogger_GetMessages (0.00s)
+=== RUN   TestMockLogger_GetMessagesCount
+--- PASS: TestMockLogger_GetMessagesCount (0.00s)
+=== RUN   TestMockLogger_GetMessagesAtLevel
+--- PASS: TestMockLogger_GetMessagesAtLevel (0.00s)
+=== RUN   TestMockLogger_Reset
+--- PASS: TestMockLogger_Reset (0.00s)
+=== RUN   TestMockLogger_FindMessage
+=== RUN   TestMockLogger_FindMessage/finds_existing_message
+=== RUN   TestMockLogger_FindMessage/returns_nil_for_non-existing
+=== RUN   TestMockLogger_FindMessage/returns_nil_for_non-matching_substring
+--- PASS: TestMockLogger_FindMessage (0.00s)
+    --- PASS: TestMockLogger_FindMessage/finds_existing_message (0.00s)
+    --- PASS: TestMockLogger_FindMessage/returns_nil_for_non-existing (0.00s)
+    --- PASS: TestMockLogger_FindMessage/returns_nil_for_non-matching_substring (0.00s)
+=== RUN   TestMockLogger_HasError
+=== RUN   TestMockLogger_HasError/true_when_error_logged
+=== RUN   TestMockLogger_HasError/false_when_no_error
+--- PASS: TestMockLogger_HasError (0.00s)
+    --- PASS: TestMockLogger_HasError/true_when_error_logged (0.00s)
+    --- PASS: TestMockLogger_HasError/false_when_no_error (0.00s)
+=== RUN   TestMockLogger_FieldFactoryMethods
+=== RUN   TestMockLogger_FieldFactoryMethods/String
+=== RUN   TestMockLogger_FieldFactoryMethods/Int
+=== RUN   TestMockLogger_FieldFactoryMethods/Int64
+=== RUN   TestMockLogger_FieldFactoryMethods/Float64
+=== RUN   TestMockLogger_FieldFactoryMethods/Bool
+=== RUN   TestMockLogger_FieldFactoryMethods/Duration
+=== RUN   TestMockLogger_FieldFactoryMethods/Time
+=== RUN   TestMockLogger_FieldFactoryMethods/Any
+--- PASS: TestMockLogger_FieldFactoryMethods (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/String (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Int (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Int64 (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Float64 (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Bool (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Duration (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Time (0.00s)
+    --- PASS: TestMockLogger_FieldFactoryMethods/Any (0.00s)
+=== RUN   TestMockLogger_Concurrency
+--- PASS: TestMockLogger_Concurrency (0.00s)
+=== RUN   TestMockLogger_ImplementsLogger
+--- PASS: TestMockLogger_ImplementsLogger (0.00s)
+=== RUN   TestNewNopLogger
+--- PASS: TestNewNopLogger (0.00s)
+=== RUN   TestNopLoggerMethods
+=== RUN   TestNopLoggerMethods/Debug
+=== RUN   TestNopLoggerMethods/Info
+=== RUN   TestNopLoggerMethods/Warn
+=== RUN   TestNopLoggerMethods/Error
+--- PASS: TestNopLoggerMethods (0.00s)
+    --- PASS: TestNopLoggerMethods/Debug (0.00s)
+    --- PASS: TestNopLoggerMethods/Info (0.00s)
+    --- PASS: TestNopLoggerMethods/Warn (0.00s)
+    --- PASS: TestNopLoggerMethods/Error (0.00s)
+=== RUN   TestNopLoggerWithFields
+=== RUN   TestNopLoggerWithFields/WithFields_returns_same_instance
+=== RUN   TestNopLoggerWithFields/chained_calls
+--- PASS: TestNopLoggerWithFields (0.00s)
+    --- PASS: TestNopLoggerWithFields/WithFields_returns_same_instance (0.00s)
+    --- PASS: TestNopLoggerWithFields/chained_calls (0.00s)
+=== RUN   TestNopLoggerWithError
+=== RUN   TestNopLoggerWithError/WithError_returns_same_instance
+=== RUN   TestNopLoggerWithError/WithError_nil
+--- PASS: TestNopLoggerWithError (0.00s)
+    --- PASS: TestNopLoggerWithError/WithError_returns_same_instance (0.00s)
+    --- PASS: TestNopLoggerWithError/WithError_nil (0.00s)
+=== RUN   TestNopLoggerFieldMethods
+=== RUN   TestNopLoggerFieldMethods/String
+=== RUN   TestNopLoggerFieldMethods/Int
+=== RUN   TestNopLoggerFieldMethods/Int64
+=== RUN   TestNopLoggerFieldMethods/Float64
+=== RUN   TestNopLoggerFieldMethods/Bool
+=== RUN   TestNopLoggerFieldMethods/Duration
+=== RUN   TestNopLoggerFieldMethods/Time
+=== RUN   TestNopLoggerFieldMethods/Any
+--- PASS: TestNopLoggerFieldMethods (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/String (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Int (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Int64 (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Float64 (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Bool (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Duration (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Time (0.00s)
+    --- PASS: TestNopLoggerFieldMethods/Any (0.00s)
+=== RUN   TestIsNopLogger
+=== RUN   TestIsNopLogger/returns_true_for_NopLogger
+=== RUN   TestIsNopLogger/returns_false_for_SlogLogger
+--- PASS: TestIsNopLogger (0.00s)
+    --- PASS: TestIsNopLogger/returns_true_for_NopLogger (0.00s)
+    --- PASS: TestIsNopLogger/returns_false_for_SlogLogger (0.00s)
+=== RUN   TestNewSlogLogger
+--- PASS: TestNewSlogLogger (0.00s)
+=== RUN   TestNewDefaultSlogLogger
+--- PASS: TestNewDefaultSlogLogger (0.00s)
+=== RUN   TestSlogLoggerLevelFiltering
+=== RUN   TestSlogLoggerLevelFiltering/Debug_filtered_at_Info_level
+=== RUN   TestSlogLoggerLevelFiltering/Info_allowed_at_Info_level
+=== RUN   TestSlogLoggerLevelFiltering/Warn_allowed_at_Info_level
+=== RUN   TestSlogLoggerLevelFiltering/Error_allowed_at_Info_level
+=== RUN   TestSlogLoggerLevelFiltering/All_levels_at_Debug_level
+=== RUN   TestSlogLoggerLevelFiltering/Error_filtered_at_Error_level
+--- PASS: TestSlogLoggerLevelFiltering (0.02s)
+    --- PASS: TestSlogLoggerLevelFiltering/Debug_filtered_at_Info_level (0.00s)
+    --- PASS: TestSlogLoggerLevelFiltering/Info_allowed_at_Info_level (0.02s)
+    --- PASS: TestSlogLoggerLevelFiltering/Warn_allowed_at_Info_level (0.00s)
+    --- PASS: TestSlogLoggerLevelFiltering/Error_allowed_at_Info_level (0.00s)
+    --- PASS: TestSlogLoggerLevelFiltering/All_levels_at_Debug_level (0.00s)
+    --- PASS: TestSlogLoggerLevelFiltering/Error_filtered_at_Error_level (0.00s)
+=== RUN   TestSlogLoggerWithFields
+=== RUN   TestSlogLoggerWithFields/adds_fields_to_log
+=== RUN   TestSlogLoggerWithFields/WithFields_creates_new_logger
+=== RUN   TestSlogLoggerWithFields/WithFields_preserves_original_logger
+=== RUN   TestSlogLoggerWithFields/empty_fields_returns_same_logger
+--- PASS: TestSlogLoggerWithFields (0.00s)
+    --- PASS: TestSlogLoggerWithFields/adds_fields_to_log (0.00s)
+    --- PASS: TestSlogLoggerWithFields/WithFields_creates_new_logger (0.00s)
+    --- PASS: TestSlogLoggerWithFields/WithFields_preserves_original_logger (0.00s)
+    --- PASS: TestSlogLoggerWithFields/empty_fields_returns_same_logger (0.00s)
+=== RUN   TestSlogLoggerWithError
+=== RUN   TestSlogLoggerWithError/adds_error_field
+=== RUN   TestSlogLoggerWithError/nil_error_returns_same_logger
+=== RUN   TestSlogLoggerWithError/chaining_WithError_and_WithFields
+--- PASS: TestSlogLoggerWithError (0.00s)
+    --- PASS: TestSlogLoggerWithError/adds_error_field (0.00s)
+    --- PASS: TestSlogLoggerWithError/nil_error_returns_same_logger (0.00s)
+    --- PASS: TestSlogLoggerWithError/chaining_WithError_and_WithFields (0.00s)
+=== RUN   TestSlogLoggerWithContext
+=== RUN   TestSlogLoggerWithContext/extracts_context_fields
+=== RUN   TestSlogLoggerWithContext/nil_context_handled_gracefully
+--- PASS: TestSlogLoggerWithContext (0.00s)
+    --- PASS: TestSlogLoggerWithContext/extracts_context_fields (0.00s)
+    --- PASS: TestSlogLoggerWithContext/nil_context_handled_gracefully (0.00s)
+=== RUN   TestSlogLoggerFieldMethods
+=== RUN   TestSlogLoggerFieldMethods/String
+=== RUN   TestSlogLoggerFieldMethods/Int
+=== RUN   TestSlogLoggerFieldMethods/Int64
+=== RUN   TestSlogLoggerFieldMethods/Float64
+=== RUN   TestSlogLoggerFieldMethods/Bool
+=== RUN   TestSlogLoggerFieldMethods/Duration
+=== RUN   TestSlogLoggerFieldMethods/Time
+=== RUN   TestSlogLoggerFieldMethods/Any
+--- PASS: TestSlogLoggerFieldMethods (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/String (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Int (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Int64 (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Float64 (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Bool (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Duration (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Time (0.00s)
+    --- PASS: TestSlogLoggerFieldMethods/Any (0.00s)
+=== RUN   TestSlogLoggerSetLevel
+--- PASS: TestSlogLoggerSetLevel (0.00s)
+=== RUN   TestSlogLoggerClone
+--- PASS: TestSlogLoggerClone (0.00s)
+=== RUN   TestWriterInterface
+--- PASS: TestWriterInterface (0.00s)
+=== RUN   TestWriterFunc
+--- PASS: TestWriterFunc (0.00s)
+=== RUN   TestMultiWriter
+=== RUN   TestMultiWriter/write_to_multiple_writers
+=== RUN   TestMultiWriter/continues_on_writer_error
+writer error: assert.AnError general error for testing
+=== RUN   TestMultiWriter/returns_error_if_all_writers_fail
+writer error: assert.AnError general error for testing
+writer error: assert.AnError general error for testing
+=== RUN   TestMultiWriter/handles_empty_writer_list
+=== RUN   TestMultiWriter/close_is_safe_to_call_multiple_times
+=== RUN   TestMultiWriter/returns_error_when_closed
+=== RUN   TestMultiWriter/add_writer
+=== RUN   TestMultiWriter/remove_writer
+=== RUN   TestMultiWriter/len_returns_correct_count
+--- PASS: TestMultiWriter (0.02s)
+    --- PASS: TestMultiWriter/write_to_multiple_writers (0.01s)
+    --- PASS: TestMultiWriter/continues_on_writer_error (0.01s)
+    --- PASS: TestMultiWriter/returns_error_if_all_writers_fail (0.00s)
+    --- PASS: TestMultiWriter/handles_empty_writer_list (0.00s)
+    --- PASS: TestMultiWriter/close_is_safe_to_call_multiple_times (0.00s)
+    --- PASS: TestMultiWriter/returns_error_when_closed (0.00s)
+    --- PASS: TestMultiWriter/add_writer (0.00s)
+    --- PASS: TestMultiWriter/remove_writer (0.00s)
+    --- PASS: TestMultiWriter/len_returns_correct_count (0.00s)
+=== RUN   TestStdoutWriter
+=== RUN   TestStdoutWriter/create_with_json_format
+=== RUN   TestStdoutWriter/create_with_text_format
+=== RUN   TestStdoutWriter/default_format_is_json
+=== RUN   TestStdoutWriter/set_format_changes_format
+=== RUN   TestStdoutWriter/close_returns_error_when_writing_after_close
+--- PASS: TestStdoutWriter (0.00s)
+    --- PASS: TestStdoutWriter/create_with_json_format (0.00s)
+    --- PASS: TestStdoutWriter/create_with_text_format (0.00s)
+    --- PASS: TestStdoutWriter/default_format_is_json (0.00s)
+    --- PASS: TestStdoutWriter/set_format_changes_format (0.00s)
+    --- PASS: TestStdoutWriter/close_returns_error_when_writing_after_close (0.00s)
+=== RUN   TestFormatParsing
+=== RUN   TestFormatParsing/json
+=== RUN   TestFormatParsing/JSON
+=== RUN   TestFormatParsing/Json
+=== RUN   TestFormatParsing/text
+=== RUN   TestFormatParsing/TEXT
+=== RUN   TestFormatParsing/txt
+=== RUN   TestFormatParsing/TXT
+=== RUN   TestFormatParsing/unknown
+=== RUN   TestFormatParsing/#00
+--- PASS: TestFormatParsing (0.00s)
+    --- PASS: TestFormatParsing/json (0.00s)
+    --- PASS: TestFormatParsing/JSON (0.00s)
+    --- PASS: TestFormatParsing/Json (0.00s)
+    --- PASS: TestFormatParsing/text (0.00s)
+    --- PASS: TestFormatParsing/TEXT (0.00s)
+    --- PASS: TestFormatParsing/txt (0.00s)
+    --- PASS: TestFormatParsing/TXT (0.00s)
+    --- PASS: TestFormatParsing/unknown (0.00s)
+    --- PASS: TestFormatParsing/#00 (0.00s)
+=== RUN   TestFileWriter
+=== RUN   TestFileWriter/create_with_valid_config
+=== RUN   TestFileWriter/creates_parent_directories
+=== RUN   TestFileWriter/applies_defaults
+=== RUN   TestFileWriter/returns_error_when_closed
+--- PASS: TestFileWriter (0.01s)
+    --- PASS: TestFileWriter/create_with_valid_config (0.00s)
+    --- PASS: TestFileWriter/creates_parent_directories (0.01s)
+    --- PASS: TestFileWriter/applies_defaults (0.00s)
+    --- PASS: TestFileWriter/returns_error_when_closed (0.00s)
+=== RUN   TestConfig
+=== RUN   TestConfig/default_config
+=== RUN   TestConfig/parse_outputs
+=== RUN   TestConfig/parse_outputs/stdout
+=== RUN   TestConfig/parse_outputs/file
+=== RUN   TestConfig/parse_outputs/syslog
+=== RUN   TestConfig/parse_outputs/stdout,file
+=== RUN   TestConfig/parse_outputs/stdout,_file,_syslog
+=== RUN   TestConfig/parse_outputs/#00
+=== RUN   TestConfig/parse_outputs/STDOUT,_FILE
+=== RUN   TestConfig/parse_level
+=== RUN   TestConfig/to_file_config
+=== RUN   TestConfig/validate_valid_config
+=== RUN   TestConfig/validate_invalid_level
+=== RUN   TestConfig/validate_invalid_format
+=== RUN   TestConfig/validate_invalid_output
+=== RUN   TestConfig/validate_file_path_required
+=== RUN   TestConfig/validate_syslog_tag_required
+--- PASS: TestConfig (0.00s)
+    --- PASS: TestConfig/default_config (0.00s)
+    --- PASS: TestConfig/parse_outputs (0.00s)
+        --- PASS: TestConfig/parse_outputs/stdout (0.00s)
+        --- PASS: TestConfig/parse_outputs/file (0.00s)
+        --- PASS: TestConfig/parse_outputs/syslog (0.00s)
+        --- PASS: TestConfig/parse_outputs/stdout,file (0.00s)
+        --- PASS: TestConfig/parse_outputs/stdout,_file,_syslog (0.00s)
+        --- PASS: TestConfig/parse_outputs/#00 (0.00s)
+        --- PASS: TestConfig/parse_outputs/STDOUT,_FILE (0.00s)
+    --- PASS: TestConfig/parse_level (0.00s)
+    --- PASS: TestConfig/to_file_config (0.00s)
+    --- PASS: TestConfig/validate_valid_config (0.00s)
+    --- PASS: TestConfig/validate_invalid_level (0.00s)
+    --- PASS: TestConfig/validate_invalid_format (0.00s)
+    --- PASS: TestConfig/validate_invalid_output (0.00s)
+    --- PASS: TestConfig/validate_file_path_required (0.00s)
+    --- PASS: TestConfig/validate_syslog_tag_required (0.00s)
+=== RUN   TestConfigFromEnv
+=== RUN   TestConfigFromEnv/uses_defaults_when_no_env_vars_set
+=== RUN   TestConfigFromEnv/reads_env_vars
+--- PASS: TestConfigFromEnv (0.00s)
+    --- PASS: TestConfigFromEnv/uses_defaults_when_no_env_vars_set (0.00s)
+    --- PASS: TestConfigFromEnv/reads_env_vars (0.00s)
+=== RUN   TestNewLogger
+=== RUN   TestNewLogger/create_with_stdout_output
+=== RUN   TestNewLogger/create_with_file_output
+    writer_test.go:653: Skipping file output test on Windows due to file locking
+=== RUN   TestNewLogger/create_with_multiple_outputs
+    writer_test.go:678: Skipping file output test on Windows due to file locking
+=== RUN   TestNewLogger/create_with_syslog_output
+=== RUN   TestNewLogger/fails_on_invalid_config
+=== RUN   TestNewLogger/fails_on_missing_file_path
+--- PASS: TestNewLogger (0.00s)
+    --- PASS: TestNewLogger/create_with_stdout_output (0.00s)
+    --- SKIP: TestNewLogger/create_with_file_output (0.00s)
+    --- SKIP: TestNewLogger/create_with_multiple_outputs (0.00s)
+    --- PASS: TestNewLogger/create_with_syslog_output (0.00s)
+    --- PASS: TestNewLogger/fails_on_invalid_config (0.00s)
+    --- PASS: TestNewLogger/fails_on_missing_file_path (0.00s)
+=== RUN   TestNewDefaultLogger
+{"timestamp":"2026-04-25T10:38:59.568159Z","level":"INFO","message":"test message","fields":{"key":"value"}}
+--- PASS: TestNewDefaultLogger (0.00s)
+=== RUN   TestParseBool
+=== RUN   TestParseBool/true
+=== RUN   TestParseBool/TRUE
+=== RUN   TestParseBool/True
+=== RUN   TestParseBool/1
+=== RUN   TestParseBool/yes
+=== RUN   TestParseBool/on
+=== RUN   TestParseBool/false
+=== RUN   TestParseBool/FALSE
+=== RUN   TestParseBool/False
+=== RUN   TestParseBool/0
+=== RUN   TestParseBool/no
+=== RUN   TestParseBool/off
+=== RUN   TestParseBool/invalid
+=== RUN   TestParseBool/invalid#01
+=== RUN   TestParseBool/#00
+=== RUN   TestParseBool/#01
+--- PASS: TestParseBool (0.00s)
+    --- PASS: TestParseBool/true (0.00s)
+    --- PASS: TestParseBool/TRUE (0.00s)
+    --- PASS: TestParseBool/True (0.00s)
+    --- PASS: TestParseBool/1 (0.00s)
+    --- PASS: TestParseBool/yes (0.00s)
+    --- PASS: TestParseBool/on (0.00s)
+    --- PASS: TestParseBool/false (0.00s)
+    --- PASS: TestParseBool/FALSE (0.00s)
+    --- PASS: TestParseBool/False (0.00s)
+    --- PASS: TestParseBool/0 (0.00s)
+    --- PASS: TestParseBool/no (0.00s)
+    --- PASS: TestParseBool/off (0.00s)
+    --- PASS: TestParseBool/invalid (0.00s)
+    --- PASS: TestParseBool/invalid#01 (0.00s)
+    --- PASS: TestParseBool/#00 (0.00s)
+    --- PASS: TestParseBool/#01 (0.00s)
+=== RUN   TestContainsString
+=== RUN   TestContainsString/b
+=== RUN   TestContainsString/d
+=== RUN   TestContainsString/a
+=== RUN   TestContainsString/a#01
+=== RUN   TestContainsString/a#02
+--- PASS: TestContainsString (0.00s)
+    --- PASS: TestContainsString/b (0.00s)
+    --- PASS: TestContainsString/d (0.00s)
+    --- PASS: TestContainsString/a (0.00s)
+    --- PASS: TestContainsString/a#01 (0.00s)
+    --- PASS: TestContainsString/a#02 (0.00s)
+=== RUN   TestLogEntrySerialization
+--- PASS: TestLogEntrySerialization (0.00s)
+PASS
+ok  	github.com/example/go-api-base/internal/logger	(cached)
+=== RUN   TestDefaultLoggingSkipper
+=== RUN   TestDefaultLoggingSkipper/skips_healthz
+=== RUN   TestDefaultLoggingSkipper/skips_readyz
+=== RUN   TestDefaultLoggingSkipper/skips_metrics
+=== RUN   TestDefaultLoggingSkipper/does_not_skip_api
+=== RUN   TestDefaultLoggingSkipper/does_not_skip_root
+--- PASS: TestDefaultLoggingSkipper (0.00s)
+    --- PASS: TestDefaultLoggingSkipper/skips_healthz (0.00s)
+    --- PASS: TestDefaultLoggingSkipper/skips_readyz (0.00s)
+    --- PASS: TestDefaultLoggingSkipper/skips_metrics (0.00s)
+    --- PASS: TestDefaultLoggingSkipper/does_not_skip_api (0.00s)
+    --- PASS: TestDefaultLoggingSkipper/does_not_skip_root (0.00s)
+=== RUN   TestDefaultLoggingMiddlewareConfig
+=== RUN   TestDefaultLoggingMiddlewareConfig/uses_provided_logger
+=== RUN   TestDefaultLoggingMiddlewareConfig/uses_nop_logger_when_nil
+--- PASS: TestDefaultLoggingMiddlewareConfig (0.00s)
+    --- PASS: TestDefaultLoggingMiddlewareConfig/uses_provided_logger (0.00s)
+    --- PASS: TestDefaultLoggingMiddlewareConfig/uses_nop_logger_when_nil (0.00s)
+=== RUN   TestStructuredLogging
+=== RUN   TestStructuredLogging/logs_request_start_and_completion
+=== RUN   TestStructuredLogging/logs_status_code_and_duration
+=== RUN   TestStructuredLogging/logs_client_errors_at_WARN_level
+=== RUN   TestStructuredLogging/logs_server_errors_at_ERROR_level
+=== RUN   TestStructuredLogging/skips_when_skipper_returns_true
+=== RUN   TestStructuredLogging/uses_nop_logger_when_nil
+=== RUN   TestStructuredLogging/injects_logger_into_context
+=== RUN   TestStructuredLogging/logs_query_parameters
+=== RUN   TestStructuredLogging/extracts_trace_ID_from_header
+=== RUN   TestStructuredLogging/generates_trace_ID_when_not_in_header
+=== RUN   TestStructuredLogging/extracts_user_ID_from_JWT_claims
+=== RUN   TestStructuredLogging/extracts_org_ID_from_context
+--- PASS: TestStructuredLogging (0.00s)
+    --- PASS: TestStructuredLogging/logs_request_start_and_completion (0.00s)
+    --- PASS: TestStructuredLogging/logs_status_code_and_duration (0.00s)
+    --- PASS: TestStructuredLogging/logs_client_errors_at_WARN_level (0.00s)
+    --- PASS: TestStructuredLogging/logs_server_errors_at_ERROR_level (0.00s)
+    --- PASS: TestStructuredLogging/skips_when_skipper_returns_true (0.00s)
+    --- PASS: TestStructuredLogging/uses_nop_logger_when_nil (0.00s)
+    --- PASS: TestStructuredLogging/injects_logger_into_context (0.00s)
+    --- PASS: TestStructuredLogging/logs_query_parameters (0.00s)
+    --- PASS: TestStructuredLogging/extracts_trace_ID_from_header (0.00s)
+    --- PASS: TestStructuredLogging/generates_trace_ID_when_not_in_header (0.00s)
+    --- PASS: TestStructuredLogging/extracts_user_ID_from_JWT_claims (0.00s)
+    --- PASS: TestStructuredLogging/extracts_org_ID_from_context (0.00s)
+=== RUN   TestGetLogger
+=== RUN   TestGetLogger/returns_logger_from_context
+=== RUN   TestGetLogger/returns_nop_logger_when_not_set
+=== RUN   TestGetLogger/returns_nop_logger_for_nil_context
+--- PASS: TestGetLogger (0.00s)
+    --- PASS: TestGetLogger/returns_logger_from_context (0.00s)
+    --- PASS: TestGetLogger/returns_nop_logger_when_not_set (0.00s)
+    --- PASS: TestGetLogger/returns_nop_logger_for_nil_context (0.00s)
+=== RUN   TestSetLogger
+=== RUN   TestSetLogger/sets_logger_in_context
+=== RUN   TestSetLogger/handles_nil_logger_gracefully
+=== RUN   TestSetLogger/handles_nil_context_gracefully
+--- PASS: TestSetLogger (0.00s)
+    --- PASS: TestSetLogger/sets_logger_in_context (0.00s)
+    --- PASS: TestSetLogger/handles_nil_logger_gracefully (0.00s)
+    --- PASS: TestSetLogger/handles_nil_context_gracefully (0.00s)
+=== RUN   TestStructuredLogging_DurationAccuracy
+--- PASS: TestStructuredLogging_DurationAccuracy (0.01s)
+=== RUN   TestStructuredLogging_ResponseSize
+--- PASS: TestStructuredLogging_ResponseSize (0.00s)
+PASS
+ok  	github.com/example/go-api-base/internal/http/middleware	(cached)
+=== RUN   TestNewServerWithLogger
+--- PASS: TestNewServerWithLogger (0.00s)
+=== RUN   TestNewServerWithNilLogger
+--- PASS: TestNewServerWithNilLogger (0.00s)
+=== RUN   TestSetLogger
+--- PASS: TestSetLogger (0.00s)
+PASS
+ok  	github.com/example/go-api-base/internal/http	(cached)
+=== RUN   TestDefaultCacheConfig
+--- PASS: TestDefaultCacheConfig (0.00s)
+=== RUN   TestCacheConfigParsing
+--- PASS: TestCacheConfigParsing (0.00s)
+=== RUN   TestInvalidCacheDriver
+--- PASS: TestInvalidCacheDriver (0.00s)
+=== RUN   TestDefaultImageConfig
+--- PASS: TestDefaultImageConfig (0.00s)
+=== RUN   TestImageConfigParsing
+--- PASS: TestImageConfigParsing (0.00s)
+=== RUN   TestInvalidQuality
+--- PASS: TestInvalidQuality (0.00s)
+=== RUN   TestInvalidPreviewQuality
+--- PASS: TestInvalidPreviewQuality (0.00s)
+=== RUN   TestLogConfigDefaults
+--- PASS: TestLogConfigDefaults (0.00s)
+=== RUN   TestLogConfigParsing
+--- PASS: TestLogConfigParsing (0.00s)
+=== RUN   TestLogConfigPartial
+--- PASS: TestLogConfigPartial (0.00s)
+=== RUN   TestDefaultStorageConfig
+--- PASS: TestDefaultStorageConfig (0.00s)
+=== RUN   TestS3ConfigParsing
+--- PASS: TestS3ConfigParsing (0.00s)
+=== RUN   TestInvalidStorageDriver
+--- PASS: TestInvalidStorageDriver (0.00s)
+=== RUN   TestMissingS3Bucket
+--- PASS: TestMissingS3Bucket (0.00s)
+=== RUN   TestDefaultSwaggerConfig
+--- PASS: TestDefaultSwaggerConfig (0.00s)
+=== RUN   TestSwaggerConfigDefaults
+--- PASS: TestSwaggerConfigDefaults (0.00s)
+PASS
+ok  	github.com/example/go-api-base/internal/config	(cached)

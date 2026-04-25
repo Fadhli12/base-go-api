@@ -16,6 +16,7 @@ type OrganizationRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error)
 	FindBySlug(ctx context.Context, slug string) (*domain.Organization, error)
 	FindAll(ctx context.Context, limit, offset int) ([]*domain.Organization, int64, error)
+	FindByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Organization, int64, error)
 	Update(ctx context.Context, org *domain.Organization) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 
@@ -50,8 +51,8 @@ func (r *organizationRepository) Create(ctx context.Context, org *domain.Organiz
 func (r *organizationRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error) {
 	var org domain.Organization
 	err := r.db.WithContext(ctx).
-		Preload("Owner").
-		Preload("Members").
+		Preload("Owner", "deleted_at IS NULL").
+		Preload("Members", "deleted_at IS NULL").
 		First(&org, "id = ?", id).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.ErrNotFound
@@ -66,8 +67,8 @@ func (r *organizationRepository) FindByID(ctx context.Context, id uuid.UUID) (*d
 func (r *organizationRepository) FindBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
 	var org domain.Organization
 	err := r.db.WithContext(ctx).
-		Preload("Owner").
-		Preload("Members").
+		Preload("Owner", "deleted_at IS NULL").
+		Preload("Members", "deleted_at IS NULL").
 		Where("slug = ?", slug).
 		First(&org).Error
 	if err == gorm.ErrRecordNotFound {
@@ -90,8 +91,38 @@ func (r *organizationRepository) FindAll(ctx context.Context, limit, offset int)
 	}
 
 	// Fetch with pagination
+	// Note: Preload with soft-delete filter to exclude deleted owners
+	err := r.db.WithContext(ctx).
+		Preload("Owner", "deleted_at IS NULL").
+		Limit(limit).
+		Offset(offset).
+		Find(&orgs).Error
+	if err != nil {
+		return nil, 0, errors.WrapInternal(err)
+	}
+
+	return orgs, total, nil
+}
+
+// FindByUserID retrieves organizations where the user is a member
+func (r *organizationRepository) FindByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*domain.Organization, int64, error) {
+	var orgs []*domain.Organization
+	var total int64
+
+	// Count total organizations where user is a member
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Organization{}).
+		Joins("JOIN organization_members ON organizations.id = organization_members.organization_id").
+		Where("organization_members.user_id = ?", userID).
+		Count(&total).Error; err != nil {
+		return nil, 0, errors.WrapInternal(err)
+	}
+
+	// Fetch organizations where user is a member
 	err := r.db.WithContext(ctx).
 		Preload("Owner").
+		Joins("JOIN organization_members ON organizations.id = organization_members.organization_id").
+		Where("organization_members.user_id = ?", userID).
 		Limit(limit).
 		Offset(offset).
 		Find(&orgs).Error
@@ -152,7 +183,7 @@ func (r *organizationRepository) RemoveMember(ctx context.Context, orgID, userID
 func (r *organizationRepository) FindMember(ctx context.Context, orgID, userID uuid.UUID) (*domain.OrganizationMember, error) {
 	var member domain.OrganizationMember
 	err := r.db.WithContext(ctx).
-		Preload("User").
+		Preload("User", "deleted_at IS NULL").
 		Where("organization_id = ? AND user_id = ?", orgID, userID).
 		First(&member).Error
 	if err == gorm.ErrRecordNotFound {
@@ -178,8 +209,9 @@ func (r *organizationRepository) FindMembers(ctx context.Context, orgID uuid.UUI
 	}
 
 	// Fetch with pagination
+	// Note: Preload with soft-delete filter to exclude deleted users
 	err := r.db.WithContext(ctx).
-		Preload("User").
+		Preload("User", "deleted_at IS NULL").
 		Where("organization_id = ?", orgID).
 		Limit(limit).
 		Offset(offset).

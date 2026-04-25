@@ -8,6 +8,7 @@ A production-ready Go REST API foundation with RBAC, JWT authentication, and com
 - **Role-Based Access Control (RBAC)** - Flexible permission system powered by Casbin
 - **Permission Management** - Fine-grained permission grants with resource/action model
 - **Audit Logging** - Comprehensive audit trail for compliance and security
+- **Structured Logging** - Context-aware logging with slog, multiple output writers, and request tracing
 - **Rate Limiting** - Built-in protection against abuse
 - **Health Checks** - `/healthz` and `/readyz` endpoints for orchestration
 - **Graceful Shutdown** - 30-second timeout for clean connections drain
@@ -131,6 +132,20 @@ This project supports dynamic configuration via environment variables. Copy `.en
 - `SWAGGER_ENABLED` - Enable Swagger UI (default: true)
 - `SWAGGER_PATH` - Path for Swagger UI (default: /swagger)
 
+### Structured Logging
+- `LOG_LEVEL` - Log level: `debug`, `info`, `warn`, `error` (default: `info`)
+- `LOG_FORMAT` - Log format: `json` or `text` (default: `json`)
+- `LOG_OUTPUTS` - Output destinations: comma-separated list of `stdout`, `file`, `syslog` (default: `stdout`)
+- `LOG_FILE_PATH` - Path to log file when using file output (default: `/var/log/api.log`)
+- `LOG_FILE_MAX_SIZE` - Max log file size in MB before rotation (default: `100`)
+- `LOG_FILE_MAX_BACKUPS` - Number of backup log files to keep (default: `10`)
+- `LOG_FILE_MAX_AGE` - Days to keep backup log files (default: `30`)
+- `LOG_FILE_COMPRESS` - Compress rotated log files (default: `true`)
+- `LOG_SYSLOG_NETWORK` - Syslog network: `tcp`, `udp`, or empty for local (default: empty)
+- `LOG_SYSLOG_ADDRESS` - Syslog server address (default: empty)
+- `LOG_SYSLOG_TAG` - Syslog tag/identifier (default: `go-api`)
+- `LOG_ADD_SOURCE` - Include file:line in log output (default: `false`)
+
 ## Available Make Commands
 
 ```bash
@@ -154,6 +169,94 @@ make help              # Show all available commands
 |----------|---------|
 | `GET /healthz` | Simple liveness check (always returns 200) |
 | `GET /readyz` | Readiness check (verifies DB and Redis connections) |
+
+## Structured Logging
+
+The API includes a comprehensive structured logging system with context propagation, multiple output writers, and automatic field extraction.
+
+### Basic Usage
+
+```go
+// In HTTP handlers
+func (h *Handler) GetUser(c echo.Context) error {
+    log := middleware.GetLogger(c)
+    ctx := c.Request().Context()
+    
+    log.Info(ctx, "fetching user",
+        log.String("user_id", userID),
+    )
+    
+    user, err := h.service.GetUser(ctx, userID)
+    if err != nil {
+        log.Error(ctx, "failed to fetch user",
+            log.String("user_id", userID),
+            logger.Err(err),
+        )
+        return echo.NewHTTPError(http.StatusNotFound, "User not found")
+    }
+    
+    return c.JSON(http.StatusOK, user)
+}
+```
+
+### Automatic Context Fields
+
+The middleware automatically extracts and logs:
+- `request_id` - From X-Request-ID header or generated UUID
+- `user_id` - From JWT claims
+- `org_id` - From X-Organization-ID header
+- `trace_id` - From X-Trace-ID header or generated
+
+### Field Types
+
+```go
+log.String("key", "value")
+log.Int("count", 42)
+log.Int64("timestamp", time.Now().Unix())
+log.Float64("percentage", 99.9)
+log.Bool("active", true)
+log.Duration("elapsed", time.Second)
+log.Time("created_at", time.Now())
+log.Any("metadata", map[string]interface{}{...})
+logger.Err(err)
+```
+
+### Configuration Examples
+
+**JSON output to stdout (default):**
+```bash
+LOG_LEVEL=info
+LOG_FORMAT=json
+LOG_OUTPUTS=stdout
+```
+
+**Multiple outputs with file rotation:**
+```bash
+LOG_LEVEL=info
+LOG_FORMAT=json
+LOG_OUTPUTS=stdout,file
+LOG_FILE_PATH=/var/log/api.log
+LOG_FILE_MAX_SIZE=100
+LOG_FILE_MAX_BACKUPS=10
+LOG_FILE_MAX_AGE=30
+```
+
+**Syslog integration:**
+```bash
+LOG_LEVEL=info
+LOG_FORMAT=json
+LOG_OUTPUTS=syslog
+LOG_SYSLOG_NETWORK=tcp
+LOG_SYSLOG_ADDRESS=logs.example.com:514
+LOG_SYSLOG_TAG=go-api
+```
+
+### Performance
+
+- Log call overhead: < 1ms
+- Middleware overhead: < 2ms per request
+- Zero-allocation for constant keys
+- Goroutine-safe implementations
 
 ## Deployment
 

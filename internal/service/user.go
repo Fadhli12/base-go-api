@@ -5,6 +5,7 @@ import (
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/repository"
+	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
 )
 
@@ -71,11 +72,29 @@ func (s *UserService) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]dom
 
 // GrantPermission grants a permission to a user (allow effect)
 func (s *UserService) GrantPermission(ctx context.Context, userID, permissionID, assignedBy uuid.UUID) error {
+	userPerm := &domain.UserPermission{
+		UserID:       userID,
+		PermissionID: permissionID,
+		Effect:       domain.EffectAllow,
+		AssignedBy:   assignedBy,
+	}
+	if err := userPerm.Validate(); err != nil {
+		return apperrors.NewAppError("VALIDATION_ERROR", err.Error(), 400)
+	}
 	return s.userPermissionRepo.Grant(ctx, userID, permissionID, assignedBy)
 }
 
 // DenyPermission denies a permission for a user (deny effect)
 func (s *UserService) DenyPermission(ctx context.Context, userID, permissionID, assignedBy uuid.UUID) error {
+	userPerm := &domain.UserPermission{
+		UserID:       userID,
+		PermissionID: permissionID,
+		Effect:       domain.EffectDeny,
+		AssignedBy:   assignedBy,
+	}
+	if err := userPerm.Validate(); err != nil {
+		return apperrors.NewAppError("VALIDATION_ERROR", err.Error(), 400)
+	}
 	return s.userPermissionRepo.Deny(ctx, userID, permissionID, assignedBy)
 }
 
