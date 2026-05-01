@@ -33,6 +33,7 @@ type Server struct {
 	config      *config.Config
 	db          *gorm.DB
 	redis       *redis.Client
+	cache       cache.Driver
 	logger      logger.Logger
 	enforcer    *permission.Enforcer
 	permCache   *permission.Cache
@@ -65,6 +66,7 @@ func NewServer(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, cache
 		config: cfg,
 		db:     db,
 		redis:  redisClient,
+		cache:  cacheDriver,
 		logger: log,
 	}
 
@@ -389,6 +391,11 @@ func (s *Server) RegisterRoutes() {
 		slog.Info("Swagger documentation disabled")
 	}
 
+	// Health check routes (public, no auth required)
+	healthHandler := handler.NewHealthHandler(s.db, s.redis)
+	s.echo.GET("/healthz", healthHandler.Healthz)
+	s.echo.GET("/readyz", healthHandler.Readyz)
+
 	// API v1 routes
 	v1 := s.echo.Group("/api/v1")
 
@@ -397,9 +404,16 @@ func (s *Server) RegisterRoutes() {
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/refresh", authHandler.Refresh)
-	auth.POST("/logout", authHandler.Logout)
 	auth.POST("/password-reset", authHandler.RequestPasswordReset)
 	auth.POST("/password-reset/confirm", authHandler.ResetPassword)
+
+	// Auth routes (protected - require JWT)
+	authProtected := v1.Group("/auth")
+	authProtected.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+	authProtected.POST("/logout", authHandler.Logout)
 
 	// MED-005: Session management routes (protected)
 	sessions := v1.Group("/sessions")
@@ -453,6 +467,13 @@ func (s *Server) RegisterRoutes() {
 
 	// Email routes
 	s.RegisterEmailRoutes(v1)
+
+	// Notification routes
+	notificationRepo := repository.NewNotificationRepository(s.db)
+	notificationPrefRepo := repository.NewNotificationPreferenceRepository(s.db)
+	notificationService := service.NewNotificationService(notificationRepo, notificationPrefRepo, emailService, userRepo, s.cache, slog.Default())
+	notificationHandler := handler.NewNotificationHandler(notificationService)
+	s.RegisterNotificationRoutes(v1, notificationHandler)
 }
 
 // RegisterEmailRoutes registers email-related routes
@@ -529,6 +550,37 @@ func (s *Server) RegisterEmailRoutes(api *echo.Group) {
 	webhooks.POST("/:provider/bounce", emailHandler.WebhookBounce)
 }
 
+// RegisterNotificationRoutes registers notification-related routes.
+// Uses JWT middleware for authentication. Ownership is enforced at the service/repository layer,
+// so no RequirePermission middleware is applied here.
+func (s *Server) RegisterNotificationRoutes(api *echo.Group, notifHandler *handler.NotificationHandler) {
+	notifications := api.Group("/notifications")
+
+	// JWT middleware - required
+	notifications.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// NO RequirePermission middleware - ownership is enforced in service/repository layer
+
+	// Audit middleware
+	if s.auditSvc != nil {
+		notifications.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	notifications.GET("", notifHandler.List)
+	notifications.GET("/unread-count", notifHandler.CountUnread)
+	notifications.PATCH("/:id/read", notifHandler.MarkAsRead)
+	notifications.POST("/read-all", notifHandler.MarkAllAsRead)
+	notifications.DELETE("/:id", notifHandler.Archive)
+	notifications.GET("/preferences", notifHandler.GetPreferences)
+	notifications.PUT("/preferences", notifHandler.UpdatePreference)
+}
+
 // RegisterPermissionRoutes registers permission-related routes
 // Requires JWT authentication and permission:manage permission for write operations
 func (s *Server) RegisterPermissionRoutes(api *echo.Group, permHandler *handler.PermissionHandler) {
@@ -583,6 +635,7 @@ func (s *Server) RegisterRoleRoutes(api *echo.Group, roleHandler *handler.RoleHa
 
 	roles.POST("", roleHandler.Create)
 	roles.GET("", roleHandler.GetAll)
+	roles.GET("/:id", roleHandler.GetByID)
 	roles.PUT("/:id", roleHandler.Update)
 	roles.DELETE("/:id", roleHandler.SoftDelete)
 	roles.POST("/:id/permissions/:pid", roleHandler.AttachPermission)
@@ -614,7 +667,9 @@ func (s *Server) RegisterUserRoutes(api *echo.Group, userHandler *handler.UserHa
 	}
 
 	users.GET("", userHandler.ListUsers)
+	users.POST("", userHandler.CreateUser)
 	users.GET("/:id", userHandler.GetUserByID)
+	users.PUT("/:id", userHandler.UpdateUser)
 	users.DELETE("/:id", userHandler.SoftDelete)
 	users.POST("/:id/roles", userHandler.AssignRole)
 	users.DELETE("/:id/roles/:roleId", userHandler.RemoveRole)

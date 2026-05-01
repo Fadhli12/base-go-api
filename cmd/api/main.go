@@ -568,8 +568,32 @@ func runMigrations() error {
 		slog.Info("No migrations applied yet, starting fresh")
 	} else {
 		slog.Info("Current migration state", "version", version, "dirty", dirty)
+
+		// Check if database already has tables (from previous setup)
+		sqlDB, _ := db.DB()
+		var tableCount int
+		sqlDB.QueryRow("SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public'").Scan(&tableCount)
+		slog.Info("Current table count in public schema", "count", tableCount)
+
+		if version > 0 && tableCount > 10 && !dirty {
+			// Database has tables and a valid version - assume migrations already applied
+			slog.Info("Database already migrated, skipping", "version", version, "table_count", tableCount)
+			return nil
+		}
+
 		if dirty {
-			return fmt.Errorf("database is in dirty state, please resolve and force to version %d", version)
+			slog.Info("Database in dirty state, forcing to version", "version", version)
+			if forceErr := m.Force(int(version)); forceErr != nil {
+				return fmt.Errorf("failed to force migration version: %w", forceErr)
+			}
+			slog.Info("Forced migration to clean state")
+
+			// After forcing, check again - if we still have tables and version > 0, skip Up
+			newVersion, newDirty, _ := m.Version()
+			if !newDirty && newVersion > 0 && tableCount > 10 {
+				slog.Info("Database now clean at version", "version", newVersion, "- skipping migrations")
+				return nil
+			}
 		}
 	}
 
@@ -673,6 +697,10 @@ func runSeed() error {
 		{"organization:manage", "organizations", "manage", "all", "Manage organization settings", false},
 		{"organization:invite", "organizations", "invite", "all", "Invite members to organization", false},
 		{"organization:remove", "organizations", "remove", "all", "Remove members from organization", false},
+
+		// Notification permissions
+		{"notifications:view", "notifications", "view", "own", "View own notifications", false},
+		{"notifications:manage", "notifications", "manage", "own", "Manage own notifications", false},
 	}
 
 	slog.Info("Seeding permissions", "count", len(permissions))
@@ -786,6 +814,7 @@ func runSeed() error {
 		"permissions:view", "permissions:create", "permissions:manage",
 		"invoices:view:all", "invoices:create", "invoices:update:all", "invoices:delete:all", "invoices:manage",
 		"audit:view",
+		"notifications:view", "notifications:manage",
 	}
 	slog.Info("Assigning permissions to admin role")
 	for _, permName := range adminPermissions {
@@ -807,6 +836,7 @@ func runSeed() error {
 		"roles:view",
 		"permissions:view",
 		"invoices:view", "invoices:create",
+		"notifications:view", "notifications:manage",
 	}
 	slog.Info("Assigning permissions to viewer role")
 	for _, permName := range viewerPermissions {

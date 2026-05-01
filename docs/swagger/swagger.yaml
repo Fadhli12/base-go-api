@@ -1,6 +1,647 @@
 basePath: /api/v1
 definitions:
-  github_com_example_go-api-base_internal_http_request.CreateInvoiceRequest:
+  domain.MediaConversionResponse:
+    properties:
+      metadata:
+        additionalProperties: true
+        type: object
+      name:
+        type: string
+      size:
+        type: integer
+      url:
+        type: string
+    type: object
+  domain.MediaResponse:
+    properties:
+      collection_name:
+        type: string
+      conversions:
+        items:
+          $ref: '#/definitions/domain.MediaConversionResponse'
+        type: array
+      created_at:
+        type: string
+      custom_properties:
+        additionalProperties: true
+        type: object
+      filename:
+        type: string
+      id:
+        type: string
+      mime_type:
+        type: string
+      model_type:
+        type: string
+      size:
+        type: integer
+      url:
+        type: string
+    type: object
+  domain.NewsResponse:
+    properties:
+      author_email:
+        type: string
+      author_id:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      excerpt:
+        type: string
+      id:
+        type: string
+      metadata: {}
+      published_at:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/domain.NewsStatus'
+      tags: {}
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.NewsStatus:
+    enum:
+    - draft
+    - published
+    - archived
+    type: string
+    x-enum-varnames:
+    - NewsStatusDraft
+    - NewsStatusPublished
+    - NewsStatusArchived
+  domain.NotificationPreferenceResponse:
+    properties:
+      created_at:
+        type: string
+      email_enabled:
+        type: boolean
+      id:
+        type: string
+      notification_type:
+        type: string
+      push_enabled:
+        type: boolean
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  domain.NotificationResponse:
+    properties:
+      action_url:
+        type: string
+      archived_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      read_at:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  domain.OrganizationMemberResponse:
+    properties:
+      joined_at:
+        type: string
+      organization_id:
+        type: string
+      role:
+        type: string
+      user_email:
+        type: string
+      user_id:
+        type: string
+      user_name:
+        type: string
+    type: object
+  domain.OrganizationResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      member_count:
+        type: integer
+      name:
+        type: string
+      owner_id:
+        type: string
+      settings:
+        type: object
+      slug:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handler.APIKeyListItem:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      is_expired:
+        type: boolean
+      is_revoked:
+        type: boolean
+      last_used_at:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      updated_at:
+        type: string
+    type: object
+  handler.AdminMediaListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/domain.MediaResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.CleanupResponse:
+    properties:
+      deleted_count:
+        type: integer
+      errors:
+        items:
+          type: string
+        type: array
+      message:
+        type: string
+      orphans_found:
+        type: integer
+    type: object
+  handler.CreateAPIKeyResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      key:
+        description: Only returned on creation
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+      user_id:
+        type: string
+    type: object
+  handler.DiskStats:
+    properties:
+      count:
+        type: integer
+      disk:
+        type: string
+      size:
+        type: integer
+    type: object
+  handler.EffectivePermissionResponse:
+    properties:
+      action:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+      scope:
+        type: string
+    type: object
+  handler.EmailQueueResponse:
+    properties:
+      attempts:
+        type: integer
+      bounce_reason:
+        type: string
+      bounced_at:
+        type: string
+      created_at:
+        type: string
+      delivered_at:
+        type: string
+      id:
+        type: string
+      last_error:
+        type: string
+      message_id:
+        type: string
+      provider:
+        type: string
+      sent_at:
+        type: string
+      status:
+        type: string
+      subject:
+        type: string
+      template:
+        type: string
+      to_address:
+        type: string
+    type: object
+  handler.HealthStatusResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  handler.ListAPIKeysResponse:
+    properties:
+      api_keys:
+        items:
+          $ref: '#/definitions/handler.APIKeyListItem'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/handler.UserResponse'
+    type: object
+  handler.LogoutResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  handler.MeResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handler.MediaListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/domain.MediaResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.MediaStatsResponse:
+    properties:
+      by_disk:
+        items:
+          $ref: '#/definitions/handler.DiskStats'
+        type: array
+      by_mime_type:
+        items:
+          $ref: '#/definitions/handler.MimeTypeStats'
+        type: array
+      by_model_type:
+        items:
+          $ref: '#/definitions/handler.ModelTypeStats'
+        type: array
+      total_files:
+        type: integer
+      total_size:
+        type: integer
+    type: object
+  handler.MimeTypeStats:
+    properties:
+      count:
+        type: integer
+      mime_type:
+        type: string
+      size:
+        type: integer
+    type: object
+  handler.ModelTypeStats:
+    properties:
+      count:
+        type: integer
+      model_type:
+        type: string
+      size:
+        type: integer
+    type: object
+  handler.NewsListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/domain.NewsResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.NotificationListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/domain.NotificationResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.PasswordResetConfirmResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  handler.PasswordResetRequestResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  handler.PermissionResponse:
+    properties:
+      action:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      resource:
+        type: string
+      scope:
+        type: string
+    type: object
+  handler.ReadyzSuccessResponse:
+    properties:
+      checks:
+        additionalProperties:
+          type: string
+        type: object
+      status:
+        example: ready
+        type: string
+    type: object
+  handler.RefreshResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  handler.RegisterRequestResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+    type: object
+  handler.RevokeAPIKeyResponse:
+    properties:
+      id:
+        type: string
+      message:
+        type: string
+    type: object
+  handler.RoleListResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/handler.PermissionResponse'
+        type: array
+    type: object
+  handler.RoleResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/handler.PermissionResponse'
+        type: array
+    type: object
+  handler.SignedURLResponse:
+    properties:
+      expires_at:
+        type: string
+      expires_in:
+        type: integer
+      url:
+        type: string
+    type: object
+  handler.TemplateListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/handler.TemplateResponse'
+        type: array
+      total:
+        type: integer
+    type: object
+  handler.TemplateResponse:
+    properties:
+      category:
+        type: string
+      created_at:
+        type: string
+      html_content:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      subject:
+        type: string
+      text_content:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handler.UserDetailResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handler.UserListResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handler.UserResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+    type: object
+  handler.UserRoleResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/handler.PermissionResponse'
+        type: array
+    type: object
+  invoice.InvoiceListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/invoice.InvoiceResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  invoice.InvoiceResponse:
+    properties:
+      amount:
+        type: number
+      created_at:
+        type: string
+      customer:
+        type: string
+      description:
+        type: string
+      due_date:
+        type: string
+      id:
+        type: string
+      number:
+        type: string
+      status:
+        $ref: '#/definitions/invoice.InvoiceStatus'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  invoice.InvoiceStatus:
+    enum:
+    - draft
+    - pending
+    - paid
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - InvoiceStatusDraft
+    - InvoiceStatusPending
+    - InvoiceStatusPaid
+    - InvoiceStatusCancelled
+  request.AddMemberRequest:
+    properties:
+      role:
+        enum:
+        - owner
+        - admin
+        - member
+        type: string
+      user_id:
+        type: string
+    required:
+    - role
+    - user_id
+    type: object
+  request.CreateAPIKeyRequest:
+    properties:
+      expires_at:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    - scopes
+    type: object
+  request.CreateInvoiceRequest:
     properties:
       amount:
         type: number
@@ -16,7 +657,42 @@ definitions:
     - amount
     - customer
     type: object
-  github_com_example_go-api-base_internal_http_request.CreatePermissionRequest:
+  request.CreateNewsRequest:
+    properties:
+      content:
+        type: string
+      excerpt:
+        maxLength: 500
+        type: string
+      metadata:
+        type: object
+      tags:
+        type: object
+      title:
+        maxLength: 255
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  request.CreateOrganizationRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      settings:
+        additionalProperties: true
+        type: object
+      slug:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    - slug
+    type: object
+  request.CreatePermissionRequest:
     properties:
       action:
         maxLength: 20
@@ -35,7 +711,7 @@ definitions:
     - name
     - resource
     type: object
-  github_com_example_go-api-base_internal_http_request.CreateRoleRequest:
+  request.CreateRoleRequest:
     properties:
       description:
         maxLength: 255
@@ -46,7 +722,34 @@ definitions:
     required:
     - name
     type: object
-  github_com_example_go-api-base_internal_http_request.CreateUserPermissionRequest:
+  request.CreateTemplateRequest:
+    properties:
+      category:
+        enum:
+        - transactional
+        - marketing
+        - notification
+        - system
+        type: string
+      html_content:
+        type: string
+      name:
+        maxLength: 100
+        minLength: 3
+        type: string
+      subject:
+        maxLength: 255
+        minLength: 1
+        type: string
+      text_content:
+        type: string
+    required:
+    - category
+    - html_content
+    - name
+    - subject
+    type: object
+  request.CreateUserPermissionRequest:
     properties:
       effect:
         enum:
@@ -59,14 +762,28 @@ definitions:
     - effect
     - permission_id
     type: object
-  github_com_example_go-api-base_internal_http_request.CreateUserRoleRequest:
+  request.CreateUserRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  request.CreateUserRoleRequest:
     properties:
       role_id:
         type: string
     required:
     - role_id
     type: object
-  github_com_example_go-api-base_internal_http_request.LoginRequest:
+  request.LoginRequest:
     properties:
       email:
         type: string
@@ -76,14 +793,33 @@ definitions:
     - email
     - password
     type: object
-  github_com_example_go-api-base_internal_http_request.RefreshRequest:
+  request.PasswordResetConfirmRequest:
+    properties:
+      password:
+        maxLength: 72
+        minLength: 8
+        type: string
+      token:
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  request.PasswordResetRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  request.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  github_com_example_go-api-base_internal_http_request.RegisterRequest:
+  request.RegisterRequest:
     properties:
       email:
         type: string
@@ -95,7 +831,27 @@ definitions:
     - email
     - password
     type: object
-  github_com_example_go-api-base_internal_http_request.UpdateInvoiceRequest:
+  request.SendEmailRequest:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      html_content:
+        type: string
+      subject:
+        maxLength: 500
+        type: string
+      template:
+        maxLength: 100
+        type: string
+      text_content:
+        type: string
+      to:
+        type: string
+    required:
+    - to
+    type: object
+  request.UpdateInvoiceRequest:
     properties:
       amount:
         type: number
@@ -115,7 +871,79 @@ definitions:
         - cancelled
         type: string
     type: object
-  github_com_example_go-api-base_internal_http_request.UpdateRoleRequest:
+  request.UpdateMediaMetadataRequest:
+    properties:
+      custom_properties:
+        type: object
+    required:
+    - custom_properties
+    type: object
+  request.UpdateNewsRequest:
+    properties:
+      content:
+        type: string
+      excerpt:
+        maxLength: 500
+        type: string
+      metadata:
+        type: object
+      status:
+        enum:
+        - draft
+        - published
+        - archived
+        type: string
+      tags:
+        type: object
+      title:
+        maxLength: 255
+        type: string
+    type: object
+  request.UpdateNewsStatusRequest:
+    properties:
+      status:
+        enum:
+        - draft
+        - published
+        - archived
+        type: string
+    required:
+    - status
+    type: object
+  request.UpdateNotificationPreferenceRequest:
+    properties:
+      email_enabled:
+        type: boolean
+      notification_type:
+        enum:
+        - mention
+        - assignment
+        - system
+        - invoice.created
+        - news.published
+        type: string
+      push_enabled:
+        type: boolean
+    required:
+    - email_enabled
+    - notification_type
+    - push_enabled
+    type: object
+  request.UpdateOrganizationRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      settings:
+        additionalProperties: true
+        type: object
+      slug:
+        maxLength: 100
+        minLength: 1
+        type: string
+    type: object
+  request.UpdateRoleRequest:
     properties:
       description:
         maxLength: 255
@@ -124,15 +952,44 @@ definitions:
         maxLength: 50
         type: string
     type: object
-  github_com_example_go-api-base_internal_http_response.Envelope:
+  request.UpdateTemplateRequest:
+    properties:
+      category:
+        enum:
+        - transactional
+        - marketing
+        - notification
+        - system
+        type: string
+      html_content:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        maxLength: 100
+        minLength: 3
+        type: string
+      subject:
+        maxLength: 255
+        minLength: 1
+        type: string
+      text_content:
+        type: string
+    type: object
+  request.UpdateUserRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  response.Envelope:
     properties:
       data: {}
       error:
-        $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.ErrorDetail'
+        $ref: '#/definitions/response.ErrorDetail'
       meta:
-        $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Meta'
+        $ref: '#/definitions/response.Meta'
     type: object
-  github_com_example_go-api-base_internal_http_response.ErrorDetail:
+  response.ErrorDetail:
     properties:
       code:
         type: string
@@ -140,216 +997,13 @@ definitions:
       message:
         type: string
     type: object
-  github_com_example_go-api-base_internal_http_response.Meta:
+  response.Meta:
     properties:
       request_id:
         type: string
       timestamp:
         type: string
     type: object
-  internal_http_handler.EffectivePermissionResponse:
-    properties:
-      action:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      resource:
-        type: string
-      scope:
-        type: string
-    type: object
-  internal_http_handler.HealthStatusResponse:
-    properties:
-      status:
-        example: ok
-        type: string
-    type: object
-  internal_http_handler.LoginResponse:
-    properties:
-      access_token:
-        type: string
-      refresh_token:
-        type: string
-      user:
-        $ref: '#/definitions/internal_http_handler.UserResponse'
-    type: object
-  internal_http_handler.LogoutResponse:
-    properties:
-      message:
-        type: string
-    type: object
-  internal_http_handler.MeResponse:
-    properties:
-      created_at:
-        type: string
-      email:
-        type: string
-      id:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  internal_http_handler.PermissionResponse:
-    properties:
-      action:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      resource:
-        type: string
-      scope:
-        type: string
-    type: object
-  internal_http_handler.ReadyzSuccessResponse:
-    properties:
-      checks:
-        additionalProperties:
-          type: string
-        type: object
-      status:
-        example: ready
-        type: string
-    type: object
-  internal_http_handler.RefreshResponse:
-    properties:
-      access_token:
-        type: string
-      refresh_token:
-        type: string
-    type: object
-  internal_http_handler.RegisterRequestResponse:
-    properties:
-      email:
-        type: string
-      id:
-        type: string
-    type: object
-  internal_http_handler.RoleListResponse:
-    properties:
-      description:
-        type: string
-      id:
-        type: string
-      is_system:
-        type: boolean
-      name:
-        type: string
-      permissions:
-        items:
-          $ref: '#/definitions/internal_http_handler.PermissionResponse'
-        type: array
-    type: object
-  internal_http_handler.RoleResponse:
-    properties:
-      description:
-        type: string
-      id:
-        type: string
-      is_system:
-        type: boolean
-      name:
-        type: string
-      permissions:
-        items:
-          $ref: '#/definitions/internal_http_handler.PermissionResponse'
-        type: array
-    type: object
-  internal_http_handler.UserDetailResponse:
-    properties:
-      created_at:
-        type: string
-      email:
-        type: string
-      id:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  internal_http_handler.UserListResponse:
-    properties:
-      created_at:
-        type: string
-      email:
-        type: string
-      id:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  internal_http_handler.UserResponse:
-    properties:
-      email:
-        type: string
-      id:
-        type: string
-    type: object
-  internal_http_handler.UserRoleResponse:
-    properties:
-      description:
-        type: string
-      id:
-        type: string
-      is_system:
-        type: boolean
-      name:
-        type: string
-      permissions:
-        items:
-          $ref: '#/definitions/internal_http_handler.PermissionResponse'
-        type: array
-    type: object
-  internal_module_invoice.InvoiceListResponse:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
-        type: array
-      limit:
-        type: integer
-      offset:
-        type: integer
-      total:
-        type: integer
-    type: object
-  internal_module_invoice.InvoiceResponse:
-    properties:
-      amount:
-        type: number
-      created_at:
-        type: string
-      customer:
-        type: string
-      description:
-        type: string
-      due_date:
-        type: string
-      id:
-        type: string
-      number:
-        type: string
-      status:
-        $ref: '#/definitions/internal_module_invoice.InvoiceStatus'
-      updated_at:
-        type: string
-      user_id:
-        type: string
-    type: object
-  internal_module_invoice.InvoiceStatus:
-    enum:
-    - draft
-    - pending
-    - paid
-    - cancelled
-    type: string
-    x-enum-varnames:
-    - InvoiceStatusDraft
-    - InvoiceStatusPending
-    - InvoiceStatusPaid
-    - InvoiceStatusCancelled
 host: localhost:8080
 info:
   contact:
@@ -364,6 +1018,315 @@ info:
   title: Go API Base
   version: "1.0"
 paths:
+  /api/v1/admin/media:
+    get:
+      consumes:
+      - application/json
+      description: List all media files with filtering. Admin access only.
+      parameters:
+      - description: Filter by model type
+        in: query
+        name: model_type
+        type: string
+      - description: Filter by model ID
+        in: query
+        name: model_id
+        type: string
+      - description: Include soft-deleted media
+        in: query
+        name: include_deleted
+        type: boolean
+      - default: 20
+        description: Limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.AdminMediaListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List all media (admin)
+      tags:
+      - media
+      - admin
+  /api/v1/admin/media/cleanup:
+    post:
+      consumes:
+      - application/json
+      description: Trigger cleanup of orphaned media files. Admin access only.
+      parameters:
+      - default: 24
+        description: Hours since orphaned
+        in: query
+        name: cutoff_hours
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.CleanupResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Cleanup orphaned media (admin)
+      tags:
+      - media
+      - admin
+  /api/v1/admin/media/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get storage statistics for all media files. Admin access only.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.MediaStatsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get media statistics (admin)
+      tags:
+      - media
+      - admin
+  /api/v1/api-keys:
+    get:
+      consumes:
+      - application/json
+      description: List all API keys for the authenticated user with pagination
+      parameters:
+      - description: 'Number of results (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Pagination offset (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.ListAPIKeysResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List API keys
+      tags:
+      - api-keys
+    post:
+      consumes:
+      - application/json
+      description: Create a new API key with specified scopes for the authenticated
+        user
+      parameters:
+      - description: API key details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateAPIKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.CreateAPIKeyResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Permission denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: API key name already exists
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create a new API key
+      tags:
+      - api-keys
+  /api/v1/api-keys/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Revoke (soft delete) an API key by ID
+      parameters:
+      - description: API key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.RevokeAPIKeyResponse'
+              type: object
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Already revoked
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Revoke an API key
+      tags:
+      - api-keys
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific API key by ID
+      parameters:
+      - description: API key ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.APIKeyListItem'
+              type: object
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get API key by ID
+      tags:
+      - api-keys
   /api/v1/auth/login:
     post:
       consumes:
@@ -375,7 +1338,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.LoginRequest'
+          $ref: '#/definitions/request.LoginRequest'
       produces:
       - application/json
       responses:
@@ -383,19 +1346,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.LoginResponse'
+                  $ref: '#/definitions/handler.LoginResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Invalid credentials
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Login a user
       tags:
       - auth
@@ -404,12 +1367,6 @@ paths:
       consumes:
       - application/json
       description: Revoke all refresh tokens for the authenticated user
-      parameters:
-      - description: User ID
-        in: header
-        name: X-User-ID
-        required: true
-        type: string
       produces:
       - application/json
       responses:
@@ -417,16 +1374,80 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.LogoutResponse'
+                  $ref: '#/definitions/handler.LogoutResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Logout a user
+      tags:
+      - auth
+  /api/v1/auth/password-reset:
+    post:
+      consumes:
+      - application/json
+      description: Send a password reset email to the user
+      parameters:
+      - description: Email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.PasswordResetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.PasswordResetRequestResponse'
               type: object
         "400":
-          description: Missing user ID
+          description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
-      summary: Logout a user
+            $ref: '#/definitions/response.Envelope'
+      summary: Request password reset
+      tags:
+      - auth
+  /api/v1/auth/password-reset/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Reset user password using the token from email
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.PasswordResetConfirmRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.PasswordResetConfirmResponse'
+              type: object
+        "400":
+          description: Invalid request or expired token
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Reset password
       tags:
       - auth
   /api/v1/auth/refresh:
@@ -440,7 +1461,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.RefreshRequest'
+          $ref: '#/definitions/request.RefreshRequest'
       produces:
       - application/json
       responses:
@@ -448,19 +1469,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.RefreshResponse'
+                  $ref: '#/definitions/handler.RefreshResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Invalid refresh token
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Refresh access token
       tags:
       - auth
@@ -475,7 +1496,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.RegisterRequest'
+          $ref: '#/definitions/request.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -483,22 +1504,249 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.RegisterRequestResponse'
+                  $ref: '#/definitions/handler.RegisterRequestResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "409":
           description: Email already exists
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Register a new user
       tags:
       - auth
+  /api/v1/email-templates:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of email templates
+      parameters:
+      - default: 20
+        description: Page size
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.TemplateListResponse'
+              type: object
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get all email templates
+      tags:
+      - email-templates
+    post:
+      consumes:
+      - application/json
+      description: Create a new email template with name, subject, content, and category
+      parameters:
+      - description: Template details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.TemplateResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Template already exists
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Create a new email template
+      tags:
+      - email-templates
+  /api/v1/email-templates/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft-delete an email template
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: Template deleted
+        "404":
+          description: Template not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Delete an email template
+      tags:
+      - email-templates
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a single email template by its ID
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.TemplateResponse'
+              type: object
+        "404":
+          description: Template not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get email template by ID
+      tags:
+      - email-templates
+    put:
+      consumes:
+      - application/json
+      description: Update an existing email template
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Template updates
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.TemplateResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Template not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Update an email template
+      tags:
+      - email-templates
+  /api/v1/emails:
+    post:
+      consumes:
+      - application/json
+      description: Queue an email for async delivery
+      parameters:
+      - description: Email details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.SendEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Email queued
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Send an email
+      tags:
+      - email
+  /api/v1/emails/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get the status of a queued email
+      parameters:
+      - description: Email ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.EmailQueueResponse'
+              type: object
+        "404":
+          description: Email not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get email status
+      tags:
+      - email
   /api/v1/invoices:
     get:
       consumes:
@@ -523,19 +1771,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_module_invoice.InvoiceListResponse'
+                  $ref: '#/definitions/invoice.InvoiceListResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: List invoices
@@ -551,7 +1799,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateInvoiceRequest'
+          $ref: '#/definitions/request.CreateInvoiceRequest'
       produces:
       - application/json
       responses:
@@ -559,23 +1807,23 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+                  $ref: '#/definitions/invoice.InvoiceResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Create invoice
@@ -599,7 +1847,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -609,15 +1857,15 @@ paths:
         "400":
           description: Invalid invoice ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Invoice not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Delete invoice
@@ -640,23 +1888,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+                  $ref: '#/definitions/invoice.InvoiceResponse'
               type: object
         "400":
           description: Invalid invoice ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Invoice not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Get invoice by ID
@@ -677,7 +1925,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.UpdateInvoiceRequest'
+          $ref: '#/definitions/request.UpdateInvoiceRequest'
       produces:
       - application/json
       responses:
@@ -685,23 +1933,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_module_invoice.InvoiceResponse'
+                  $ref: '#/definitions/invoice.InvoiceResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Invoice not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Update invoice
@@ -730,7 +1978,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -740,19 +1988,19 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Invoice not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Update invoice status
@@ -770,24 +2018,1347 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.MeResponse'
+                  $ref: '#/definitions/handler.MeResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Get current user
       tags:
       - user
+  /api/v1/media/{media_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a media file
+      parameters:
+      - description: Media ID
+        in: path
+        name: media_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Media not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete media
+      tags:
+      - media
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific media file
+      parameters:
+      - description: Media ID
+        in: path
+        name: media_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.MediaResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Media not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get media by ID
+      tags:
+      - media
+    patch:
+      consumes:
+      - application/json
+      description: Update custom properties for a media file
+      parameters:
+      - description: Media ID
+        in: path
+        name: media_id
+        required: true
+        type: string
+      - description: Metadata update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateMediaMetadataRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.MediaResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Media not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update media metadata
+      tags:
+      - media
+  /api/v1/media/{media_id}/download:
+    get:
+      description: Download a media file directly
+      parameters:
+      - description: Media ID
+        in: path
+        name: media_id
+        required: true
+        type: string
+      - description: Conversion name
+        in: query
+        name: conversion
+        type: string
+      - description: Signature for signed URL
+        in: query
+        name: sig
+        type: string
+      - description: Expiry timestamp for signed URL
+        in: query
+        name: expires
+        type: integer
+      responses:
+        "200":
+          description: Media file
+          schema:
+            type: file
+        "401":
+          description: Unauthorized or invalid signature
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Media not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "410":
+          description: Media deleted
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Download media file
+      tags:
+      - media
+  /api/v1/media/{media_id}/url:
+    get:
+      consumes:
+      - application/json
+      description: Generate a signed URL for downloading media
+      parameters:
+      - description: Media ID
+        in: path
+        name: media_id
+        required: true
+        type: string
+      - description: Conversion name
+        in: query
+        name: conversion
+        type: string
+      - description: Expiry time in seconds (max 86400)
+        in: query
+        name: expires_in
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.SignedURLResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Media not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get signed download URL
+      tags:
+      - media
+  /api/v1/models/{model_type}/{model_id}/media:
+    get:
+      consumes:
+      - application/json
+      description: List all media files for a specific model instance
+      parameters:
+      - description: Model type
+        in: path
+        name: model_type
+        required: true
+        type: string
+      - description: Model instance ID
+        in: path
+        name: model_id
+        required: true
+        type: string
+      - description: Filter by collection name
+        in: query
+        name: collection
+        type: string
+      - description: Filter by MIME type
+        in: query
+        name: mime_type
+        type: string
+      - default: 20
+        description: Limit (max 100)
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      - description: Sort field
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.MediaListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List media for model
+      tags:
+      - media
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a media file to a specific model instance
+      parameters:
+      - description: Model type (e.g., news, user)
+        in: path
+        name: model_type
+        required: true
+        type: string
+      - description: Model instance ID
+        in: path
+        name: model_id
+        required: true
+        type: string
+      - description: Media file to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 'Collection name (default: default)'
+        in: formData
+        name: collection
+        type: string
+      - description: Custom properties as JSON
+        in: formData
+        name: custom_properties
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.MediaResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Storage quota exceeded
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Upload media file
+      tags:
+      - media
+  /api/v1/news:
+    get:
+      consumes:
+      - application/json
+      description: List news articles. Regular users see their own articles, admins
+        see all.
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.NewsListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List news articles
+      tags:
+      - news
+    post:
+      consumes:
+      - application/json
+      description: Create a new news article
+      parameters:
+      - description: News article data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateNewsRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.NewsResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create news article
+      tags:
+      - news
+  /api/v1/news/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a news article. Users can only delete their own articles.
+      parameters:
+      - description: News ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid news ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: News not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete news article
+      tags:
+      - news
+    get:
+      consumes:
+      - application/json
+      description: Get a news article by ID. Regular users can only see their own
+        articles.
+      parameters:
+      - description: News ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.NewsResponse'
+              type: object
+        "400":
+          description: Invalid news ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: News not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get news by ID
+      tags:
+      - news
+    put:
+      consumes:
+      - application/json
+      description: Update a news article. Users can only update their own articles.
+      parameters:
+      - description: News ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: News data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateNewsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.NewsResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: News not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update news article
+      tags:
+      - news
+  /api/v1/news/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Update the status of a news article
+      parameters:
+      - description: News ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateNewsStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.NewsResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: News not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update news status
+      tags:
+      - news
+  /api/v1/news/slug/{slug}:
+    get:
+      consumes:
+      - application/json
+      description: Get a published news article by its slug
+      parameters:
+      - description: News slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.NewsResponse'
+              type: object
+        "400":
+          description: Invalid slug
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: News not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get news by slug
+      tags:
+      - news
+  /api/v1/notifications:
+    get:
+      consumes:
+      - application/json
+      description: List notifications for the authenticated user
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      - description: Filter unread only
+        in: query
+        name: unread_only
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.NotificationListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List notifications
+      tags:
+      - notifications
+  /api/v1/notifications/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Archive a specific notification
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid notification ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Notification not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Archive notification
+      tags:
+      - notifications
+  /api/v1/notifications/{id}/read:
+    patch:
+      consumes:
+      - application/json
+      description: Mark a specific notification as read
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid notification ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Notification not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Mark notification as read
+      tags:
+      - notifications
+  /api/v1/notifications/preferences:
+    get:
+      consumes:
+      - application/json
+      description: Get all notification preferences for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.NotificationPreferenceResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get notification preferences
+      tags:
+      - notifications
+    put:
+      consumes:
+      - application/json
+      description: Create or update a notification preference for the authenticated
+        user
+      parameters:
+      - description: Preference data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateNotificationPreferenceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update notification preference
+      tags:
+      - notifications
+  /api/v1/notifications/read-all:
+    post:
+      consumes:
+      - application/json
+      description: Mark all unread notifications as read, optionally filtered by type
+      parameters:
+      - description: Notification type filter
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    format: int64
+                    type: integer
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Mark all notifications as read
+      tags:
+      - notifications
+  /api/v1/notifications/unread-count:
+    get:
+      consumes:
+      - application/json
+      description: Get the count of unread notifications for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    format: int64
+                    type: integer
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Count unread notifications
+      tags:
+      - notifications
+  /api/v1/organizations:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all organizations where the user is a member
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.OrganizationResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List organizations
+      tags:
+      - organizations
+    post:
+      consumes:
+      - application/json
+      description: Create a new organization with name and slug
+      parameters:
+      - description: Organization details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.OrganizationResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Organization slug already exists
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create a new organization
+      tags:
+      - organizations
+  /api/v1/organizations/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete an organization (requires manage permission)
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid organization ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Organization not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete an organization
+      tags:
+      - organizations
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific organization by its ID
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.OrganizationResponse'
+              type: object
+        "400":
+          description: Invalid organization ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Organization not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get organization by ID
+      tags:
+      - organizations
+    put:
+      consumes:
+      - application/json
+      description: Update an organization's name, slug, or settings
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Organization update details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.OrganizationResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Organization not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update an organization
+      tags:
+      - organizations
+  /api/v1/organizations/{id}/members:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all members of an organization with pagination
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid organization ID
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get organization members
+      tags:
+      - organizations
+    post:
+      consumes:
+      - application/json
+      description: Add a user to an organization with a specific role
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Member details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.AddMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.OrganizationMemberResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: User is already a member
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Add member to organization
+      tags:
+      - organizations
+  /api/v1/organizations/{id}/members/{user_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a user from an organization
+      parameters:
+      - description: Organization ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid IDs
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Member not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Remove member from organization
+      tags:
+      - organizations
   /api/v1/permissions:
     get:
       consumes:
@@ -800,17 +3371,17 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/internal_http_handler.PermissionResponse'
+                    $ref: '#/definitions/handler.PermissionResponse'
                   type: array
               type: object
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Get all permissions
       tags:
       - permissions
@@ -825,7 +3396,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreatePermissionRequest'
+          $ref: '#/definitions/request.CreatePermissionRequest'
       produces:
       - application/json
       responses:
@@ -833,19 +3404,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.PermissionResponse'
+                  $ref: '#/definitions/handler.PermissionResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "409":
           description: Permission already exists
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Create a new permission
       tags:
       - permissions
@@ -861,17 +3432,17 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/internal_http_handler.RoleListResponse'
+                    $ref: '#/definitions/handler.RoleListResponse'
                   type: array
               type: object
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Get all roles
       tags:
       - roles
@@ -885,7 +3456,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateRoleRequest'
+          $ref: '#/definitions/request.CreateRoleRequest'
       produces:
       - application/json
       responses:
@@ -893,19 +3464,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.RoleResponse'
+                  $ref: '#/definitions/handler.RoleResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "409":
           description: Role already exists
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Create a new role
       tags:
       - roles
@@ -927,7 +3498,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -937,15 +3508,15 @@ paths:
         "400":
           description: Invalid role ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "403":
           description: Cannot delete system role
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Role not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Delete a role
       tags:
       - roles
@@ -964,7 +3535,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.UpdateRoleRequest'
+          $ref: '#/definitions/request.UpdateRoleRequest'
       produces:
       - application/json
       responses:
@@ -972,19 +3543,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.RoleResponse'
+                  $ref: '#/definitions/handler.RoleResponse'
               type: object
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Role not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Update a role
       tags:
       - roles
@@ -1011,7 +3582,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1021,11 +3592,11 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Detach permission from role
       tags:
       - roles
@@ -1051,7 +3622,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1061,11 +3632,11 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Role or permission not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Attach permission to role
       tags:
       - roles
@@ -1081,24 +3652,64 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/internal_http_handler.UserListResponse'
+                    $ref: '#/definitions/handler.UserListResponse'
                   type: array
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "500":
           description: Internal server error
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: List all users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account (admin)
+      parameters:
+      - description: User creation details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.UserDetailResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Email already exists
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create user
       tags:
       - users
   /api/v1/users/{id}:
@@ -1119,7 +3730,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1129,15 +3740,15 @@ paths:
         "400":
           description: Invalid user ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Delete a user
@@ -1160,26 +3771,71 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_http_handler.UserDetailResponse'
+                  $ref: '#/definitions/handler.UserDetailResponse'
               type: object
         "400":
           description: Invalid user ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Get user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update a user's profile information
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User update details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/handler.UserDetailResponse'
+              type: object
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update user
       tags:
       - users
   /api/v1/users/{id}/effective-permissions:
@@ -1201,25 +3857,25 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/internal_http_handler.EffectivePermissionResponse'
+                    $ref: '#/definitions/handler.EffectivePermissionResponse'
                   type: array
               type: object
         "400":
           description: Invalid user ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Get effective permissions
@@ -1241,7 +3897,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateUserPermissionRequest'
+          $ref: '#/definitions/request.CreateUserPermissionRequest'
       produces:
       - application/json
       responses:
@@ -1249,7 +3905,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1259,15 +3915,15 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User or permission not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Grant permission to user
@@ -1296,7 +3952,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1306,15 +3962,15 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Permission assignment not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Remove permission from user
@@ -1338,25 +3994,25 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/internal_http_handler.UserRoleResponse'
+                    $ref: '#/definitions/handler.UserRoleResponse'
                   type: array
               type: object
         "400":
           description: Invalid user ID
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Get user roles
@@ -1377,7 +4033,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_example_go-api-base_internal_http_request.CreateUserRoleRequest'
+          $ref: '#/definitions/request.CreateUserRoleRequest'
       produces:
       - application/json
       responses:
@@ -1385,7 +4041,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1395,15 +4051,15 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User or role not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Assign role to user
@@ -1432,7 +4088,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
                   additionalProperties:
@@ -1442,20 +4098,74 @@ paths:
         "400":
           description: Invalid request
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: User or role not found
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       security:
       - BearerAuth: []
       summary: Remove role from user
       tags:
       - users
+  /api/v1/webhooks/{provider}/bounce:
+    post:
+      consumes:
+      - application/json
+      description: Process bounce notification from email provider
+      parameters:
+      - description: Provider name (smtp/sendgrid/ses)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Webhook payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Webhook processed
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Handle bounce webhook
+      tags:
+      - email-webhooks
+  /api/v1/webhooks/{provider}/delivery:
+    post:
+      consumes:
+      - application/json
+      description: Process delivery confirmation from email provider
+      parameters:
+      - description: Provider name (smtp/sendgrid/ses)
+        in: path
+        name: provider
+        required: true
+        type: string
+      - description: Webhook payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Webhook processed
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Handle delivery webhook
+      tags:
+      - email-webhooks
   /healthz:
     get:
       consumes:
@@ -1467,7 +4177,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_http_handler.HealthStatusResponse'
+            $ref: '#/definitions/handler.HealthStatusResponse'
       summary: Liveness probe
       tags:
       - health
@@ -1482,11 +4192,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_http_handler.ReadyzSuccessResponse'
+            $ref: '#/definitions/handler.ReadyzSuccessResponse'
         "503":
           description: Service unavailable
           schema:
-            $ref: '#/definitions/github_com_example_go-api-base_internal_http_response.Envelope'
+            $ref: '#/definitions/response.Envelope'
       summary: Readiness probe
       tags:
       - health
