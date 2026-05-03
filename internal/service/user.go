@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/repository"
@@ -14,6 +15,7 @@ type UserService struct {
 	userRepo           repository.UserRepository
 	userRoleRepo       repository.UserRoleRepository
 	userPermissionRepo repository.UserPermissionRepository
+	eventBus           *domain.EventBus
 }
 
 // Performance Notes:
@@ -35,6 +37,42 @@ func NewUserService(
 	}
 }
 
+// SetEventBus sets the event bus for publishing domain events.
+// This is called after construction to avoid changing the constructor signature.
+func (s *UserService) SetEventBus(eventBus *domain.EventBus) {
+	s.eventBus = eventBus
+}
+
+// Create creates a new user after checking for duplicate email and hashing password
+func (s *UserService) Create(ctx context.Context, user *domain.User) error {
+	// Check for duplicate email
+	existing, err := s.userRepo.FindByEmail(ctx, user.Email)
+	if err != nil && !errors.Is(err, apperrors.ErrNotFound) {
+		return err
+	}
+	if existing != nil {
+		return apperrors.NewAppError("CONFLICT", "Email already registered", 409)
+	}
+	if err := s.userRepo.Create(ctx, user); err != nil {
+		return err
+	}
+
+	// Publish user.created event (best-effort, don't fail on error)
+	if s.eventBus != nil {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "user.created",
+			Payload: user.ToResponse(),
+		})
+	}
+
+	return nil
+}
+
+// Update updates an existing user by ID
+func (s *UserService) Update(ctx context.Context, user *domain.User) error {
+	return s.userRepo.Update(ctx, user)
+}
+
 // FindByID retrieves a user by their ID
 func (s *UserService) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	return s.userRepo.FindByID(ctx, id)
@@ -52,7 +90,19 @@ func (s *UserService) FindAll(ctx context.Context) ([]domain.User, error) {
 
 // SoftDelete performs a soft delete on a user
 func (s *UserService) SoftDelete(ctx context.Context, id uuid.UUID) error {
-	return s.userRepo.SoftDelete(ctx, id)
+	if err := s.userRepo.SoftDelete(ctx, id); err != nil {
+		return err
+	}
+
+	// Publish user.deleted event (best-effort, don't fail on error)
+	if s.eventBus != nil {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "user.deleted",
+			Payload: map[string]interface{}{"id": id.String()},
+		})
+	}
+
+	return nil
 }
 
 // AssignRole assigns a role to a user

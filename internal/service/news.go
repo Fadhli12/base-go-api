@@ -17,6 +17,7 @@ import (
 type NewsService struct {
 	repo     repository.NewsRepository
 	enforcer *permission.Enforcer
+	eventBus *domain.EventBus
 }
 
 // NewNewsService creates a new NewsService instance
@@ -25,6 +26,11 @@ func NewNewsService(repo repository.NewsRepository, enforcer *permission.Enforce
 		repo:     repo,
 		enforcer: enforcer,
 	}
+}
+
+// SetEventBus sets the event bus for publishing domain events.
+func (s *NewsService) SetEventBus(eventBus *domain.EventBus) {
+	s.eventBus = eventBus
 }
 
 // Create creates a new news article
@@ -223,7 +229,19 @@ func (s *NewsService) Delete(ctx context.Context, userID, id uuid.UUID, isAdmin 
 		return errors.ErrNotFound
 	}
 
-	return s.repo.SoftDelete(ctx, id)
+	if err := s.repo.SoftDelete(ctx, id); err != nil {
+		return err
+	}
+
+	// Publish news.deleted event (best-effort)
+	if s.eventBus != nil {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "news.deleted",
+			Payload: map[string]interface{}{"id": id.String()},
+		})
+	}
+
+	return nil
 }
 
 // UpdateStatus updates the status of a news article
@@ -255,7 +273,19 @@ func (s *NewsService) UpdateStatus(ctx context.Context, userID, id uuid.UUID, st
 		news.SetPublishedAt()
 	}
 
-	return s.repo.Update(ctx, news)
+	if err := s.repo.Update(ctx, news); err != nil {
+		return err
+	}
+
+	// Publish news.published event (best-effort)
+	if s.eventBus != nil && status == domain.NewsStatusPublished {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "news.published",
+			Payload: news.ToResponse(),
+		})
+	}
+
+	return nil
 }
 
 // CheckPermission checks if a user has permission for an action on news

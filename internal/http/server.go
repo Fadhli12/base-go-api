@@ -11,6 +11,7 @@ import (
 
 	"github.com/example/go-api-base/internal/cache"
 	"github.com/example/go-api-base/internal/config"
+	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/handler"
 	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/example/go-api-base/internal/http/response"
@@ -29,17 +30,23 @@ import (
 
 // Server wraps Echo server with dependencies
 type Server struct {
-	echo        *echo.Echo
-	config      *config.Config
-	db          *gorm.DB
-	redis       *redis.Client
-	cache       cache.Driver
-	logger      logger.Logger
-	enforcer    *permission.Enforcer
-	permCache   *permission.Cache
-	invalidator *permission.Invalidator
-	auditSvc    *service.AuditService
-	emailWorker *service.EmailWorker
+	echo           *echo.Echo
+	config         *config.Config
+	db             *gorm.DB
+	redis          *redis.Client
+	cache          cache.Driver
+	logger         logger.Logger
+	enforcer       *permission.Enforcer
+	permCache      *permission.Cache
+	invalidator    *permission.Invalidator
+	auditSvc       *service.AuditService
+	emailWorker    *service.EmailWorker
+	webhookWorker  *service.WebhookWorker
+	webhookService *service.WebhookService
+	userService    *service.UserService
+	invoiceService *invoice.Service
+	newsService    *service.NewsService
+	eventBus       *domain.EventBus
 }
 
 // ServerConfig holds Echo server configuration.
@@ -258,6 +265,66 @@ func (s *Server) EmailWorker() *service.EmailWorker {
 	return s.emailWorker
 }
 
+// SetWebhookWorker sets the webhook worker
+func (s *Server) SetWebhookWorker(webhookWorker *service.WebhookWorker) {
+	s.webhookWorker = webhookWorker
+}
+
+// WebhookWorker returns the webhook worker
+func (s *Server) WebhookWorker() *service.WebhookWorker {
+	return s.webhookWorker
+}
+
+// SetWebhookService sets the webhook service
+func (s *Server) SetWebhookService(webhookService *service.WebhookService) {
+	s.webhookService = webhookService
+}
+
+// WebhookService returns the webhook service
+func (s *Server) WebhookService() *service.WebhookService {
+	return s.webhookService
+}
+
+// EventBus returns the event bus
+func (s *Server) EventBus() *domain.EventBus {
+	return s.eventBus
+}
+
+// SetEventBus sets the event bus
+func (s *Server) SetEventBus(eventBus *domain.EventBus) {
+	s.eventBus = eventBus
+}
+
+// UserService returns the user service
+func (s *Server) UserService() *service.UserService {
+	return s.userService
+}
+
+// SetUserService sets the user service
+func (s *Server) SetUserService(userService *service.UserService) {
+	s.userService = userService
+}
+
+// InvoiceService returns the invoice service
+func (s *Server) InvoiceService() *invoice.Service {
+	return s.invoiceService
+}
+
+// SetInvoiceService sets the invoice service
+func (s *Server) SetInvoiceService(invoiceService *invoice.Service) {
+	s.invoiceService = invoiceService
+}
+
+// NewsService returns the news service
+func (s *Server) NewsService() *service.NewsService {
+	return s.newsService
+}
+
+// SetNewsService sets the news service
+func (s *Server) SetNewsService(newsService *service.NewsService) {
+	s.newsService = newsService
+}
+
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	address := fmt.Sprintf(":%d", s.config.Server.Port)
@@ -286,6 +353,8 @@ func (s *Server) RegisterRoutes() {
 	mediaRepo := repository.NewMediaRepository(s.db)
 	apiKeyRepo := repository.NewAPIKeyRepository(s.db)
 	organizationRepo := repository.NewOrganizationRepository(s.db)
+	webhookRepo := repository.NewWebhookRepository(s.db)
+	webhookDeliveryRepo := repository.NewWebhookDeliveryRepository(s.db)
 	emailTemplateRepo := repository.NewEmailTemplateRepository(s.db)
 	emailQueueRepo := repository.NewEmailQueueRepository(s.db)
 	emailBounceRepo := repository.NewEmailBounceRepository(s.db)
@@ -331,11 +400,22 @@ func (s *Server) RegisterRoutes() {
 		userRoleRepo,
 	)
 	userService := service.NewUserService(userRepo, userRoleRepo, userPermissionRepo)
+	s.userService = userService
 	permissionService := service.NewPermissionService(permissionRepo)
 	roleService := service.NewRoleService(roleRepo, rolePermissionRepo, permissionRepo)
 	
 	// Initialize organization service
 	orgService := service.NewOrganizationService(organizationRepo, userRepo, s.enforcer, auditService, emailService, slog.Default())
+
+	// Initialize webhook service and handler
+	webhookService := service.NewWebhookService(webhookRepo, webhookDeliveryRepo, &s.config.Webhook, s.logger)
+	s.SetWebhookService(webhookService)
+	webhookHandler := handler.NewWebhookHandler(webhookService, s.enforcer, s.logger)
+
+	// Initialize settings service
+	userSettingsRepo := repository.NewUserSettingsRepository(s.db)
+	systemSettingsRepo := repository.NewSystemSettingsRepository(s.db)
+	settingsService := service.NewSettingsService(userSettingsRepo, systemSettingsRepo, slog.Default())
 
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
@@ -365,10 +445,12 @@ func (s *Server) RegisterRoutes() {
 	permissionHandler := handler.NewPermissionHandler(permissionService)
 	roleHandler := handler.NewRoleHandler(roleService)
 	orgHandler := handler.NewOrganizationHandler(orgService)
+	settingsHandler := handler.NewSettingsHandler(settingsService)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)
 	invoiceService := invoice.NewService(invoiceRepo, s.enforcer)
+	s.invoiceService = invoiceService
 	invoiceHandler := invoice.NewHandler(invoiceService, s.enforcer)
 
 	// Initialize media handler if media service is available
@@ -464,6 +546,12 @@ func (s *Server) RegisterRoutes() {
 
 	// Organization routes
 	s.RegisterOrganizationRoutes(v1, orgHandler)
+
+	// Webhook routes
+	s.RegisterWebhookRoutes(v1, webhookHandler)
+
+	// Settings routes
+	s.RegisterSettingsRoutes(v1, settingsHandler)
 
 	// Email routes
 	s.RegisterEmailRoutes(v1)
@@ -767,6 +855,64 @@ func (s *Server) RegisterOrganizationRoutes(api *echo.Group, orgHandler *handler
 	orgs.POST("/:id/members", orgHandler.AddMember)        // Add member (auth + invite permission)
 	orgs.GET("/:id/members", orgHandler.GetMembers)         // Get members (auth + membership check)
 	orgs.DELETE("/:id/members/:user_id", orgHandler.RemoveMember) // Remove member (auth + remove permission)
+}
+
+// RegisterWebhookRoutes registers webhook CRUD routes.
+// All routes require JWT authentication. Permission checks are handled in the handler.
+func (s *Server) RegisterWebhookRoutes(api *echo.Group, webhookHandler *handler.WebhookHandler) {
+	webhooks := api.Group("/webhooks")
+
+	// All webhook routes require JWT authentication
+	webhooks.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// Apply organization context middleware (extracts X-Organization-ID header)
+	webhooks.Use(middleware.ExtractOrganizationID())
+
+	// Apply audit middleware to mutating routes
+	if s.auditSvc != nil {
+		webhooks.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	// CRUD routes - permission checks handled in handler (webhook scope)
+	webhooks.POST("", webhookHandler.Create)        // Create webhook (auth + webhooks:manage)
+	webhooks.GET("", webhookHandler.List)            // List webhooks (auth + webhooks:view)
+	webhooks.GET("/:id", webhookHandler.GetByID)      // Get webhook (auth + webhooks:view + ownership)
+	webhooks.PUT("/:id", webhookHandler.Update)      // Update webhook (auth + webhooks:manage + ownership)
+	webhooks.DELETE("/:id", webhookHandler.SoftDelete) // Delete webhook (auth + webhooks:manage + ownership)
+
+	// Delivery routes - permission checks handled in handler
+	webhooks.GET("/:id/deliveries", webhookHandler.ListDeliveries)                     // List deliveries (auth + webhooks:view + ownership)
+	webhooks.GET("/:id/deliveries/:delivery_id", webhookHandler.GetDelivery)            // Get delivery (auth + webhooks:view + ownership)
+	webhooks.POST("/:id/deliveries/:delivery_id/replay", webhookHandler.ReplayDelivery) // Replay delivery (auth + webhooks:manage + ownership)
+}
+
+// RegisterSettingsRoutes registers settings-related routes
+// All routes require JWT authentication and organization context via X-Organization-ID header
+func (s *Server) RegisterSettingsRoutes(api *echo.Group, settingsHandler *handler.SettingsHandler) {
+	settings := api.Group("/settings")
+
+	// All settings routes require JWT authentication
+	settings.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	// User settings routes
+	settings.GET("/user", settingsHandler.GetUserSettings)       // Get user settings
+	settings.PUT("/user", settingsHandler.UpdateUserSettings)    // Update user settings
+
+	// Effective settings (merged system + user)
+	settings.GET("/effective", settingsHandler.GetEffectiveSettings)
+
+	// System settings routes
+	settings.GET("/system", settingsHandler.GetSystemSettings)       // Get system settings
+	settings.PUT("/system", settingsHandler.UpdateSystemSettings)    // Update system settings (manage_system permission enforced by handler/middleware)
 }
 
 // HealthCheck performs health checks on dependencies
