@@ -103,6 +103,7 @@ type Config struct {
 	Swagger       SwaggerConfig      `mapstructure:"swagger"`
 	Cache         CacheConfig         `mapstructure:"cache"`
 	Email         EmailConfig         `mapstructure:"email"`
+	Webhook       WebhookConfig       `mapstructure:"webhook"`
 }
 
 var (
@@ -180,6 +181,9 @@ func loadConfig() (*Config, error) {
 	}
 	if err := parseEmailConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse email config: %w", err)
+	}
+	if err := parseWebhookConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse webhook config: %w", err)
 	}
 	if err := parsePasswordResetConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse password reset config: %w", err)
@@ -289,6 +293,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("email.worker_concurrency", 10)
 	v.SetDefault("email.retry_max", 5)
 	v.SetDefault("email.rate_limit_per_hour", 100)
+
+	// Webhook defaults
+	v.SetDefault("webhook.worker_concurrency", 5)
+	v.SetDefault("webhook.retry_max", 3)
+	v.SetDefault("webhook.rate_limit", 100)
+	v.SetDefault("webhook.allow_http", false)
+	v.SetDefault("webhook.delivery_timeout", "10s")
+	v.SetDefault("webhook.delivery_retention_days", 90)
+	v.SetDefault("webhook.max_payload_size", 1048576)
 }
 
 // loadYAMLConfig attempts to load configuration from YAML files.
@@ -681,6 +694,25 @@ func parseEmailConfig(v *viper.Viper, cfg *Config) error {
 	cfg.Email.WorkerConcurrency = getEnvIntOrDefault("EMAIL_WORKER_CONCURRENCY", v.GetInt("email.worker_concurrency"))
 	cfg.Email.RetryMax = getEnvIntOrDefault("EMAIL_RETRY_MAX", v.GetInt("email.retry_max"))
 	cfg.Email.RateLimitPerHour = getEnvIntOrDefault("EMAIL_RATE_LIMIT_PER_HOUR", v.GetInt("email.rate_limit_per_hour"))
+	return nil
+}
+
+// parseWebhookConfig parses webhook configuration from environment.
+func parseWebhookConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Webhook.WorkerConcurrency = getEnvIntOrDefault("WEBHOOK_WORKER_CONCURRENCY", v.GetInt("webhook.worker_concurrency"))
+	cfg.Webhook.RetryMax = getEnvIntOrDefault("WEBHOOK_RETRY_MAX", v.GetInt("webhook.retry_max"))
+	cfg.Webhook.RateLimit = getEnvIntOrDefault("WEBHOOK_RATE_LIMIT", v.GetInt("webhook.rate_limit"))
+	cfg.Webhook.AllowHTTP = getEnvBoolOrDefault("WEBHOOK_ALLOW_HTTP", v.GetBool("webhook.allow_http"))
+	cfg.Webhook.DeliveryRetentionDays = getEnvIntOrDefault("WEBHOOK_DELIVERY_RETENTION_DAYS", v.GetInt("webhook.delivery_retention_days"))
+	cfg.Webhook.MaxPayloadSize = getEnvIntOrDefault("WEBHOOK_MAX_PAYLOAD_SIZE", v.GetInt("webhook.max_payload_size"))
+
+	deliveryTimeout := getEnvOrDefault("WEBHOOK_DELIVERY_TIMEOUT", v.GetString("webhook.delivery_timeout"))
+	duration, err := time.ParseDuration(deliveryTimeout)
+	if err != nil {
+		return fmt.Errorf("invalid WEBHOOK_DELIVERY_TIMEOUT: %w", err)
+	}
+	cfg.Webhook.DeliveryTimeout = duration
+
 	return nil
 }
 
