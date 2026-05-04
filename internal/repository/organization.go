@@ -52,7 +52,7 @@ func (r *organizationRepository) FindByID(ctx context.Context, id uuid.UUID) (*d
 	var org domain.Organization
 	err := r.db.WithContext(ctx).
 		Preload("Owner", "deleted_at IS NULL").
-		Preload("Members", "deleted_at IS NULL").
+		Preload("Members").
 		First(&org, "id = ?", id).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, errors.ErrNotFound
@@ -68,7 +68,7 @@ func (r *organizationRepository) FindBySlug(ctx context.Context, slug string) (*
 	var org domain.Organization
 	err := r.db.WithContext(ctx).
 		Preload("Owner", "deleted_at IS NULL").
-		Preload("Members", "deleted_at IS NULL").
+		Preload("Members").
 		Where("slug = ?", slug).
 		First(&org).Error
 	if err == gorm.ErrRecordNotFound {

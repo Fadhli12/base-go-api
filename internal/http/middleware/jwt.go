@@ -57,7 +57,7 @@ func JWT(config JWTConfig) echo.MiddlewareFunc {
 				return echo.NewHTTPError(401, "Invalid authorization header format")
 			}
 
-			tokenString := parts[1]
+			tokenString := strings.TrimSpace(parts[1])
 			if tokenString == "" {
 				return echo.NewHTTPError(401, "Missing bearer token")
 			}
@@ -149,3 +149,21 @@ func GetUserEmail(c echo.Context) (string, error) {
 
 	return claims.Email, nil
 }
+
+// GetTokenID extracts the JWT token ID (jti) from the context claims.
+// Returns the token ID and true if found, or uuid.Nil and false if not present.
+func GetTokenID(c echo.Context) (uuid.UUID, bool) {
+	claims, err := GetUserClaims(c)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	if claims.ID == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(claims.ID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+

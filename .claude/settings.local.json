@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+      "Bash(PGPASSWORD=c07cfe98586841969eb21138f2e06347 psql *)",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(swag init *)",
+      "Bash(psql -h localhost -U postgres -d go_api_base -c \"\\\\d user_roles\")",
+      "mcp__plugin_oh-my-claudecode_t__notepad_read",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "mcp__plugin_oh-my-claudecode_t__lsp_workspace_symbols",
+      "mcp__plugin_oh-my-claudecode_t__lsp_document_symbols",
+      "Bash(grep -E \"\\\\.\\(go|sql|md\\)$\")"
+    ]
+  }
+}

@@ -3,6 +3,7 @@ package unit
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/request"
@@ -76,6 +77,14 @@ func (m *MockRefreshTokenRepositoryAuth) FindByHash(ctx context.Context, hash st
 	return args.Get(0).(*domain.RefreshToken), args.Error(1)
 }
 
+func (m *MockRefreshTokenRepositoryAuth) FindByID(ctx context.Context, id uuid.UUID) (*domain.RefreshToken, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.RefreshToken), args.Error(1)
+}
+
 func (m *MockRefreshTokenRepositoryAuth) MarkRevoked(ctx context.Context, hash string) error {
 	args := m.Called(ctx, hash)
 	return args.Error(0)
@@ -83,6 +92,11 @@ func (m *MockRefreshTokenRepositoryAuth) MarkRevoked(ctx context.Context, hash s
 
 func (m *MockRefreshTokenRepositoryAuth) RevokeAllByUser(ctx context.Context, userID uuid.UUID) error {
 	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
+func (m *MockRefreshTokenRepositoryAuth) DeleteExpired(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 
@@ -94,14 +108,164 @@ func (m *MockRefreshTokenRepositoryAuth) FindByUserID(ctx context.Context, userI
 	return args.Get(0).([]*domain.RefreshToken), args.Error(1)
 }
 
-func (m *MockRefreshTokenRepositoryAuth) DeleteExpired(ctx context.Context) error {
+func (m *MockRefreshTokenRepositoryAuth) RevokeFamily(ctx context.Context, familyID uuid.UUID) error {
+	args := m.Called(ctx, familyID)
+	return args.Error(0)
+}
+
+func (m *MockRefreshTokenRepositoryAuth) FindFamilyTokens(ctx context.Context, familyID uuid.UUID) ([]*domain.RefreshToken, error) {
+	args := m.Called(ctx, familyID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.RefreshToken), args.Error(1)
+}
+
+// MockPasswordResetTokenRepository for testing AuthService
+type MockPasswordResetTokenRepositoryAuth struct {
+	mock.Mock
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) Create(ctx context.Context, token *domain.PasswordResetToken) error {
+	args := m.Called(ctx, token)
+	return args.Error(0)
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) FindByHash(ctx context.Context, hash string) (*domain.PasswordResetToken, error) {
+	args := m.Called(ctx, hash)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.PasswordResetToken), args.Error(1)
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) FindValidByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.PasswordResetToken, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*domain.PasswordResetToken), args.Error(1)
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) MarkUsed(ctx context.Context, hash string) error {
+	args := m.Called(ctx, hash)
+	return args.Error(0)
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) RevokeAllByUser(ctx context.Context, userID uuid.UUID) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
+func (m *MockPasswordResetTokenRepositoryAuth) DeleteExpired(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
 
-func (m *MockRefreshTokenRepositoryAuth) Cleanup(ctx context.Context) error {
-	args := m.Called(ctx)
+// MockRoleRepository for testing AuthService
+type MockRoleRepositoryAuth struct {
+	mock.Mock
+}
+
+func (m *MockRoleRepositoryAuth) Create(ctx context.Context, role *domain.Role) error {
+	args := m.Called(ctx, role)
 	return args.Error(0)
+}
+
+func (m *MockRoleRepositoryAuth) FindByID(ctx context.Context, id uuid.UUID) (*domain.Role, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Role), args.Error(1)
+}
+
+func (m *MockRoleRepositoryAuth) FindByName(ctx context.Context, name string) (*domain.Role, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Role), args.Error(1)
+}
+
+func (m *MockRoleRepositoryAuth) FindAll(ctx context.Context) ([]domain.Role, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]domain.Role), args.Error(1)
+}
+
+func (m *MockRoleRepositoryAuth) Update(ctx context.Context, role *domain.Role) error {
+	args := m.Called(ctx, role)
+	return args.Error(0)
+}
+
+func (m *MockRoleRepositoryAuth) SoftDelete(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+// MockUserRoleRepository for testing AuthService
+type MockUserRoleRepositoryAuth struct {
+	mock.Mock
+}
+
+func (m *MockUserRoleRepositoryAuth) Assign(ctx context.Context, userID, roleID, assignedBy uuid.UUID) error {
+	args := m.Called(ctx, userID, roleID, assignedBy)
+	return args.Error(0)
+}
+
+func (m *MockUserRoleRepositoryAuth) Remove(ctx context.Context, userID, roleID uuid.UUID) error {
+	args := m.Called(ctx, userID, roleID)
+	return args.Error(0)
+}
+
+func (m *MockUserRoleRepositoryAuth) FindByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Role, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]domain.Role), args.Error(1)
+}
+
+func (m *MockUserRoleRepositoryAuth) FindByUserIDWithPermissions(ctx context.Context, userID uuid.UUID) ([]domain.Role, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]domain.Role), args.Error(1)
+}
+
+// Helper function to create AuthService with mocks
+func newTestAuthService(
+	userRepo *MockUserRepositoryAuth,
+	refreshTokenRepo *MockRefreshTokenRepositoryAuth,
+	resetTokenRepo *MockPasswordResetTokenRepositoryAuth,
+	roleRepo *MockRoleRepositoryAuth,
+	userRoleRepo *MockUserRoleRepositoryAuth,
+) *service.AuthService {
+	tokenService := service.NewTokenService(
+		"test-secret-key-32-characters-long",
+		"go-api-base",
+		"go-api-base",
+		15*time.Minute,
+		24*time.Hour,
+	)
+	passwordHasher := service.NewPasswordHasher()
+
+	return service.NewAuthService(
+		userRepo,
+		refreshTokenRepo,
+		resetTokenRepo,
+		tokenService,
+		passwordHasher,
+		nil, // emailService
+		nil, // auditService
+		5*time.Minute,
+		roleRepo,
+		userRoleRepo,
+	)
 }
 
 // TestAuthService_Register_Success tests successful user registration
@@ -109,6 +273,9 @@ func TestAuthService_Register_Success(t *testing.T) {
 	ctx := context.Background()
 	userRepo := new(MockUserRepositoryAuth)
 	refreshTokenRepo := new(MockRefreshTokenRepositoryAuth)
+	resetTokenRepo := new(MockPasswordResetTokenRepositoryAuth)
+	roleRepo := new(MockRoleRepositoryAuth)
+	userRoleRepo := new(MockUserRoleRepositoryAuth)
 
 	// Mock FindByEmail to return not found (user doesn't exist)
 	userRepo.On("FindByEmail", ctx, "test@example.com").Return(nil, apperrors.ErrNotFound)
@@ -116,9 +283,10 @@ func TestAuthService_Register_Success(t *testing.T) {
 	// Mock Create to succeed
 	userRepo.On("Create", ctx, mock.AnythingOfType("*domain.User")).Return(nil)
 
-	tokenService := service.NewTokenService("test-secret-key-32-characters-long", 3600, 86400)
-	passwordHasher := service.NewPasswordHasher()
-	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, nil)
+	// Mock FindByName to return not found (viewer role doesn't exist)
+	roleRepo.On("FindByName", ctx, "viewer").Return(nil, apperrors.ErrNotFound)
+
+	authSvc := newTestAuthService(userRepo, refreshTokenRepo, resetTokenRepo, roleRepo, userRoleRepo)
 
 	req := &request.RegisterRequest{
 		Email:    "test@example.com",
@@ -139,6 +307,9 @@ func TestAuthService_Register_DuplicateEmail(t *testing.T) {
 	ctx := context.Background()
 	userRepo := new(MockUserRepositoryAuth)
 	refreshTokenRepo := new(MockRefreshTokenRepositoryAuth)
+	resetTokenRepo := new(MockPasswordResetTokenRepositoryAuth)
+	roleRepo := new(MockRoleRepositoryAuth)
+	userRoleRepo := new(MockUserRoleRepositoryAuth)
 
 	existingUser := &domain.User{
 		ID:    uuid.New(),
@@ -148,9 +319,7 @@ func TestAuthService_Register_DuplicateEmail(t *testing.T) {
 	// Mock FindByEmail to return existing user
 	userRepo.On("FindByEmail", ctx, "existing@example.com").Return(existingUser, nil)
 
-	tokenService := service.NewTokenService("test-secret-key-32-characters-long", 3600, 86400)
-	passwordHasher := service.NewPasswordHasher()
-	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, nil)
+	authSvc := newTestAuthService(userRepo, refreshTokenRepo, resetTokenRepo, roleRepo, userRoleRepo)
 
 	req := &request.RegisterRequest{
 		Email:    "existing@example.com",
@@ -170,6 +339,9 @@ func TestAuthService_Login_Success(t *testing.T) {
 	ctx := context.Background()
 	userRepo := new(MockUserRepositoryAuth)
 	refreshTokenRepo := new(MockRefreshTokenRepositoryAuth)
+	resetTokenRepo := new(MockPasswordResetTokenRepositoryAuth)
+	roleRepo := new(MockRoleRepositoryAuth)
+	userRoleRepo := new(MockUserRoleRepositoryAuth)
 
 	passwordHasher := service.NewPasswordHasher()
 	passwordHash, _ := passwordHasher.Hash("password123")
@@ -186,8 +358,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	// Mock Create for refresh token
 	refreshTokenRepo.On("Create", ctx, mock.AnythingOfType("*domain.RefreshToken")).Return(nil)
 
-	tokenService := service.NewTokenService("test-secret-key-32-characters-long", 3600, 86400)
-	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, nil)
+	authSvc := newTestAuthService(userRepo, refreshTokenRepo, resetTokenRepo, roleRepo, userRoleRepo)
 
 	req := &request.LoginRequest{
 		Email:    "test@example.com",
@@ -209,13 +380,14 @@ func TestAuthService_Login_UserNotFound(t *testing.T) {
 	ctx := context.Background()
 	userRepo := new(MockUserRepositoryAuth)
 	refreshTokenRepo := new(MockRefreshTokenRepositoryAuth)
+	resetTokenRepo := new(MockPasswordResetTokenRepositoryAuth)
+	roleRepo := new(MockRoleRepositoryAuth)
+	userRoleRepo := new(MockUserRoleRepositoryAuth)
 
 	// Mock FindByEmail to return not found
 	userRepo.On("FindByEmail", ctx, "nonexistent@example.com").Return(nil, apperrors.ErrNotFound)
 
-	tokenService := service.NewTokenService("test-secret-key-32-characters-long", 3600, 86400)
-	passwordHasher := service.NewPasswordHasher()
-	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, nil)
+	authSvc := newTestAuthService(userRepo, refreshTokenRepo, resetTokenRepo, roleRepo, userRoleRepo)
 
 	req := &request.LoginRequest{
 		Email:    "nonexistent@example.com",
@@ -236,6 +408,9 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	ctx := context.Background()
 	userRepo := new(MockUserRepositoryAuth)
 	refreshTokenRepo := new(MockRefreshTokenRepositoryAuth)
+	resetTokenRepo := new(MockPasswordResetTokenRepositoryAuth)
+	roleRepo := new(MockRoleRepositoryAuth)
+	userRoleRepo := new(MockUserRoleRepositoryAuth)
 
 	passwordHasher := service.NewPasswordHasher()
 	passwordHash, _ := passwordHasher.Hash("correctpassword")
@@ -249,8 +424,7 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	// Mock FindByEmail to return user
 	userRepo.On("FindByEmail", ctx, "test@example.com").Return(existingUser, nil)
 
-	tokenService := service.NewTokenService("test-secret-key-32-characters-long", 3600, 86400)
-	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, tokenService, passwordHasher, nil)
+	authSvc := newTestAuthService(userRepo, refreshTokenRepo, resetTokenRepo, roleRepo, userRoleRepo)
 
 	req := &request.LoginRequest{
 		Email:    "test@example.com",

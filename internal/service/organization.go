@@ -164,7 +164,7 @@ func (s *OrganizationService) GetOrganization(
 		return nil, apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return nil, apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return nil, apperrors.ErrForbidden
 	}
 
 	// 2. Retrieve organization
@@ -207,7 +207,7 @@ func (s *OrganizationService) UpdateOrganization(
 		return nil, apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return nil, apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return nil, apperrors.ErrForbidden
 	}
 
 	// 2. Retrieve organization
@@ -275,7 +275,7 @@ func (s *OrganizationService) DeleteOrganization(
 		return apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return apperrors.ErrForbidden
 	}
 
 	// 2. Retrieve organization (for audit)
@@ -320,7 +320,7 @@ func (s *OrganizationService) AddMember(
 		return nil, apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return nil, apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return nil, apperrors.ErrForbidden
 	}
 
 	// 2. Validate role
@@ -368,6 +368,31 @@ func (s *OrganizationService) AddMember(
 			slog.String("org_id", orgID.String()),
 		)
 		// Continue - role can be added later
+	}
+
+	// 6b. Add Casbin policies for member role
+	var memberPolicies [][]string
+	switch role {
+	case domain.RoleOwner:
+		memberPolicies = [][]string{
+			{role, orgID.String(), "organization", "view"},
+			{role, orgID.String(), "organization", "manage"},
+			{role, orgID.String(), "organization", "invite"},
+			{role, orgID.String(), "organization", "remove"},
+		}
+	case domain.RoleAdmin:
+		memberPolicies = [][]string{
+			{role, orgID.String(), "organization", "view"},
+			{role, orgID.String(), "organization", "manage"},
+			{role, orgID.String(), "organization", "invite"},
+		}
+	case domain.RoleMember:
+		memberPolicies = [][]string{
+			{role, orgID.String(), "organization", "view"},
+		}
+	}
+	for _, policy := range memberPolicies {
+		s.enforcer.AddPolicy(policy[0], policy[1], policy[2], policy[3])
 	}
 
 	// 7. Audit log
@@ -435,7 +460,7 @@ func (s *OrganizationService) RemoveMember(
 		return apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return apperrors.ErrForbidden
 	}
 
 	// 2. Find member to verify role
@@ -500,7 +525,7 @@ func (s *OrganizationService) GetMembers(
 		return nil, 0, apperrors.WrapInternal(err)
 	}
 	if !allowed {
-		return nil, 0, apperrors.NewAppError("FORBIDDEN", "access denied", 403)
+		return nil, 0, apperrors.ErrForbidden
 	}
 
 	// 2. Retrieve members

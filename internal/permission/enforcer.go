@@ -292,13 +292,16 @@ func (e *Enforcer) EnforceWithCache(ctx context.Context, sub, dom, obj, act stri
 
 	// Check cache first
 	cachedAllowed, err := e.cache.Get(ctx, key)
-	if err != nil {
+	if err == nil {
+		// Cache hit - return cached result
+		return cachedAllowed, nil
+	}
+
+	// Cache miss or error - fall back to direct enforcement
+	if err != ErrCacheMiss {
 		// Log the error but don't fail - fall back to direct enforcement
 		slog.Warn("Failed to get cached permission, falling back to direct enforcement",
 			"key", key, "error", err.Error())
-	} else {
-		// Cache hit - return cached result
-		return cachedAllowed, nil
 	}
 
 	// Cache miss - call Enforce

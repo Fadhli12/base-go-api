@@ -2,6 +2,12 @@
 
 A production-ready Go REST API foundation with RBAC, JWT authentication, and comprehensive permission management.
 
+## Current Feature
+
+**Email Service** - Comprehensive email infrastructure for transactional emails, notifications, and system alerts. Multi-provider support (SMTP, SendGrid, SES), async Redis-based queue with retry logic, and webhook handling for delivery tracking.
+
+See [specs/004-email-service/plan.md](specs/004-email-service/plan.md) for implementation details and [specs/004-email-service/spec.md](specs/004-email-service/spec.md) for feature specification.
+
 ## Features
 
 - **JWT Authentication** - Secure token-based authentication with access and refresh tokens
@@ -9,6 +15,7 @@ A production-ready Go REST API foundation with RBAC, JWT authentication, and com
 - **Permission Management** - Fine-grained permission grants with resource/action model
 - **Audit Logging** - Comprehensive audit trail for compliance and security
 - **Structured Logging** - Context-aware logging with slog, multiple output writers, and request tracing
+- **Email Service** - Transactional emails with multi-provider support (SMTP, SendGrid, SES) and async queue processing
 - **Rate Limiting** - Built-in protection against abuse
 - **Health Checks** - `/healthz` and `/readyz` endpoints for orchestration
 - **Graceful Shutdown** - 30-second timeout for clean connections drain

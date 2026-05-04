@@ -1,55 +1,69 @@
 # Integration Tests
 
-This package provides integration test infrastructure using [testcontainers-go](https://golang.testcontainers.org/) for isolated, ephemeral PostgreSQL and Redis containers.
+Integration tests that run against local PostgreSQL and Redis instances. No Docker required.
 
 ## Prerequisites
 
-- **Docker**: Must be running locally (testcontainers creates ephemeral containers)
-- **Go 1.22+**: Required for testcontainers-go
+- **PostgreSQL**: Running locally (default: `localhost:5432`)
+- **Redis**: Running locally (default: `localhost:6379`)
+- **Go 1.22+**: Required for test execution
 - **Test dependencies**: Already added to `go.mod`
 
 ## Running Tests
 
-Integration tests are tagged with `//go:build integration` to prevent them from running during normal test execution. To run integration tests:
-
 ```bash
 # Run all integration tests
-go test ./tests/integration/... -tags=integration -v
+go test -tags=integration ./tests/integration/... -v -timeout 10m
 
 # Run specific test
-go test ./tests/integration/... -tags=integration -v -run TestInfrastructure_Initialization
+go test -tags=integration ./tests/integration/... -v -timeout 5m -run TestAuthHandler_Register
 
-# Run with timeout (containers take time to start)
-go test ./tests/integration/... -tags=integration -v -timeout 5m
+# Run with serial execution (recommended for stability)
+go test -tags=integration -p 1 -count=1 -timeout 10m ./tests/integration/...
 ```
+
+## Configuration
+
+The test suite automatically loads database and Redis configuration from:
+
+1. **Environment variables** (highest priority):
+   - `TEST_DATABASE_URL` — Full connection string (for CI/test isolation)
+   - `DATABASE_URL` — Full connection string
+   - `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME`
+   - `REDIS_URL` or `REDIS_HOST`, `REDIS_PORT`
+
+2. **`.env` file** (auto-loaded from project root):
+   - The test suite walks up from the working directory to find and load `.env`
+   - Environment variables take precedence over `.env` values
+   - This means your local `.env` credentials are automatically used
+
+3. **Defaults** (if nothing is set):
+   - PostgreSQL: `host=localhost port=5432 user=postgres password=postgres dbname=go_api_base sslmode=disable`
+   - Redis: `localhost:6379`
 
 ## Architecture
 
-### TestSuite
+### Shared Test Suite
 
-The `TestSuite` struct manages the complete test lifecycle:
+All tests share a single `TestSuite` instance for performance:
 
-```go
-type TestSuite struct {
-    DB             *gorm.DB              // GORM database connection
-    RedisClient    *redis.Client         // Redis client
-    PGContainer    *postgres.PostgresContainer
-    RedisContainer testcontainers.Container
-    Cleanup        func()
-}
-```
-
-### Initialization
-
-The test suite is initialized lazily on first use via `SetupIntegrationTest()`:
+- **First test**: Initializes DB connection, Redis connection, drops all tables, runs migrations
+- **Each test**: Truncates all tables and flushes Redis for isolation
+- **After all tests**: Closes connections in `TestMain`
 
 ```go
+// Shared suite pattern — used automatically by NewTestSuite()
 func TestMyFeature(t *testing.T) {
+    suite := NewTestSuite(t)
+    // suite.SetupTest(t) is called automatically
+    // Use suite.DB and suite.RedisClient
+}
+
+// Alternative: SetupIntegrationTest() (same behavior)
+func TestMyFeature2(t *testing.T) {
     suite := SetupIntegrationTest(t)
     defer suite.TeardownTest(t)
-    
-    // Use suite.DB for database operations
-    // Use suite.RedisClient for Redis operations
+    // Use suite.DB and suite.RedisClient
 }
 ```
 
@@ -59,154 +73,48 @@ Each test starts with a clean state:
 
 1. **Database**: All tables are truncated before each test
 2. **Redis**: Database is flushed before each test
-3. **Containers**: Single container instance shared across tests (created once)
+3. **Schema**: On first run, all tables are dropped and recreated from migrations
 
 ### Migration Handling
 
-Migrations are executed once during initial setup:
+Migrations are embedded directly in `testsuite.go`:
 
-- `000001_init.up.sql`: Base schema (users, roles, permissions, pivots, refresh_tokens)
-- `000002_audit_logs.up.sql`: Audit logging table
+- **First run**: Drops all existing tables, then creates from scratch
+- **Subsequent runs**: Skipped (idempotent guard)
+- This ensures the schema always matches test expectations, even if the dev database has different column types
 
 ## Package Structure
 
 ```
 tests/integration/
-├── testsuite.go          # TestSuite implementation, container setup, migrations
-├── main_test.go          # TestMain entry point, lifecycle management
-├── infrastructure_test.go # Infrastructure validation tests
-└── README.md             # This file
-```
-
-## Example Tests
-
-### Basic Database Test
-
-```go
-func TestDatabaseInsert(t *testing.T) {
-    suite := SetupIntegrationTest(t)
-    defer suite.TeardownTest(t)
-
-    // Insert test user
-    result := suite.DB.Exec(`
-        INSERT INTO users (email, password_hash) 
-        VALUES ('test@example.com', 'hash123')
-    `)
-    require.NoError(t, result.Error)
-
-    // Verify insertion
-    var count int64
-    suite.DB.Raw("SELECT COUNT(*) FROM users").Scan(&count)
-    require.Equal(t, int64(1), count)
-}
-```
-
-### Redis Operations Test
-
-```go
-func TestRedisCaching(t *testing.T) {
-    suite := SetupIntegrationTest(t)
-    defer suite.TeardownTest(t)
-
-    ctx := context.Background()
-    
-    // Set value
-    err := suite.RedisClient.Set(ctx, "key", "value", 10*time.Second).Err()
-    require.NoError(t, err)
-
-    // Get value
-    val, err := suite.RedisClient.Get(ctx, "key").Result()
-    require.NoError(t, err)
-    require.Equal(t, "value", val)
-}
-```
-
-## Container Lifecycle
-
-1. **First Test**: Containers start, migrations run
-2. **Each Test**: Tables truncated, Redis flushed
-3. **All Tests Complete**: Containers terminate
-
-Containers are shared across tests for performance, but data is isolated.
-
-## Debugging
-
-### Enable Container Logs
-
-```go
-// In testsuite.go, modify container creation:
-pgContainer, err := postgrescontainer.Run(ctx, "postgres:15-alpine",
-    postgrescontainer.WithDatabase("testdb"),
-    postgrescontainer.WithUsername("test"),
-    postgrescontainer.WithPassword("test"),
-    testcontainers.WithLogger(testcontainers.TestLogger(t)), // Enable logs
-)
-```
-
-### Inspect Container State
-
-```go
-// Get Redis address
-addr := suite.GetRedisAddr()
-t.Logf("Redis running at: %s", addr)
-
-// Check database connectivity
-var result int
-suite.DB.Raw("SELECT 1").Scan(&result)
-t.Logf("Database responsive: %d", result)
+├── testsuite.go          # TestSuite, NewTestSuite, migrations, .env loader
+├── main_test.go          # TestMain, SetupIntegrationTest, GetTestSuite
+├── helpers/              # Test helper functions
+├── auth_handler_test.go  # Auth endpoint tests
+├── audit_log_test.go     # Audit logging tests
+├── email_test.go         # Email service tests
+├── media_test.go         # Media/upload tests
+├── notification_test.go  # Notification preference tests
+├── organization_test.go  # Organization service tests
+├── role_test.go          # Role CRUD tests
+├── permission_test.go    # Permission enforcement tests
+└── ...
 ```
 
 ## Troubleshooting
 
-### "rootless Docker is not supported on Windows"
+| Issue | Solution |
+|-------|----------|
+| "Failed to connect GORM to PostgreSQL" | Verify PostgreSQL is running: `pg_isready -h localhost -p 5432` |
+| "Failed to ping Redis" | Verify Redis is running: `redis-cli ping` |
+| Wrong password error | Check `.env` file has correct `DATABASE_PASSWORD` |
+| Schema mismatch errors | Tests drop and recreate all tables on first run — restart if needed |
+| Slow tests | Use `-p 1` flag for serial execution to avoid contention |
 
-**Solution**: Ensure Docker Desktop is running and you're using Docker Engine (not rootless mode).
+## Key Design Decisions
 
-```bash
-# Check Docker status
-docker ps
-
-# If not running, start Docker Desktop
-```
-
-### Container Startup Timeout
-
-**Solution**: Increase test timeout:
-
-```bash
-go test ./tests/integration/... -tags=integration -v -timeout 10m
-```
-
-### Port Conflicts
-
-**Solution**: Testcontainers uses random ports, but if conflicts occur:
-
-1. Stop existing containers: `docker ps -a | grep test | docker rm -f`
-2. Verify ports not in use: `netstat -an | grep 5432`, `netstat -an | grep 6379`
-
-## Dependencies Added
-
-```go
-// go.mod additions
-require (
-    github.com/testcontainers/testcontainers-go v0.42.0
-    github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
-    github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
-    github.com/stretchr/testify v1.10.0
-)
-```
-
-## Best Practices
-
-1. **Use `SetupIntegrationTest(t)`** for automatic test isolation
-2. **Always defer `TeardownTest(t)`** for extensibility
-3. **Don't share test suite across packages** - each test file should call `SetupIntegrationTest`
-4. **Keep tests independent** - each test should pass in isolation
-5. **Use `require` for fatal assertions** - fail fast on critical errors
-
-## Related Documentation
-
-- [Testcontainers-go Documentation](https://golang.testcontainers.org/)
-- [PostgreSQL Module](https://golang.testcontainers.org/modules/postgres/)
-- [Redis Module](https://golang.testcontainers.org/modules/redis/)
-- [Testify Documentation](https://github.com/stretchr/testify)
+1. **No Docker containers** — Tests run against local PostgreSQL and Redis for speed and simplicity
+2. **Shared suite** — Single DB/Redis connection pool shared across all tests for performance
+3. **`.env` auto-loading** — Credentials are picked up automatically from project `.env` file
+4. **Drop-and-recreate migrations** — Tests always start with a known schema state
+5. **Serial execution recommended** — Use `-p 1` flag to avoid test interference

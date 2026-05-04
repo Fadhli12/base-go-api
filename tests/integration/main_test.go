@@ -1,19 +1,18 @@
 //go:build integration
 // +build integration
 
-// Package integration provides integration test infrastructure using testcontainers.
+// Package integration provides integration test infrastructure.
+// Tests connect to local PostgreSQL and Redis (no Docker required).
 package integration
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
 
-// Global test suite shared across all integration tests
-var testSuite *TestSuite
-
 // TestMain is the entry point for all integration tests.
-// It sets up containers once before all tests and tears them down after all tests complete.
+// It runs all tests and cleans up the shared suite afterward.
 //
 // Usage:
 //
@@ -21,16 +20,22 @@ var testSuite *TestSuite
 //
 // The -tags=integration build tag ensures these tests only run when explicitly requested.
 func TestMain(m *testing.M) {
-	// Initialize test suite with PostgreSQL and Redis containers
-	// Note: We cannot create a *testing.T here, so initialization happens lazily
-	// in the first test that calls SetupIntegrationTest
-
 	// Run all tests
 	code := m.Run()
 
-	// Cleanup containers after all tests complete
-	if testSuite != nil && testSuite.Cleanup != nil {
-		testSuite.Cleanup()
+	// Cleanup shared suite after all tests complete
+	if testSuite != nil {
+		if testSuite.RedisClient != nil {
+			if err := testSuite.RedisClient.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to close Redis client: %v\n", err)
+			}
+		}
+		if testSuite.DB != nil {
+			sqlDB, err := testSuite.DB.DB()
+			if err == nil {
+				sqlDB.Close()
+			}
+		}
 	}
 
 	// Exit with the test result code
@@ -65,15 +70,7 @@ func GetTestSuite(t *testing.T) *TestSuite {
 //	    // test code here
 //	}
 func SetupIntegrationTest(t *testing.T) *TestSuite {
-	// Initialize on first call
-	if testSuite == nil {
-		testSuite = NewTestSuite(t)
-		testSuite.RunMigrations(t)
-	}
-
-	// Clean before each test
-	testSuite.SetupTest(t)
-	return testSuite
+	return NewTestSuite(t)
 }
 
 // TeardownTest performs cleanup after each test.

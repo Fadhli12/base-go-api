@@ -1,0 +1,41 @@
+{
+  "mcp": {
+    "servers": {
+      "mempalace": {
+        "command": "mempalace-mcp",
+        "args": [
+          "--palace-path", "C:\\Development\\base\\go-api",
+          "--wing", "go_api",
+          "--port", "3000",
+          "--log-level", "info"
+        ],
+        "env": {
+          "MEMPALACE_PALACE_PATH": "C:\\Development\\base\\go-api",
+          "MEMPALACE_WING": "go_api",
+          "MEMPALACE_LOG_LEVEL": "info"
+        }
+      }
+    }
+  },
+  "claude": {
+    "mcp_servers": {
+      "mempalace": {
+        "command": "mempalace-mcp",
+        "args": [
+          "--palace-path", "C:\\Development\\base\\go-api",
+          "--wing", "go_api"
+        ]
+      }
+    }
+  },
+  "settings": {
+    "palace_path": "C:\\Development\\base\\go-api",
+    "wing": "go_api",
+    "mcp_port": 3000,
+    "mcp_socket": "mempalace.sock",
+    "search_timeout_ms": 5000,
+    "max_results": 10,
+    "auto_compress": false,
+    "diary_retention_days": 90
+  }
+}

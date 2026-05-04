@@ -5,25 +5,48 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/example/go-api-base/internal/auth"
+	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+// requireAppErrorCode checks that an error is an AppError with the expected code
+func requireAppErrorCode(t *testing.T, err error, expectedCode string, msgAndArgs ...interface{}) {
+	t.Helper()
+	var appErr *apperrors.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("Expected AppError with code %s, got %T: %v", expectedCode, err, err)
+	}
+	require.Equal(t, expectedCode, appErr.Code, msgAndArgs...)
+}
 
 // createAuthServiceForTest creates an AuthService with real dependencies for testing
 func createAuthServiceForTest(t *testing.T, suite *TestSuite) *service.AuthService {
 	userRepo := repository.NewUserRepository(suite.DB)
 	tokenRepo := repository.NewRefreshTokenRepository(suite.DB)
-	tokenService := service.NewTokenService("test-secret-key-min-32-characters-long", 15*time.Minute, 24*time.Hour)
+	resetTokenRepo := repository.NewPasswordResetTokenRepository(suite.DB)
+	tokenService := service.NewTokenService(
+		"test-secret-key-min-32-characters-long",
+		"go-api-base",
+		"go-api-base",
+		15*time.Minute,
+		24*time.Hour,
+	)
 	passwordHasher := service.NewPasswordHasher()
-	return service.NewAuthService(userRepo, tokenRepo, tokenService, passwordHasher)
+	emailService := service.NewEmailService(nil, nil, nil, nil, nil, nil)
+	auditRepo := repository.NewAuditLogRepository(suite.DB)
+	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
+	roleRepo := repository.NewRoleRepository(suite.DB)
+	userRoleRepo := repository.NewUserRoleRepository(suite.DB)
+	return service.NewAuthService(userRepo, tokenRepo, resetTokenRepo, tokenService, passwordHasher, emailService, auditService, 15*time.Minute, roleRepo, userRoleRepo)
 }
 
 // createTestUser creates a test user and returns the user with plaintext password
@@ -95,7 +118,7 @@ func TestAuthRefresh_OldTokenRevoked(t *testing.T) {
 	// Second refresh with same token should fail (token was revoked)
 	_, _, _, err = authSvc.Refresh(ctx, refreshToken)
 	require.Error(t, err, "Second refresh with same token should fail")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	require.Contains(t, err.Error(), "Refresh token has been revoked", "Error should indicate invalid refresh token")
 }
 
 // TestAuthRefresh_InvalidToken tests that refresh with an invalid token returns an error
@@ -109,7 +132,7 @@ func TestAuthRefresh_InvalidToken(t *testing.T) {
 	// Try to refresh with a completely invalid token string
 	_, _, _, err := authSvc.Refresh(ctx, "invalid-token-string")
 	require.Error(t, err, "Refresh with invalid token should fail")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	requireAppErrorCode(t, err, "INVALID_REFRESH_TOKEN", "Error code should be INVALID_REFRESH_TOKEN")
 }
 
 // TestAuthRefresh_ExpiredToken tests that refresh with an expired token returns an error
@@ -127,9 +150,8 @@ func TestAuthRefresh_ExpiredToken(t *testing.T) {
 	user := createTestUser(t, authSvc, ctx, email, password)
 
 	// Create an expired refresh token manually
-	// Generate a valid token hash
-	tokenHash, err := auth.Hash("expired-token-value")
-	require.NoError(t, err, "Hashing should succeed")
+	// Generate a valid token hash (SHA256 for refresh tokens)
+	tokenHash := auth.HashToken("expired-token-value")
 
 	// Store expired token in database
 	expiredToken := &domain.RefreshToken{
@@ -137,13 +159,13 @@ func TestAuthRefresh_ExpiredToken(t *testing.T) {
 		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired 1 hour ago
 	}
-	err = tokenRepo.Create(ctx, expiredToken)
+	err := tokenRepo.Create(ctx, expiredToken)
 	require.NoError(t, err, "Creating expired token should succeed")
 
 	// Try to refresh with the expired token
 	_, _, _, err = authSvc.Refresh(ctx, "expired-token-value")
 	require.Error(t, err, "Refresh with expired token should fail")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	requireAppErrorCode(t, err, "INVALID_REFRESH_TOKEN", "Error code should be INVALID_REFRESH_TOKEN")
 }
 
 // TestAuthRefresh_RevokedToken tests that refresh with a revoked token returns an error
@@ -168,15 +190,14 @@ func TestAuthRefresh_RevokedToken(t *testing.T) {
 	require.NoError(t, err, "Login should succeed")
 
 	// Manually revoke the token by marking it in the database
-	tokenHash, err := auth.Hash(refreshToken)
-	require.NoError(t, err, "Hashing should succeed")
+	tokenHash := auth.HashToken(refreshToken)
 	err = tokenRepo.MarkRevoked(ctx, tokenHash)
 	require.NoError(t, err, "Marking token as revoked should succeed")
 
 	// Try to refresh with the revoked token
 	_, _, _, err = authSvc.Refresh(ctx, refreshToken)
 	require.Error(t, err, "Refresh with revoked token should fail")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	requireAppErrorCode(t, err, "INVALID_REFRESH_TOKEN", "Error code should be INVALID_REFRESH_TOKEN")
 }
 
 // TestAuthRefresh_MultipleRefreshTokens tests that a user can have multiple valid refresh tokens
@@ -227,24 +248,25 @@ func TestAuthRefresh_NonExistentUser(t *testing.T) {
 
 	ctx := context.Background()
 	authSvc := createAuthServiceForTest(t, suite)
-	tokenRepo := repository.NewRefreshTokenRepository(suite.DB)
 
-	// Create a token for a non-existent user ID
-	nonExistentUserID := uuid.New()
-	tokenHash, err := auth.Hash("orphan-token")
-	require.NoError(t, err, "Hashing should succeed")
+	// Create a user and login to get a valid refresh token
+	email := "refresh-orphan@example.com"
+	password := "password123"
+	createTestUser(t, authSvc, ctx, email, password)
 
-	orphanToken := &domain.RefreshToken{
-		UserID:    nonExistentUserID,
-		TokenHash: tokenHash,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
-	err = tokenRepo.Create(ctx, orphanToken)
-	require.NoError(t, err, "Creating orphan token should succeed")
+	_, _, refreshToken, err := authSvc.Login(ctx, &request.LoginRequest{
+		Email:    email,
+		Password: password,
+	})
+	require.NoError(t, err, "Login should succeed")
 
-	// Try to refresh with the orphan token
-	_, _, _, err = authSvc.Refresh(ctx, "orphan-token")
-	require.Error(t, err, "Refresh with orphan token should fail")
-	// The error could be either user not found or internal error
-	require.Error(t, err, "Should return an error")
+	// Soft-delete the user so the token exists but the user can't be found
+	userRepo := repository.NewUserRepository(suite.DB)
+	user, _ := userRepo.FindByEmail(ctx, email)
+	require.NotNil(t, user, "User should exist")
+	require.NoError(t, userRepo.SoftDelete(ctx, user.ID), "Should soft-delete user")
+
+	// Try to refresh - should fail because user is deleted
+	_, _, _, err = authSvc.Refresh(ctx, refreshToken)
+	require.Error(t, err, "Refresh with deleted user should fail")
 }

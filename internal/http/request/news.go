@@ -9,8 +9,8 @@ type CreateNewsRequest struct {
 	Title    string          `json:"title" validate:"required,max=255"`
 	Content  string          `json:"content" validate:"required"`
 	Excerpt  string          `json:"excerpt" validate:"omitempty,max=500"`
-	Tags     json.RawMessage `json:"tags,omitempty"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
+	Tags     json.RawMessage `json:"tags,omitempty" swaggertype:"object"`
+	Metadata json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // UpdateNewsRequest represents a request to update a news article
@@ -19,8 +19,8 @@ type UpdateNewsRequest struct {
 	Content  string          `json:"content" validate:"omitempty"`
 	Excerpt  string          `json:"excerpt" validate:"omitempty,max=500"`
 	Status   string          `json:"status" validate:"omitempty,oneof=draft published archived"`
-	Tags     json.RawMessage `json:"tags,omitempty"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
+	Tags     json.RawMessage `json:"tags,omitempty" swaggertype:"object"`
+	Metadata json.RawMessage `json:"metadata,omitempty" swaggertype:"object"`
 }
 
 // NewsListQuery represents query parameters for listing news articles

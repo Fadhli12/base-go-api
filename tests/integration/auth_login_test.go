@@ -30,9 +30,21 @@ func TestAuthLogin(t *testing.T) {
 	userRepo := repository.NewUserRepository(suite.DB)
 	tokenRepo := repository.NewRefreshTokenRepository(suite.DB)
 	testSecret := "test-secret-key-min-32-chars-long!"
-	tokenService := service.NewTokenService(testSecret, 15*time.Minute, 168*time.Hour)
+	tokenService := service.NewTokenService(
+		testSecret,
+		"go-api-base",
+		"go-api-base",
+		15*time.Minute,
+		24*time.Hour,
+	)
 	passwordHasher := &passwordHasherTestService{}
-	authService := service.NewAuthService(userRepo, tokenRepo, tokenService, passwordHasher)
+	resetTokenRepo := repository.NewPasswordResetTokenRepository(suite.DB)
+	emailService := service.NewEmailService(nil, nil, nil, nil, nil, nil)
+	auditRepo := repository.NewAuditLogRepository(suite.DB)
+	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
+	roleRepo := repository.NewRoleRepository(suite.DB)
+	userRoleRepo := repository.NewUserRoleRepository(suite.DB)
+	authService := service.NewAuthService(userRepo, tokenRepo, resetTokenRepo, tokenService, passwordHasher, emailService, auditService, 15*time.Minute, roleRepo, userRoleRepo)
 
 	ctx := context.Background()
 
@@ -173,9 +185,8 @@ func TestAuthLogin(t *testing.T) {
 		require.NoError(t, err, "Login should succeed")
 		require.NotEmpty(t, refreshToken, "Refresh token should be returned")
 
-		// Hash the refresh token to look it up (same way the service does)
-		tokenHash, err := auth.Hash(refreshToken)
-		require.NoError(t, err, "Should be able to hash refresh token")
+		// Hash the refresh token to look it up (same way the service does - SHA256)
+		tokenHash := auth.HashToken(refreshToken)
 
 		// Find the token in the database
 		storedToken, err := tokenRepo.FindByHash(ctx, tokenHash)
@@ -292,20 +303,19 @@ func TestAuthLogin(t *testing.T) {
 		_, _, refreshToken, err := authService.Login(ctx, req)
 		require.NoError(t, err, "Login should succeed")
 
-		tokenHash, err := auth.Hash(refreshToken)
-		require.NoError(t, err, "Should hash refresh token")
+		tokenHash := auth.HashToken(refreshToken)
 
 		storedToken, err := tokenRepo.FindByHash(ctx, tokenHash)
 		require.NoError(t, err, "Token should be found")
 
-		// Verify expiry is approximately 168 hours (7 days) from now
-		expectedExpiry := time.Now().Add(168 * time.Hour)
+		// Verify expiry is approximately 24 hours from now (matching TokenService refreshExpiry config)
+		expectedExpiry := time.Now().Add(24 * time.Hour)
 		actualExpiry := storedToken.ExpiresAt
 
 		// Allow 1 minute tolerance for test execution time
 		diff := actualExpiry.Sub(expectedExpiry)
 		assert.True(t, diff.Abs() < time.Minute,
-			"Expiry should be approximately 168 hours from now, diff: %v", diff)
+			"Expiry should be approximately 24 hours from now, diff: %v", diff)
 	})
 
 	t.Run("Login fails validation with empty email", func(t *testing.T) {

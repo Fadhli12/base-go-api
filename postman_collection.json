@@ -1,8 +1,8 @@
 {
 	"info": {
 		"_postman_id": "go-api-auth-collection",
-		"name": "Go API - Auth & RBAC",
-		"description": "Postman collection for testing authentication and RBAC features in Go API Base project.\n\n**Authentication:**\n- Public endpoints (register, login, password reset) require no auth\n- Protected endpoints require `Authorization: Bearer {{access_token}}`\n\n**Password Requirements:**\n- 8-72 characters\n- At least 1 uppercase letter\n- At least 1 lowercase letter\n- At least 1 number\n- At least 1 special character (!@#$%^&*(),.?\\\":{}|<>)\n\n**Response Format:**\nAll responses wrapped in `{\"data\": {...}, \"error\": {...}, \"meta\": {...}}`",
+		"name": "Go API - Complete",
+		"description": "Postman collection for testing all features in Go API Base project.\n\n**Authentication:**\n- Public endpoints (register, login, password reset, webhooks) require no auth\n- Protected endpoints require `Authorization: Bearer {{access_token}}`\n\n**Password Requirements:**\n- 8-72 characters\n- At least 1 uppercase letter\n- At least 1 lowercase letter\n- At least 1 number\n- At least 1 special character (!@#$%^&*(),.?\\\":{}|<>)\n\n**Response Format:**\nAll responses wrapped in `{\"data\": {...}, \"error\": {...}, \"meta\": {...}}`",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -56,6 +56,41 @@
 		},
 		{
 			"key": "user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "email_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "organization_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "api_key_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "template_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "notification_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "media_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "invoice_id",
 			"value": "",
 			"type": "string"
 		}
@@ -272,7 +307,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "auth", "password-reset"]
 						},
-						"description": "Request password reset email. Always returns success to prevent email enumeration. In development, check logs for reset token."
+						"description": "Request password reset email. Always returns success to prevent email enumeration."
 					},
 					"response": []
 				},
@@ -411,7 +446,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions"]
 						},
-						"description": "List all active sessions for current user. Shows device name, user agent, IP, creation time, expiration, and current session flag."
+						"description": "List all active sessions for current user."
 					},
 					"response": []
 				},
@@ -454,7 +489,7 @@
 								}
 							]
 						},
-						"description": "Revoke a specific session by ID. Cannot revoke current session (use logout instead)."
+						"description": "Revoke a specific session by ID."
 					},
 					"response": []
 				},
@@ -496,7 +531,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "sessions", "others"]
 						},
-						"description": "Revoke all sessions except the current one. Returns count of revoked sessions."
+						"description": "Revoke all sessions except the current one."
 					},
 					"response": []
 				}
@@ -551,10 +586,23 @@
 			]
 		},
 		{
-			"name": "Users (manage permission)",
+			"name": "Metrics",
 			"item": [
 				{
-					"name": "List Users",
+					"name": "Get Auth Metrics",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"auth": {
 						"type": "bearer",
 						"bearer": [
@@ -564,6 +612,29 @@
 								"type": "string"
 							}
 						]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/metrics/auth",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "metrics", "auth"]
+						},
+						"description": "Get authentication metrics (login counts, failure rates, etc.). Requires authentication."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users (manage permission)",
+			"item": [
+				{
+					"name": "List Users",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -578,16 +649,51 @@
 					"response": []
 				},
 				{
+					"name": "Create User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has user data', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.expect(json.data).to.have.property('email');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"NewPassword123!\",\n  \"name\": \"New User\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						},
+						"description": "Create a new user. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
 					"name": "Get User by ID",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -596,14 +702,32 @@
 							"raw": "{{base_url}}/api/v1/users/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								}
-							]
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
 						},
 						"description": "Get user details by ID. Requires 'users:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Name\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
+						},
+						"description": "Update a user's profile. Requires 'users:manage' permission."
 					},
 					"response": []
 				},
@@ -611,13 +735,7 @@
 					"name": "Delete User (Soft)",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "DELETE",
@@ -626,12 +744,7 @@
 							"raw": "{{base_url}}/api/v1/users/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "paste-user-id"
-								}
-							]
+							"variable": [{"key": "id", "value": "paste-user-id"}]
 						},
 						"description": "Soft delete a user. Requires 'users:manage' permission."
 					},
@@ -641,22 +754,11 @@
 					"name": "Assign Role to User",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{"key": "Content-Type", "value": "application/json"}],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"role_id\": \"paste-role-id\"\n}"
@@ -665,12 +767,7 @@
 							"raw": "{{base_url}}/api/v1/users/:id/roles",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "roles"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								}
-							]
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
 						},
 						"description": "Assign a role to a user. Requires 'users:manage' permission."
 					},
@@ -680,13 +777,7 @@
 					"name": "Remove Role from User",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "DELETE",
@@ -696,14 +787,8 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "roles", ":roleId"],
 							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								},
-								{
-									"key": "roleId",
-									"value": "paste-role-id"
-								}
+								{"key": "id", "value": "{{user_id}}"},
+								{"key": "roleId", "value": "paste-role-id"}
 							]
 						},
 						"description": "Remove a role from a user. Requires 'users:manage' permission."
@@ -714,13 +799,7 @@
 					"name": "Get User Roles",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -729,14 +808,9 @@
 							"raw": "{{base_url}}/api/v1/users/:id/roles",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "roles"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								}
-							]
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
 						},
-						"description": "Get all roles assigned to a user. Requires 'users:manage' permission."
+						"description": "Get all roles assigned to a user."
 					},
 					"response": []
 				},
@@ -744,22 +818,11 @@
 					"name": "Grant Permission to User",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{"key": "Content-Type", "value": "application/json"}],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"permission_id\": \"paste-permission-id\",\n  \"effect\": \"allow\"\n}"
@@ -768,14 +831,9 @@
 							"raw": "{{base_url}}/api/v1/users/:id/permissions",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "permissions"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								}
-							]
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
 						},
-						"description": "Grant a direct permission to a user. Effect can be 'allow' or 'deny'. Requires 'users:manage' permission."
+						"description": "Grant a direct permission to a user."
 					},
 					"response": []
 				},
@@ -783,13 +841,7 @@
 					"name": "Remove Permission from User",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "DELETE",
@@ -799,17 +851,11 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "permissions", ":permId"],
 							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								},
-								{
-									"key": "permId",
-									"value": "paste-permission-id"
-								}
+								{"key": "id", "value": "{{user_id}}"},
+								{"key": "permId", "value": "paste-permission-id"}
 							]
 						},
-						"description": "Remove a direct permission from a user. Requires 'users:manage' permission."
+						"description": "Remove a direct permission from a user."
 					},
 					"response": []
 				},
@@ -817,13 +863,7 @@
 					"name": "Get Effective Permissions",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -832,14 +872,9 @@
 							"raw": "{{base_url}}/api/v1/users/:id/effective-permissions",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", ":id", "effective-permissions"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "{{user_id}}"
-								}
-							]
+							"variable": [{"key": "id", "value": "{{user_id}}"}]
 						},
-						"description": "Get all effective permissions for a user (from roles + direct grants). Requires 'users:manage' permission."
+						"description": "Get all effective permissions for a user (from roles + direct grants)."
 					},
 					"response": []
 				}
@@ -852,22 +887,11 @@
 					"name": "Create Role",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{"key": "Content-Type", "value": "application/json"}],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"editor\",\n  \"description\": \"Content editor role\"\n}"
@@ -885,13 +909,7 @@
 					"name": "List Roles",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -901,7 +919,26 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "roles"]
 						},
-						"description": "List all roles with their permissions. Requires 'roles:manage' permission."
+						"description": "List all roles with their permissions."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Role by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/roles/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "roles", ":id"],
+							"variable": [{"key": "id", "value": "paste-role-id"}]
+						},
+						"description": "Get a specific role by ID. Requires 'roles:manage' permission."
 					},
 					"response": []
 				},
@@ -909,22 +946,11 @@
 					"name": "Update Role",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{"key": "Content-Type", "value": "application/json"}],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"editor\",\n  \"description\": \"Updated description\"\n}"
@@ -933,14 +959,9 @@
 							"raw": "{{base_url}}/api/v1/roles/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "roles", ":id"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "paste-role-id"
-								}
-							]
+							"variable": [{"key": "id", "value": "paste-role-id"}]
 						},
-						"description": "Update a role. Cannot modify system roles (is_system=true). Requires 'roles:manage' permission."
+						"description": "Update a role. Cannot modify system roles."
 					},
 					"response": []
 				},
@@ -948,13 +969,7 @@
 					"name": "Delete Role",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "DELETE",
@@ -963,14 +978,9 @@
 							"raw": "{{base_url}}/api/v1/roles/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "roles", ":id"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "paste-role-id"
-								}
-							]
+							"variable": [{"key": "id", "value": "paste-role-id"}]
 						},
-						"description": "Soft delete a role. Cannot delete system roles. Requires 'roles:manage' permission."
+						"description": "Soft delete a role. Cannot delete system roles."
 					},
 					"response": []
 				},
@@ -978,13 +988,7 @@
 					"name": "Attach Permission to Role",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "POST",
@@ -994,17 +998,11 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "roles", ":id", "permissions", ":pid"],
 							"variable": [
-								{
-									"key": "id",
-									"value": "paste-role-id"
-								},
-								{
-									"key": "pid",
-									"value": "paste-permission-id"
-								}
+								{"key": "id", "value": "paste-role-id"},
+								{"key": "pid", "value": "paste-permission-id"}
 							]
 						},
-						"description": "Attach a permission to a role. Requires 'roles:manage' permission."
+						"description": "Attach a permission to a role."
 					},
 					"response": []
 				},
@@ -1012,13 +1010,7 @@
 					"name": "Detach Permission from Role",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "DELETE",
@@ -1028,17 +1020,11 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "roles", ":id", "permissions", ":pid"],
 							"variable": [
-								{
-									"key": "id",
-									"value": "paste-role-id"
-								},
-								{
-									"key": "pid",
-									"value": "paste-permission-id"
-								}
+								{"key": "id", "value": "paste-role-id"},
+								{"key": "pid", "value": "paste-permission-id"}
 							]
 						},
-						"description": "Detach a permission from a role. Requires 'roles:manage' permission."
+						"description": "Detach a permission from a role."
 					},
 					"response": []
 				}
@@ -1051,22 +1037,11 @@
 					"name": "Create Permission",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
+						"header": [{"key": "Content-Type", "value": "application/json"}],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"posts:create\",\n  \"resource\": \"posts\",\n  \"action\": \"create\",\n  \"scope\": \"own\"\n}"
@@ -1076,7 +1051,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "permissions"]
 						},
-						"description": "Create a new permission. Requires 'permissions:manage' permission."
+						"description": "Create a new permission."
 					},
 					"response": []
 				},
@@ -1084,13 +1059,7 @@
 					"name": "List Permissions",
 					"auth": {
 						"type": "bearer",
-						"bearer": [
-							{
-								"key": "token",
-								"value": "{{access_token}}",
-								"type": "string"
-							}
-						]
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
 					},
 					"request": {
 						"method": "GET",
@@ -1100,7 +1069,1117 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "permissions"]
 						},
-						"description": "List all permissions. Requires 'permissions:manage' permission."
+						"description": "List all permissions."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Organizations",
+			"item": [
+				{
+					"name": "Create Organization",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has organization data', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.collectionVariables.set('organization_id', json.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My Organization\",\n  \"slug\": \"my-org\",\n  \"settings\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations"]
+						},
+						"description": "Create a new organization. Current user becomes the owner."
+					},
+					"response": []
+				},
+				{
+					"name": "List Organizations",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations"],
+							"query": [
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"}
+							]
+						},
+						"description": "List organizations where the current user is a member."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Organization by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id"],
+							"variable": [{"key": "id", "value": "{{organization_id}}"}]
+						},
+						"description": "Get organization details. User must be a member."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Organization",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Organization Name\",\n  \"slug\": \"updated-org\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id"],
+							"variable": [{"key": "id", "value": "{{organization_id}}"}]
+						},
+						"description": "Update organization name, slug, or settings. Requires 'manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Organization",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id"],
+							"variable": [{"key": "id", "value": "{{organization_id}}"}]
+						},
+						"description": "Soft delete an organization. Requires 'manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Member",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"paste-user-uuid\",\n  \"role\": \"member\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id/members",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id", "members"],
+							"variable": [{"key": "id", "value": "{{organization_id}}"}]
+						},
+						"description": "Add a member to an organization. Role must be 'owner', 'admin', or 'member'."
+					},
+					"response": []
+				},
+				{
+					"name": "List Members",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id/members?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id", "members"],
+							"variable": [{"key": "id", "value": "{{organization_id}}"}],
+							"query": [
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"}
+							]
+						},
+						"description": "List members of an organization."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Member",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/organizations/:id/members/:user_id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "organizations", ":id", "members", ":user_id"],
+							"variable": [
+								{"key": "id", "value": "{{organization_id}}"},
+								{"key": "user_id", "value": "paste-member-user-id"}
+							]
+						},
+						"description": "Remove a member from an organization. Requires 'manage' permission."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "API Keys",
+			"item": [
+				{
+					"name": "Create API Key",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has API key data', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.expect(json.data).to.have.property('key');",
+									"    pm.collectionVariables.set('api_key_id', json.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My API Key\",\n  \"scopes\": [\"read\"],\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"]
+						},
+						"description": "Create a new API key. The secret key is only returned on creation."
+					},
+					"response": []
+				},
+				{
+					"name": "List API Keys",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys"],
+							"query": [
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"}
+							]
+						},
+						"description": "List all API keys for the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get API Key by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", ":id"],
+							"variable": [{"key": "id", "value": "{{api_key_id}}"}]
+						},
+						"description": "Get details of a specific API key."
+					},
+					"response": []
+				},
+				{
+					"name": "Revoke API Key",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/api-keys/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "api-keys", ":id"],
+							"variable": [{"key": "id", "value": "{{api_key_id}}"}]
+						},
+						"description": "Revoke (soft delete) an API key."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Email Templates (manage permission)",
+			"item": [
+				{
+					"name": "Create Template",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has template data', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.collectionVariables.set('template_id', json.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"welcome\",\n  \"subject\": \"Welcome to {{.AppName}}\",\n  \"html_content\": \"<html><body><h1>Welcome {{.UserName}}!</h1></body></html>\",\n  \"text_content\": \"Welcome {{.UserName}}!\",\n  \"category\": \"transactional\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/email-templates",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "email-templates"]
+						},
+						"description": "Create a new email template. Category must be one of: transactional, marketing, notification, system."
+					},
+					"response": []
+				},
+				{
+					"name": "List Templates",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/email-templates?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "email-templates"],
+							"query": [
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"}
+							]
+						},
+						"description": "List all email templates with pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Template by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/email-templates/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "email-templates", ":id"],
+							"variable": [{"key": "id", "value": "{{template_id}}"}]
+						},
+						"description": "Get a specific email template by ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Template",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subject\": \"Welcome to {{.AppName}}!\",\n  \"html_content\": \"<html><body><p>Welcome {{.UserName}}</p></body></html>\",\n  \"text_content\": \"Welcome {{.UserName}}\",\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/email-templates/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "email-templates", ":id"],
+							"variable": [{"key": "id", "value": "{{template_id}}"}]
+						},
+						"description": "Update an email template by ID. All fields are optional."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Template",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/email-templates/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "email-templates", ":id"],
+							"variable": [{"key": "id", "value": "{{template_id}}"}]
+						},
+						"description": "Soft delete an email template."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Email Sending",
+			"item": [
+				{
+					"name": "Send Email",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 202', function () {",
+									"    pm.response.to.have.status(202);",
+									"});",
+									"",
+									"pm.test('Response confirms queuing', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data.message).to.include('queued');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"to\": \"recipient@example.com\",\n  \"subject\": \"Test Email\",\n  \"html_content\": \"<h1>Hello</h1><p>This is a test email.</p>\",\n  \"text_content\": \"Hello, this is a test email.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/emails",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "emails"]
+						},
+						"description": "Queue an email for async delivery. Can use template name instead of content."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Email Status",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/emails/{{email_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "emails", "{{email_id}}"]
+						},
+						"description": "Get status of a queued email (pending, sent, delivered, failed, bounced)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Email Webhooks (Public)",
+			"item": [
+				{
+					"name": "Delivery Webhook (SMTP)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message_id\": \"msg-123\",\n  \"timestamp\": 1700000000,\n  \"event\": \"delivered\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/smtp/delivery",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "smtp", "delivery"]
+						},
+						"description": "Process delivery confirmation from SMTP provider. No auth required."
+					},
+					"response": []
+				},
+				{
+					"name": "Delivery Webhook (SendGrid)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message_id\": \"msg-456\",\n  \"timestamp\": 1700000000,\n  \"event\": \"delivered\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/sendgrid/delivery",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "sendgrid", "delivery"]
+						},
+						"description": "Process delivery confirmation from SendGrid. No auth required."
+					},
+					"response": []
+				},
+				{
+					"name": "Delivery Webhook (SES)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message_id\": \"msg-789\",\n  \"timestamp\": 1700000000,\n  \"event\": \"delivered\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/ses/delivery",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "ses", "delivery"]
+						},
+						"description": "Process delivery confirmation from Amazon SES. No auth required."
+					},
+					"response": []
+				},
+				{
+					"name": "Bounce Webhook (SMTP)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"message_id\": \"msg-123\",\n  \"type\": \"hard\",\n  \"reason\": \"Mailbox not found\",\n  \"timestamp\": 1700000000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/smtp/bounce",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "smtp", "bounce"]
+						},
+						"description": "Process bounce notification from SMTP provider. Type can be: hard, soft, spam."
+					},
+					"response": []
+				},
+				{
+					"name": "Bounce Webhook (SendGrid)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"message_id\": \"msg-456\",\n  \"type\": \"soft\",\n  \"reason\": \"Mailbox full\",\n  \"timestamp\": 1700000000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/sendgrid/bounce",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "sendgrid", "bounce"]
+						},
+						"description": "Process bounce notification from SendGrid."
+					},
+					"response": []
+				},
+				{
+					"name": "Bounce Webhook (SES)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"message_id\": \"msg-789\",\n  \"type\": \"spam\",\n  \"reason\": \"Complaint received\",\n  \"timestamp\": 1700000000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/webhooks/ses/bounce",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "webhooks", "ses", "bounce"]
+						},
+						"description": "Process bounce/spam complaint from Amazon SES."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "List Notifications",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications?limit=20&offset=0&unread_only=false",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications"],
+							"query": [
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"},
+								{"key": "unread_only", "value": "false"}
+							]
+						},
+						"description": "List notifications for the authenticated user. Use unread_only=true to filter."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Unread Count",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/unread-count",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", "unread-count"]
+						},
+						"description": "Get count of unread notifications."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Notification as Read",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/:id/read",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", ":id", "read"],
+							"variable": [{"key": "id", "value": "{{notification_id}}"}]
+						},
+						"description": "Mark a single notification as read."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark All as Read",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/read-all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", "read-all"]
+						},
+						"description": "Mark all unread notifications as read. Optional ?type= filter."
+					},
+					"response": []
+				},
+				{
+					"name": "Archive Notification",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", ":id"],
+							"variable": [{"key": "id", "value": "{{notification_id}}"}]
+						},
+						"description": "Archive (soft delete) a notification."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Notification Preferences",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/preferences",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", "preferences"]
+						},
+						"description": "Get all notification preferences for the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Notification Preference",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notification_type\": \"mention\",\n  \"email_enabled\": true,\n  \"push_enabled\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/notifications/preferences",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "notifications", "preferences"]
+						},
+						"description": "Create or update a notification preference. Type must be: mention, assignment, system, invoice.created, or news.published."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Media - Upload & List",
+			"item": [
+				{
+					"name": "Upload Media",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Response has media data', function () {",
+									"    const json = pm.response.json();",
+									"    pm.expect(json.data).to.have.property('id');",
+									"    pm.collectionVariables.set('media_id', json.data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{"key": "file", "type": "file", "src": "/path/to/file.jpg"},
+								{"key": "collection", "value": "default", "type": "text"},
+								{"key": "custom_properties", "value": "{}", "type": "text"}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/models/news/{{user_id}}/media",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "models", "news", "{{user_id}}", "media"]
+						},
+						"description": "Upload a media file to a specific model instance. Requires media upload permission."
+					},
+					"response": []
+				},
+				{
+					"name": "List Model Media",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/models/news/{{user_id}}/media?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "models", "news", "{{user_id}}", "media"],
+							"query": [
+								{"key": "collection", "value": "", "disabled": true},
+								{"key": "mime_type", "value": "", "disabled": true},
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"},
+								{"key": "sort", "value": "", "disabled": true}
+							]
+						},
+						"description": "List all media for a specific model instance."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Media - Individual",
+			"item": [
+				{
+					"name": "Get Media by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/media/{{media_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "media", "{{media_id}}"]
+						},
+						"description": "Get details of a specific media file."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Media",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/media/{{media_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "media", "{{media_id}}"]
+						},
+						"description": "Soft delete a media file. Owner or admin can delete."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Media Metadata",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PATCH",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"custom_properties\": {\n    \"alt_text\": \"Description of image\",\n    \"caption\": \"Image caption\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/media/{{media_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "media", "{{media_id}}"]
+						},
+						"description": "Update custom properties/metadata for a media file."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Signed URL",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/media/{{media_id}}/url?expires_in=3600",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "media", "{{media_id}}", "url"],
+							"query": [
+								{"key": "conversion", "value": "thumbnail", "disabled": true},
+								{"key": "expires_in", "value": "3600"}
+							]
+						},
+						"description": "Generate a signed URL for downloading media. Expires in seconds (max 86400)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Media - Public",
+			"item": [
+				{
+					"name": "Download Media",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/media/{{media_id}}/download?sig=&expires=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "media", "{{media_id}}", "download"],
+							"query": [
+								{"key": "conversion", "value": "", "disabled": true},
+								{"key": "sig", "value": ""},
+								{"key": "expires", "value": "0"}
+							]
+						},
+						"description": "Download a media file. Public access with signed URL (sig+expires) or authenticated."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Media - Admin",
+			"item": [
+				{
+					"name": "List All Media (Admin)",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/media?limit=20&offset=0",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "media"],
+							"query": [
+								{"key": "model_type", "value": "", "disabled": true},
+								{"key": "model_id", "value": "", "disabled": true},
+								{"key": "include_deleted", "value": "false", "disabled": true},
+								{"key": "limit", "value": "20"},
+								{"key": "offset", "value": "0"}
+							]
+						},
+						"description": "List all media files with filtering. Requires 'media:manage' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Cleanup Orphaned Media (Admin)",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/media/cleanup?cutoff_hours=24",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "media", "cleanup"],
+							"query": [
+								{"key": "cutoff_hours", "value": "24"}
+							]
+						},
+						"description": "Trigger cleanup of orphaned media files older than cutoff_hours."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Media Stats (Admin)",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/media/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "media", "stats"]
+						},
+						"description": "Get storage statistics for all media files. Requires 'media:manage' permission."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Invoices",
+			"item": [
+				{
+					"name": "Create Invoice",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 100.00,\n  \"description\": \"Test Invoice\",\n  \"due_date\": \"2026-06-30T00:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/invoices",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "invoices"]
+						},
+						"description": "Create a new invoice. Requires 'invoices:create' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "List Invoices",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/invoices",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "invoices"]
+						},
+						"description": "List invoices for the authenticated user. Requires 'invoices:view' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Invoice by ID",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/invoices/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "invoices", ":id"],
+							"variable": [{"key": "id", "value": "{{invoice_id}}"}]
+						},
+						"description": "Get a specific invoice by ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Invoice",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Updated Invoice\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/invoices/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "invoices", ":id"],
+							"variable": [{"key": "id", "value": "{{invoice_id}}"}]
+						},
+						"description": "Update an invoice. Requires 'invoices:update' permission."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Invoice",
+					"auth": {
+						"type": "bearer",
+						"bearer": [{"key": "token", "value": "{{access_token}}", "type": "string"}]
+					},
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/invoices/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "invoices", ":id"],
+							"variable": [{"key": "id", "value": "{{invoice_id}}"}]
+						},
+						"description": "Soft delete an invoice. Requires 'invoices:delete' permission."
 					},
 					"response": []
 				}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/example/go-api-base/internal/domain"
@@ -161,6 +162,43 @@ func (h *RoleHandler) GetAll(c echo.Context) error {
 			IsSystem:    r.IsSystem,
 			Permissions: perms,
 		}
+	}
+
+	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))
+}
+
+// GetByID handles retrieving a single role by ID
+func (h *RoleHandler) GetByID(c echo.Context) error {
+	log := middleware.GetLogger(c)
+	ctx := c.Request().Context()
+
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		// Invalid UUID format means no such resource can exist — return 404
+		return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role not found"))
+	}
+
+	log.Info(ctx, "getting role by id", logger.String("role_id", idStr))
+
+	role, err := h.roleService.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, response.ErrorWithContext(c, "NOT_FOUND", "Role not found"))
+		}
+		log.Error(ctx, "failed to retrieve role", logger.Err(err))
+		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve role"))
+	}
+
+	resp := RoleListResponse{
+		ID:          role.ID.String(),
+		Name:        role.Name,
+		Description: role.Description,
+		IsSystem:    role.IsSystem,
+		Permissions: make([]PermissionResponse, len(role.Permissions)),
+	}
+	for i, p := range role.Permissions {
+		resp.Permissions[i] = mapPermissionToResponse(p)
 	}
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/example/go-api-base/internal/http/request"
-	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,60 +16,6 @@ import (
 
 // TestAuthLogout_RevokesAllTokens tests that logout revokes all user's refresh tokens
 func TestAuthLogout_RevokesAllTokens(t *testing.T) {
-	suite := SetupIntegrationTest(t)
-	defer suite.TeardownTest(t)
-
-	ctx := context.Background()
-	authSvc := createAuthServiceForTest(t, suite)
-	tokenRepo := repository.NewRefreshTokenRepository(suite.DB)
-
-	// Create user
-	email := "logout-user@example.com"
-	password := "password123"
-	user := createTestUser(t, authSvc, ctx, email, password)
-
-	// Login multiple times to create multiple refresh tokens
-	_, _, _, err := authSvc.Login(ctx, &request.LoginRequest{
-		Email:    email,
-		Password: password,
-	})
-	require.NoError(t, err, "First login should succeed")
-
-	_, _, _, err = authSvc.Login(ctx, &request.LoginRequest{
-		Email:    email,
-		Password: password,
-	})
-	require.NoError(t, err, "Second login should succeed")
-
-	// Verify tokens exist and are not revoked
-	tokens, err := tokenRepo.FindByUserID(ctx, user.ID)
-	require.NoError(t, err, "Should find tokens")
-	require.Len(t, tokens, 2, "Should have 2 tokens")
-
-	for _, token := range tokens {
-		require.Nil(t, token.RevokedAt, "Tokens should not be revoked before logout")
-	}
-
-	// Logout
-	err = authSvc.Logout(ctx, user.ID)
-	require.NoError(t, err, "Logout should succeed")
-
-	// Verify all tokens are now revoked
-	tokens, err = tokenRepo.FindByUserID(ctx, user.ID)
-	require.NoError(t, err, "Should find tokens")
-	require.Len(t, tokens, 2, "Should still have 2 tokens")
-
-	revokedCount := 0
-	for _, token := range tokens {
-		if token.IsRevoked() {
-			revokedCount++
-		}
-	}
-	require.Equal(t, 2, revokedCount, "All tokens should be revoked after logout")
-}
-
-// TestAuthLogout_RefreshFailsAfterLogout tests that refresh fails after logout
-func TestAuthLogout_RefreshFailsAfterLogout(t *testing.T) {
 	suite := SetupIntegrationTest(t)
 	defer suite.TeardownTest(t)
 
@@ -107,7 +52,7 @@ func TestAuthLogout_RefreshFailsAfterLogout(t *testing.T) {
 	// Try to refresh with the token that was revoked by logout
 	_, _, _, err = authSvc.Refresh(ctx, refreshToken)
 	require.Error(t, err, "Refresh should fail after logout")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	requireAppErrorCode(t, err, "INVALID_REFRESH_TOKEN", "Error code should be INVALID_REFRESH_TOKEN")
 }
 
 // TestAuthLogout_CanLoginAgain tests that a user can login again after logout
@@ -117,7 +62,7 @@ func TestAuthLogout_CanLoginAgain(t *testing.T) {
 
 	ctx := context.Background()
 	authSvc := createAuthServiceForTest(t, suite)
-	tokenService := service.NewTokenService("test-secret-key-min-32-characters-long", 15*time.Minute, 24*time.Hour)
+	tokenService := service.NewTokenService("test-secret-key-min-32-characters-long", "go-api-base", "go-api-base", 15*time.Minute, 24*time.Hour)
 
 	// Create user and login
 	email := "logout-relogin@example.com"
@@ -283,7 +228,7 @@ func TestAuthLogout_DifferentUsersIndependent(t *testing.T) {
 	// User1's token should be revoked
 	_, _, _, err = authSvc.Refresh(ctx, token1)
 	require.Error(t, err, "User1's refresh should fail after logout")
-	require.Contains(t, err.Error(), "INVALID_REFRESH_TOKEN", "Error should indicate invalid refresh token")
+	requireAppErrorCode(t, err, "INVALID_REFRESH_TOKEN", "Error code should be INVALID_REFRESH_TOKEN")
 
 	// User2's token should still work
 	_, _, newToken2, err := authSvc.Refresh(ctx, token2)

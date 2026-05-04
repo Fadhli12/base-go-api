@@ -36,7 +36,7 @@ type OrganizationResponse struct {
 	Name        string             `json:"name"`
 	Slug        string             `json:"slug"`
 	OwnerID     uuid.UUID          `json:"owner_id"`
-	Settings    json.RawMessage    `json:"settings,omitempty"`
+	Settings    json.RawMessage    `json:"settings,omitempty" swaggertype:"object"`
 	CreatedAt   time.Time          `json:"created_at"`
 	UpdatedAt   time.Time          `json:"updated_at"`
 	MemberCount int                `json:"member_count,omitempty"`

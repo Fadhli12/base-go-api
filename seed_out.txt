@@ -1,0 +1,14 @@
+{"time":"2026-04-28T00:20:56.2646368+08:00","level":"INFO","msg":"Starting database seeding"}
+{"time":"2026-04-28T00:20:56.3313004+08:00","level":"INFO","msg":"Connected to PostgreSQL database","host":"localhost","port":5432,"dbname":"go_api_base"}
+{"time":"2026-04-28T00:20:56.3318699+08:00","level":"INFO","msg":"Seeding permissions","count":30}
+{"time":"2026-04-28T00:20:56.337167+08:00","level":"INFO","msg":"Seeding roles","count":6}
+{"time":"2026-04-28T00:20:56.3445717+08:00","level":"INFO","msg":"Assigning permissions to superadmin role"}
+{"time":"2026-04-28T00:20:56.3495929+08:00","level":"INFO","msg":"Assigning permissions to admin role"}
+{"time":"2026-04-28T00:20:56.3531015+08:00","level":"INFO","msg":"Assigning permissions to viewer role"}
+{"time":"2026-04-28T00:20:56.3536523+08:00","level":"INFO","msg":"Assigning permissions to owner role"}
+{"time":"2026-04-28T00:20:56.3541986+08:00","level":"INFO","msg":"Assigning permissions to org_admin role"}
+{"time":"2026-04-28T00:20:56.3548903+08:00","level":"INFO","msg":"Assigning permissions to member role"}
+{"time":"2026-04-28T00:20:56.3977233+08:00","level":"INFO","msg":"Casbin enforcer initialized successfully"}
+{"time":"2026-04-28T00:20:56.3977233+08:00","level":"INFO","msg":"Syncing roles to Casbin policies"}
+{"time":"2026-04-28T00:20:56.4771555+08:00","level":"INFO","msg":"Database seeding complete","permissions":30,"roles":6}
+{"time":"2026-04-28T00:20:56.4782633+08:00","level":"INFO","msg":"Database connection closed"}

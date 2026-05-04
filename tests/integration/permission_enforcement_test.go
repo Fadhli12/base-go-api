@@ -5,9 +5,7 @@ package integration
 import (
 	"testing"
 
-	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/permission"
-	"github.com/example/go-api-base/internal/repository"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,47 +19,14 @@ func TestPermission_Enforce_UserHasPermission(t *testing.T) {
 	enforcer, err := permission.NewEnforcer(suite.DB)
 	require.NoError(t, err, "NewEnforcer should succeed")
 
-	// Create test user and role
 	userID := uuid.New()
-	roleID := uuid.New()
-	permID := uuid.New()
 
-	// Create permission
-	perm := &domain.Permission{
-		ID:       permID,
-		Name:     "invoice:create",
-		Resource: "invoice",
-		Action:   "create",
-		Scope:    "all",
-	}
-	err = suite.DB.Create(perm).Error
+	// Add policy: role "manager" can "create" on "invoice" in domain "default"
+	err = enforcer.AddPolicy("manager", "default", "invoice", "create")
 	require.NoError(t, err)
 
-	// Create role
-	role := &domain.Role{
-		ID:          roleID,
-		Name:        "manager",
-		Description: "Manager role",
-	}
-	err = suite.DB.Create(role).Error
-	require.NoError(t, err)
-
-	// Assign permission to role
-	err = suite.DB.Create(&domain.RolePermission{
-		RoleID:       roleID,
-		PermissionID: permID,
-	}).Error
-	require.NoError(t, err)
-
-	// Assign role to user
-	err = suite.DB.Create(&domain.UserRole{
-		UserID: userID,
-		RoleID: roleID,
-	}).Error
-	require.NoError(t, err)
-
-	// Load policy into enforcer
-	err = enforcer.LoadPolicy()
+	// Assign user to role
+	err = enforcer.AddRoleForUser(userID.String(), "manager", "default")
 	require.NoError(t, err)
 
 	// Test enforcement
@@ -93,20 +58,12 @@ func TestPermission_Enforce_AfterRoleRemoved(t *testing.T) {
 	require.NoError(t, err, "NewEnforcer should succeed")
 
 	userID := uuid.New()
-	roleID := uuid.New()
-	permID := uuid.New()
 
-	// Create permission, role, and assign to user
-	perm := &domain.Permission{ID: permID, Name: "test:action", Resource: "test", Action: "action", Scope: "all"}
-	require.NoError(t, suite.DB.Create(perm).Error)
-
-	role := &domain.Role{ID: roleID, Name: "tester"}
-	require.NoError(t, suite.DB.Create(role).Error)
-
-	require.NoError(t, suite.DB.Create(&domain.RolePermission{RoleID: roleID, PermissionID: permID}).Error)
-	require.NoError(t, suite.DB.Create(&domain.UserRole{UserID: userID, RoleID: roleID}).Error)
-
-	require.NoError(t, enforcer.LoadPolicy())
+	// Add policy and role via enforcer
+	err = enforcer.AddPolicy("tester", "default", "test", "action")
+	require.NoError(t, err)
+	err = enforcer.AddRoleForUser(userID.String(), "tester", "default")
+	require.NoError(t, err)
 
 	// User should have permission
 	allowed, err := enforcer.Enforce(userID.String(), "default", "test", "action")
@@ -114,10 +71,8 @@ func TestPermission_Enforce_AfterRoleRemoved(t *testing.T) {
 	assert.True(t, allowed, "User should have permission")
 
 	// Remove role from user
-	require.NoError(t, suite.DB.Where("user_id = ? AND role_id = ?", userID, roleID).Delete(&domain.UserRole{}).Error)
-
-	// Reload policy
-	require.NoError(t, enforcer.LoadPolicy())
+	err = enforcer.RemoveRoleForUser(userID.String(), "tester", "default")
+	require.NoError(t, err)
 
 	// User should no longer have permission
 	allowed, err = enforcer.Enforce(userID.String(), "default", "test", "action")
@@ -132,21 +87,13 @@ func TestPermission_Cache_Layer(t *testing.T) {
 	enforcer, err := permission.NewEnforcer(suite.DB)
 	require.NoError(t, err, "NewEnforcer should succeed")
 
-	// Create test user with permission
+	// Create test user with permission via enforcer API
 	userID := uuid.New()
-	roleID := uuid.New()
-	permID := uuid.New()
 
-	perm := &domain.Permission{ID: permID, Name: "cache:test", Resource: "cache", Action: "test", Scope: "all"}
-	require.NoError(t, suite.DB.Create(perm).Error)
-
-	role := &domain.Role{ID: roleID, Name: "cache-role"}
-	require.NoError(t, suite.DB.Create(role).Error)
-
-	require.NoError(t, suite.DB.Create(&domain.RolePermission{RoleID: roleID, PermissionID: permID}).Error)
-	require.NoError(t, suite.DB.Create(&domain.UserRole{UserID: userID, RoleID: roleID}).Error)
-
-	require.NoError(t, enforcer.LoadPolicy())
+	err = enforcer.AddPolicy("cache-role", "default", "cache", "test")
+	require.NoError(t, err)
+	err = enforcer.AddRoleForUser(userID.String(), "cache-role", "default")
+	require.NoError(t, err)
 
 	// First check - should query Casbin
 	allowed, err := enforcer.Enforce(userID.String(), "default", "cache", "test")
@@ -169,19 +116,14 @@ func TestPermission_Domain_BasedEnforcement(t *testing.T) {
 
 	userA := uuid.New()
 	userB := uuid.New()
-	adminRoleID := uuid.New()
 
-	// Create admin role with all scope
-	permAll := &domain.Permission{ID: uuid.New(), Name: "invoice:view:all", Resource: "invoice", Action: "view", Scope: "all"}
-	require.NoError(t, suite.DB.Create(permAll).Error)
+	// Add policy: admin role can view invoices in domain "default"
+	err = enforcer.AddPolicy("admin", "default", "invoice", "view")
+	require.NoError(t, err)
 
-	adminRole := &domain.Role{ID: adminRoleID, Name: "admin"}
-	require.NoError(t, suite.DB.Create(adminRole).Error)
-
-	require.NoError(t, suite.DB.Create(&domain.RolePermission{RoleID: adminRoleID, PermissionID: permAll.ID}).Error)
-	require.NoError(t, suite.DB.Create(&domain.UserRole{UserID: userA, RoleID: adminRoleID}).Error)
-
-	require.NoError(t, enforcer.LoadPolicy())
+	// Assign userA to admin role
+	err = enforcer.AddRoleForUser(userA.String(), "admin", "default")
+	require.NoError(t, err)
 
 	// Admin user should be able to view all invoices
 	allowed, err := enforcer.Enforce(userA.String(), "default", "invoice", "view")
@@ -253,23 +195,14 @@ func TestPermission_AddRoleForUser(t *testing.T) {
 	require.NoError(t, err, "NewEnforcer should succeed")
 
 	userID := uuid.New()
-	roleID := uuid.New()
-	permID := uuid.New()
 
-	// Create permission and role in DB
-	perm := &domain.Permission{ID: permID, Name: "doc:edit", Resource: "doc", Action: "edit", Scope: "all"}
-	require.NoError(t, suite.DB.Create(perm).Error)
-
-	role := &domain.Role{ID: roleID, Name: "editor"}
-	require.NoError(t, suite.DB.Create(role).Error)
-
-	require.NoError(t, suite.DB.Create(&domain.RolePermission{RoleID: roleID, PermissionID: permID}).Error)
-
-	// Add role for user via enforcer
-	err = enforcer.AddRoleForUser(userID.String(), roleID.String(), "default")
+	// Add policy: editor role can edit docs
+	err = enforcer.AddPolicy("editor", "default", "doc", "edit")
 	require.NoError(t, err)
 
-	require.NoError(t, enforcer.LoadPolicy())
+	// Add role for user via enforcer
+	err = enforcer.AddRoleForUser(userID.String(), "editor", "default")
+	require.NoError(t, err)
 
 	// Verify user has permission through role
 	allowed, err := enforcer.Enforce(userID.String(), "default", "doc", "edit")
@@ -285,20 +218,12 @@ func TestPermission_RemoveRoleForUser(t *testing.T) {
 	require.NoError(t, err, "NewEnforcer should succeed")
 
 	userID := uuid.New()
-	roleID := uuid.New()
-	permID := uuid.New()
 
-	// Setup
-	perm := &domain.Permission{ID: permID, Name: "doc:delete", Resource: "doc", Action: "delete", Scope: "all"}
-	require.NoError(t, suite.DB.Create(perm).Error)
-
-	role := &domain.Role{ID: roleID, Name: "deleter"}
-	require.NoError(t, suite.DB.Create(role).Error)
-
-	require.NoError(t, suite.DB.Create(&domain.RolePermission{RoleID: roleID, PermissionID: permID}).Error)
-	require.NoError(t, suite.DB.Create(&domain.UserRole{UserID: userID, RoleID: roleID}).Error)
-
-	require.NoError(t, enforcer.LoadPolicy())
+	// Add policy and role
+	err = enforcer.AddPolicy("deleter", "default", "doc", "delete")
+	require.NoError(t, err)
+	err = enforcer.AddRoleForUser(userID.String(), "deleter", "default")
+	require.NoError(t, err)
 
 	// Verify initial permission
 	allowed, err := enforcer.Enforce(userID.String(), "default", "doc", "delete")
@@ -306,10 +231,8 @@ func TestPermission_RemoveRoleForUser(t *testing.T) {
 	assert.True(t, allowed)
 
 	// Remove role via enforcer
-	err = enforcer.RemoveRoleForUser(userID.String(), roleID.String(), "default")
+	err = enforcer.RemoveRoleForUser(userID.String(), "deleter", "default")
 	require.NoError(t, err)
-
-	require.NoError(t, enforcer.LoadPolicy())
 
 	// Verify permission removed
 	allowed, err = enforcer.Enforce(userID.String(), "default", "doc", "delete")

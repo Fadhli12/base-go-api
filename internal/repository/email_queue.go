@@ -227,6 +227,7 @@ func (r *emailQueueRepository) MarkFailed(ctx context.Context, id uuid.UUID, err
 		Updates(map[string]interface{}{
 			"status":     domain.EmailStatusFailed,
 			"last_error": err.Error(),
+			"attempts":   gorm.Expr("attempts + ?", 1),
 		})
 	if result.Error != nil {
 		return errors.WrapInternal(result.Error)

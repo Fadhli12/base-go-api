@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/example/go-api-base/internal/http/middleware"
 	"github.com/labstack/echo/v4"
 )
 
@@ -21,8 +22,8 @@ type SessionResponse struct {
 // ListSessions returns all active sessions for the authenticated user
 func (h *AuthHandler) ListSessions(c echo.Context) error {
 	// Get authenticated user ID from context
-	userID, ok := c.Get("userID").(uuid.UUID)
-	if !ok {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "User not authenticated")
 	}
 
@@ -33,7 +34,7 @@ func (h *AuthHandler) ListSessions(c echo.Context) error {
 	}
 
 	// Get current session token from context
-	currentTokenID, _ := c.Get("tokenID").(uuid.UUID)
+	currentTokenID, _ := middleware.GetTokenID(c)
 
 	// Convert to response format
 	response := make([]SessionResponse, len(sessions))
@@ -57,8 +58,8 @@ func (h *AuthHandler) ListSessions(c echo.Context) error {
 // RevokeSession revokes a specific session by ID
 func (h *AuthHandler) RevokeSession(c echo.Context) error {
 	// Get authenticated user ID from context
-	userID, ok := c.Get("userID").(uuid.UUID)
-	if !ok {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "User not authenticated")
 	}
 
@@ -70,7 +71,7 @@ func (h *AuthHandler) RevokeSession(c echo.Context) error {
 	}
 
 	// Get current session token from context
-	currentTokenID, _ := c.Get("tokenID").(uuid.UUID)
+	currentTokenID, _ := middleware.GetTokenID(c)
 
 	// Prevent revoking current session (use logout for that)
 	if sessionID == currentTokenID {
@@ -92,13 +93,13 @@ func (h *AuthHandler) RevokeSession(c echo.Context) error {
 // RevokeAllOtherSessions revokes all sessions except the current one
 func (h *AuthHandler) RevokeAllOtherSessions(c echo.Context) error {
 	// Get authenticated user ID from context
-	userID, ok := c.Get("userID").(uuid.UUID)
-	if !ok {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "User not authenticated")
 	}
 
 	// Get current session token from context
-	currentTokenID, ok := c.Get("tokenID").(uuid.UUID)
+	currentTokenID, ok := middleware.GetTokenID(c)
 	if !ok {
 		// If we don't have the token ID, revoke all sessions
 		currentTokenID = uuid.Nil

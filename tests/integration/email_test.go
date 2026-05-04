@@ -393,6 +393,12 @@ func TestEmailTemplate_Rendering(t *testing.T) {
 		err := templateRepo.Create(ctx, template)
 		require.NoError(t, err)
 
+		// GORM Create skips bool zero-value when default:true tag is present;
+		// update explicitly so the template is actually inactive.
+		template.IsActive = false
+		err = templateRepo.Update(ctx, template)
+		require.NoError(t, err)
+
 		cfg := &config.EmailConfig{RetryMax: 5}
 		queueRepo := repository.NewEmailQueueRepository(suite.DB)
 		bounceRepo := repository.NewEmailBounceRepository(suite.DB)

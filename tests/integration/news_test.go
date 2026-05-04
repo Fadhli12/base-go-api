@@ -15,7 +15,6 @@ import (
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/handler"
 	"github.com/example/go-api-base/internal/http/middleware"
-	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
 	"github.com/golang-jwt/jwt/v5"
@@ -40,7 +39,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 	// Create a test user
 	authorID := uuid.New()
 	authorEmail := "author@example.com"
-	createTestUser(t, suite.DB, authorID, authorEmail)
+	createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 	// Create Echo instance and register routes
 	e := echo.New()
@@ -51,7 +50,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Create News Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		reqBody := map[string]interface{}{
 			"title":   "Test News Article",
@@ -83,7 +82,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Get News by ID", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create a news article first
 		news := createTestNews(t, suite.DB, authorID, "Test Article", domain.NewsStatusDraft)
@@ -108,7 +107,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Get News by Slug", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create a published news article
 		news := createTestNews(t, suite.DB, authorID, "Published Article", domain.NewsStatusPublished)
@@ -133,7 +132,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("List News Articles", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create multiple news articles
 		createTestNews(t, suite.DB, authorID, "Article 1", domain.NewsStatusDraft)
@@ -160,7 +159,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Update News Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create a news article first
 		news := createTestNews(t, suite.DB, authorID, "Original Title", domain.NewsStatusDraft)
@@ -190,7 +189,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Update News Status", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create a draft news article
 		news := createTestNews(t, suite.DB, authorID, "Draft Article", domain.NewsStatusDraft)
@@ -220,7 +219,7 @@ func TestNews_CRUD_Full(t *testing.T) {
 
 	t.Run("Delete News Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create a news article first
 		news := createTestNews(t, suite.DB, authorID, "Article to Delete", domain.NewsStatusDraft)
@@ -260,8 +259,8 @@ func TestNews_PermissionEnforcement(t *testing.T) {
 	authorEmail := "author@example.com"
 	otherUserID := uuid.New()
 	otherUserEmail := "other@example.com"
-	createTestUser(t, suite.DB, authorID, authorEmail)
-	createTestUser(t, suite.DB, otherUserID, otherUserEmail)
+	createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
+	createTestUserWithMockHash(t, suite.DB, otherUserID, otherUserEmail)
 
 	// Create Echo instance
 	e := echo.New()
@@ -270,8 +269,8 @@ func TestNews_PermissionEnforcement(t *testing.T) {
 
 	t.Run("Non-owner Cannot Access Other's Draft", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
-		createTestUser(t, suite.DB, otherUserID, otherUserEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, otherUserID, otherUserEmail)
 
 		// Create a draft article by author
 		news := createTestNews(t, suite.DB, authorID, "Private Draft", domain.NewsStatusDraft)
@@ -288,8 +287,8 @@ func TestNews_PermissionEnforcement(t *testing.T) {
 
 	t.Run("Non-owner Can Access Published Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
-		createTestUser(t, suite.DB, otherUserID, otherUserEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, otherUserID, otherUserEmail)
 
 		// Create a published article by author
 		news := createTestNews(t, suite.DB, authorID, "Public Article", domain.NewsStatusPublished)
@@ -306,8 +305,8 @@ func TestNews_PermissionEnforcement(t *testing.T) {
 
 	t.Run("Non-owner Cannot Update Other's Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
-		createTestUser(t, suite.DB, otherUserID, otherUserEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, otherUserID, otherUserEmail)
 
 		// Create an article by author
 		news := createTestNews(t, suite.DB, authorID, "Author Article", domain.NewsStatusDraft)
@@ -328,8 +327,8 @@ func TestNews_PermissionEnforcement(t *testing.T) {
 
 	t.Run("Non-owner Cannot Delete Other's Article", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
-		createTestUser(t, suite.DB, otherUserID, otherUserEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, otherUserID, otherUserEmail)
 
 		// Create an article by author
 		news := createTestNews(t, suite.DB, authorID, "Author Article", domain.NewsStatusDraft)
@@ -357,7 +356,7 @@ func TestNews_StatusTransitions(t *testing.T) {
 
 	authorID := uuid.New()
 	authorEmail := "author@example.com"
-	createTestUser(t, suite.DB, authorID, authorEmail)
+	createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 	e := echo.New()
 	api := e.Group("/api/v1")
@@ -365,7 +364,7 @@ func TestNews_StatusTransitions(t *testing.T) {
 
 	t.Run("Draft to Published", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create draft
 		news := createTestNews(t, suite.DB, authorID, "Draft", domain.NewsStatusDraft)
@@ -386,7 +385,7 @@ func TestNews_StatusTransitions(t *testing.T) {
 
 	t.Run("Draft to Archived", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create draft
 		news := createTestNews(t, suite.DB, authorID, "Draft to Archive", domain.NewsStatusDraft)
@@ -407,7 +406,7 @@ func TestNews_StatusTransitions(t *testing.T) {
 
 	t.Run("Archived to Draft", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create archived
 		news := createTestNews(t, suite.DB, authorID, "Archived", domain.NewsStatusArchived)
@@ -428,7 +427,7 @@ func TestNews_StatusTransitions(t *testing.T) {
 
 	t.Run("Archived to Published - Invalid", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		// Create archived
 		news := createTestNews(t, suite.DB, authorID, "Archived Invalid", domain.NewsStatusArchived)
@@ -460,7 +459,7 @@ func TestNews_Validation(t *testing.T) {
 
 	authorID := uuid.New()
 	authorEmail := "author@example.com"
-	createTestUser(t, suite.DB, authorID, authorEmail)
+	createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 	e := echo.New()
 	api := e.Group("/api/v1")
@@ -468,7 +467,7 @@ func TestNews_Validation(t *testing.T) {
 
 	t.Run("Create with Empty Title", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		reqBody := map[string]interface{}{
 			"title":   "",
@@ -488,7 +487,7 @@ func TestNews_Validation(t *testing.T) {
 
 	t.Run("Create with Empty Content", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		reqBody := map[string]interface{}{
 			"title":   "Title",
@@ -508,7 +507,7 @@ func TestNews_Validation(t *testing.T) {
 
 	t.Run("Update with Invalid Status", func(t *testing.T) {
 		suite.SetupTest(t)
-		createTestUser(t, suite.DB, authorID, authorEmail)
+		createTestUserWithMockHash(t, suite.DB, authorID, authorEmail)
 
 		news := createTestNews(t, suite.DB, authorID, "Test", domain.NewsStatusDraft)
 
@@ -524,14 +523,14 @@ func TestNews_Validation(t *testing.T) {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 
-		// Should succeed update but status won't change
-		assert.Equal(t, http.StatusOK, rec.Code)
+		// Should reject update with invalid status
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 }
 
 // Helper functions
 
-func createTestUser(t *testing.T, db *gorm.DB, id uuid.UUID, email string) {
+func createTestUserWithMockHash(t *testing.T, db *gorm.DB, id uuid.UUID, email string) {
 	hash := "$2a$12$abcdefghijklmnopqrstuvwxyc12345678901234567890" // Mock bcrypt hash
 	user := &domain.User{
 		ID:           id,

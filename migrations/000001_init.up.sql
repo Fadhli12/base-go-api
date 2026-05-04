@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS permissions (
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    assigned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    assigned_by UUID,
     PRIMARY KEY (user_id, role_id)
 );
 
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE TABLE IF NOT EXISTS role_permissions (
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    assigned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     PRIMARY KEY (role_id, permission_id)
 );
 
@@ -62,7 +63,8 @@ CREATE TABLE IF NOT EXISTS user_permissions (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
     effect VARCHAR(10) NOT NULL CHECK (effect IN ('allow', 'deny')),
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    assigned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    assigned_by UUID,
     UNIQUE (user_id, permission_id)
 );
 

@@ -1,0 +1,130 @@
+{
+  "project": "Notification System Feature",
+  "description": "In-app notifications with optional email delivery, per-user preferences, and archiving",
+  "stories": [
+    {
+      "id": "NOTIF-001",
+      "title": "Database schema & domain entities",
+      "description": "Create migrations and domain models for notifications and preferences",
+      "acceptanceCriteria": [
+        "migrations/000012_notifications.up.sql creates notifications table with archived_at, read_at, created_at, updated_at columns",
+        "notifications table has partial index idx_notifications_archived ON (user_id, archived_at) WHERE archived_at IS NULL",
+        "notification_preferences table has unique constraint on (user_id, notification_type)",
+        "internal/domain/notification.go defines NotificationType const and IsValidNotificationType() func",
+        "Notification struct has fields: ID, UserID, Type, Title, Message, ActionURL, ReadAt, ArchivedAt, CreatedAt, UpdatedAt",
+        "Notification has TableName(), ToResponse(), IsRead(), IsArchived(), MarkRead(), Archive() methods",
+        "internal/domain/notification_preference.go defines NotificationPreference struct with TableName(), ToResponse()",
+        "down migration (000012_notifications.down.sql) drops both tables cleanly",
+        "make migrate runs without errors and creates both tables"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-002",
+      "title": "Repository layer implementation",
+      "description": "Implement NotificationRepository and NotificationPreferenceRepository interfaces and implementations",
+      "acceptanceCriteria": [
+        "internal/repository/notification.go defines NotificationRepository interface with 10 methods",
+        "NotificationRepository.FindByUserID filters archived_at IS NULL and returns paginated results",
+        "NotificationRepository.MarkAllAsRead accepts optional notifType *string parameter for type filtering",
+        "NotificationRepository.ArchiveByID updates archived_at instead of hard delete",
+        "All repository methods use context.Context as first parameter",
+        "internal/repository/notification_preference.go implements Upsert with INSERT ... ON CONFLICT",
+        "Both repositories use errors.WrapInternal() and errors.ErrNotFound for error handling",
+        "NotificationRepository implementation has NewNotificationRepository(db) constructor",
+        "Unit tests for soft delete filtering (archived notifications don't appear in Find results)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-003",
+      "title": "Service layer with rate limiting & email integration",
+      "description": "Implement NotificationService with Send, SendBulk, MarkAsRead, MarkAllAsRead, and preference management",
+      "acceptanceCriteria": [
+        "internal/service/notification.go defines NotificationService with 10 methods",
+        "Send() method validates notifType, checks rate limit (100/hour per user), creates notification",
+        "Send() method checks user preferences and queues email if EmailEnabled=true",
+        "Send() method uses default preferences (email enabled for system/assignment/mention, disabled for invoice/news)",
+        "Send() succeeds even if email queuing fails (email errors logged, not propagated)",
+        "SendBulk() creates notifications for multiple users and logs individual errors",
+        "MarkAllAsRead() accepts optional notifType parameter and filters by type if provided",
+        "Service constructor NewNotificationService(notifRepo, prefRepo, emailService, userRepo, cache)",
+        "Rate limiting uses Redis cache key notifications:user:{userID}:hourly with 1-hour TTL",
+        "Cache failures are logged but don't block notification creation (fail-open behavior)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-004",
+      "title": "HTTP handler and request validation",
+      "description": "Implement NotificationHandler with 7 endpoints and request/response types",
+      "acceptanceCriteria": [
+        "internal/http/request/notification.go defines UpdateNotificationPreferenceRequest with validator tags",
+        "internal/http/handler/notification.go defines NotificationHandler struct and NewNotificationHandler(service)",
+        "Handler.List (GET /api/v1/notifications) supports limit, offset, unread_only query params",
+        "Handler.CountUnread (GET /api/v1/notifications/unread-count) returns {unread_count: N}",
+        "Handler.MarkAsRead (PATCH /api/v1/notifications/:id/read) marks single notification as read",
+        "Handler.MarkAllAsRead (POST /api/v1/notifications/read-all) supports optional type query param",
+        "Handler.Archive (DELETE /api/v1/notifications/:id) archives notification via archived_at",
+        "Handler.GetPreferences (GET /api/v1/notifications/preferences) returns user's preferences",
+        "Handler.UpdatePreference (PUT /api/v1/notifications/preferences) creates/updates preferences",
+        "All handlers extract userID from JWT context (never client-supplied)",
+        "All handlers return response.Envelope format with proper error mapping via apperrors.GetAppError()"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-005",
+      "title": "Application wiring and permissions",
+      "description": "Wire routes, DI, and seed notification permissions",
+      "acceptanceCriteria": [
+        "internal/http/server.go has RegisterNotificationRoutes() method following RegisterEmailRoutes pattern",
+        "RegisterNotificationRoutes() uses JWT middleware but NOT RequirePermission (ownership-based)",
+        "Route group applies audit middleware to all routes",
+        "RegisterRoutes() in server.go initializes notificationRepo, prefRepo, service, handler",
+        "cmd/api/main.go seeds permissions: notifications:view (own), notifications:manage (own)",
+        "Both permissions added to viewerPermissions and adminPermissions in seed data",
+        "tests/integration/testsuite.go includes notification tables in migration and cleanup",
+        "Server successfully starts with no DI errors",
+        "make seed runs and seeds notification permissions without errors"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-006",
+      "title": "Integration tests",
+      "description": "Write comprehensive integration tests covering all endpoints and edge cases",
+      "acceptanceCriteria": [
+        "tests/integration/notification_handler_test.go exists with //go:build integration",
+        "TestNotificationHandler_List verifies pagination and unread_only filter",
+        "TestNotificationHandler_List verifies archived notifications are hidden",
+        "TestNotificationHandler_CountUnread correctly counts unread notifications",
+        "TestNotificationHandler_MarkAsRead sets read_at timestamp",
+        "TestNotificationHandler_MarkAllAsRead with optional type filter marks only specified type",
+        "TestNotificationHandler_Archive sets archived_at and hides from list",
+        "TestNotificationHandler_Preferences tests GET and PUT endpoints",
+        "Tests verify user cannot see/modify other users' notifications",
+        "Tests verify unauthenticated requests return 401",
+        "All integration tests pass: go test -tags=integration ./tests/integration/notification_handler_test.go",
+        "Rate limiting prevents 101st notification in same hour"
+      ],
+      "passes": true
+    },
+    {
+      "id": "NOTIF-007",
+      "title": "Swagger documentation and final verification",
+      "description": "Add Swagger annotations and regenerate documentation",
+      "acceptanceCriteria": [
+        "All 7 handler methods have @Summary, @Description, @Tags, @Security, @Param annotations",
+        "All handlers have @Success and @Failure response annotations",
+        "swag init -g cmd/api/main.go -o docs/swagger succeeds without errors",
+        "docs/swagger/swagger.json includes /notifications endpoints",
+        "TypeScript compile check: go build ./cmd/api succeeds",
+        "All lsp_diagnostics on modified/new files show 0 errors",
+        "No breaking changes to existing services or routes",
+        "Success criteria verified: all endpoints respond with envelope format, user-scoped, read/unread tracking works, archiving works, rate limiting works, email integration works"
+      ],
+      "passes": false
+    }
+  ]
+}

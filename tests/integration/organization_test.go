@@ -39,7 +39,7 @@ func TestOrganizationService_Create_ValidData(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Test Create
 	settings := map[string]interface{}{"theme": "dark"}
@@ -75,7 +75,7 @@ func TestOrganizationService_Create_DuplicateSlug(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create first organization
 	_, err := orgService.CreateOrganization(ctx, user.ID, "Org One", "duplicate-slug", nil, "127.0.0.1", "test-agent")
@@ -103,7 +103,7 @@ func TestOrganizationService_Create_InvalidInput(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	tests := []struct {
 		name    string
@@ -141,7 +141,7 @@ func TestOrganizationService_GetByID(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -167,12 +167,13 @@ func TestOrganizationService_GetByID_NotFound(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	nonExistentID := uuid.New()
 	_, err := orgService.GetOrganization(ctx, user.ID, nonExistentID)
 	require.Error(t, err, "Should fail for non-existent organization")
-	assert.True(t, errors.Is(err, apperrors.ErrNotFound), "Should be ErrNotFound")
+	// Service returns FORBIDDEN (not NOT_FOUND) to prevent information leakage
+	assert.True(t, errors.Is(err, apperrors.ErrForbidden), "Should be FORBIDDEN (access denied)")
 }
 
 // TestOrganizationService_GetByID_NotMember tests retrieving organization without membership
@@ -189,7 +190,7 @@ func TestOrganizationService_GetByID_NotMember(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -217,7 +218,7 @@ func TestOrganizationService_List(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create multiple organizations
 	for i := 1; i <= 3; i++ {
@@ -245,7 +246,7 @@ func TestOrganizationService_List_Pagination(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create 5 organizations
 	for i := 1; i <= 5; i++ {
@@ -278,7 +279,7 @@ func TestOrganizationService_Update(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Original Name", "original-slug", nil, "127.0.0.1", "test-agent")
@@ -305,7 +306,7 @@ func TestOrganizationService_Update_NotFound(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	nonExistentID := uuid.New()
 	_, err := orgService.UpdateOrganization(ctx, user.ID, nonExistentID, "Name", "slug", nil, "127.0.0.1", "test-agent")
@@ -326,7 +327,7 @@ func TestOrganizationService_Update_NotMember(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -353,7 +354,7 @@ func TestOrganizationService_Delete(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -381,7 +382,7 @@ func TestOrganizationService_Delete_NotFound(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	nonExistentID := uuid.New()
 	err := orgService.DeleteOrganization(ctx, user.ID, nonExistentID, "127.0.0.1", "test-agent")
@@ -406,7 +407,7 @@ func TestOrganizationMember_Add(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -443,7 +444,7 @@ func TestOrganizationMember_Add_AlreadyMember(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization (owner is automatically a member)
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -473,7 +474,7 @@ func TestOrganizationMember_Add_InvalidRole(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -504,7 +505,7 @@ func TestOrganizationMember_GetMembers(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -547,7 +548,7 @@ func TestOrganizationMember_Remove(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization and add member
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -584,7 +585,7 @@ func TestOrganizationMember_Remove_Owner(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -620,7 +621,7 @@ func TestOrganization_PermissionHierarchy(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create organization
 	org, err := orgService.CreateOrganization(ctx, owner.ID, "Test Org", "test-org", nil, "127.0.0.1", "test-agent")
@@ -663,7 +664,7 @@ func TestOrganization_CasbinDomainIsolation(t *testing.T) {
 	orgRepo := repository.NewOrganizationRepository(suite.DB)
 	auditRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditRepo, service.DefaultAuditServiceConfig())
-	orgService := service.NewOrganizationService(orgRepo, enforcer, auditService, createOrgTestLogger())
+	orgService := service.NewOrganizationService(orgRepo, nil, enforcer, auditService, nil, createOrgTestLogger())
 
 	// Create two organizations
 	org1, err := orgService.CreateOrganization(ctx, owner1.ID, "Org One", "org-one", nil, "127.0.0.1", "test-agent")

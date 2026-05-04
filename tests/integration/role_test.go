@@ -280,10 +280,13 @@ func createSystemRoleInDB(t *testing.T, suite *TestSuite, name, description stri
 	`, name, description)
 	require.NoError(t, result.Error)
 
-	var id uuid.UUID
+	var idStr string
 	err := suite.DB.Raw(`
 		SELECT id FROM roles WHERE name = $1
-	`, name).Scan(&id).Error
+	`, name).Scan(&idStr).Error
+	require.NoError(t, err)
+
+	id, err := uuid.Parse(idStr)
 	require.NoError(t, err)
 
 	return id

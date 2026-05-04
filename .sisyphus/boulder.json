@@ -1,0 +1,19 @@
+{
+  "active_plan": "C:\\Development\\base\\go-api\\.sisyphus\\plans\\api-testing-plan.md",
+  "started_at": "2026-04-30T10:23:41.445Z",
+  "session_ids": [
+    "ses_222e39bb0ffehtd90uXJHQy2K4",
+    "ses_22211bc29ffeYMNTSkuWnkTHUw",
+    "ses_221b4910effeXsk67gINj5Mbr9",
+    "ses_221aa63dfffeu3hyh9TM8S1OpE",
+    "ses_221a2ae9dffe5tBK9XWUXKVz13",
+    "ses_22191d6afffe6qY5QXe0KtxcCo",
+    "ses_2217d3c22ffebHU4DvgtKEy8gx",
+    "ses_2217da127ffe5csH9wbW9c4McJ",
+    "ses_2216a866bffezv3u2gbe2c6vuY",
+    "ses_2216b0238ffeU7u4HCrpIUU4Hd"
+  ],
+  "plan_name": "api-testing-plan",
+  "agent": "Sisyphus (Ultraworker)",
+  "task_sessions": {}
+}

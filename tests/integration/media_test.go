@@ -11,7 +11,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/example/go-api-base/internal/auth"
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/handler"
 	"github.com/example/go-api-base/internal/permission"
@@ -25,22 +27,18 @@ import (
 	"gorm.io/gorm"
 )
 
+const mediaJWTSeret = "test-jwt-secret"
+
 // TestMediaUpload tests the complete media upload flow
 func TestMediaUpload(t *testing.T) {
 	suite := NewTestSuite(t)
 	defer suite.Cleanup()
 	suite.RunMigrations(t)
-
-	// Add media tables to migrations
 	createMediaTables(t, suite.DB)
 
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	// Create test user
-	user := createTestUserForMedia(t, suite.DB)
-
-	// Setup storage (use temp directory for tests)
 	tempDir, err := os.MkdirTemp("", "media-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
@@ -52,39 +50,36 @@ func TestMediaUpload(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Setup services
 	mediaRepo := repository.NewMediaRepository(suite.DB)
 	mediaService := service.NewMediaService(mediaRepo, enforcer, storageDriver, "test-signing-secret")
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
-	// Register routes
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
 
 	t.Run("successful upload", func(t *testing.T) {
 		suite.SetupTest(t)
 		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
-		// Create multipart form
 		var b bytes.Buffer
 		writer := multipart.NewWriter(&b)
 		err := writer.WriteField("collection", "test-collection")
 		require.NoError(t, err)
 
-		// Create test file
 		part, err := writer.CreateFormFile("file", "test-image.jpg")
 		require.NoError(t, err)
-		_, err = part.Write([]byte("fake-image-data-jpeg-header"))
+		_, err = part.Write([]byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01})
 		require.NoError(t, err)
 		writer.Close()
 
-		// Create request
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/models/news/"+uuid.New().String()+"/media", &b)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -95,11 +90,12 @@ func TestMediaUpload(t *testing.T) {
 
 	t.Run("unauthorized upload", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
 
 		var b bytes.Buffer
 		writer := multipart.NewWriter(&b)
 		part, _ := writer.CreateFormFile("file", "test.txt")
-		part.Write([]byte("test content"))
+		part.Write([]byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01})
 		writer.Close()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/models/news/"+uuid.New().String()+"/media", &b)
@@ -113,16 +109,19 @@ func TestMediaUpload(t *testing.T) {
 
 	t.Run("invalid model ID", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
 		var b bytes.Buffer
 		writer := multipart.NewWriter(&b)
 		part, _ := writer.CreateFormFile("file", "test.txt")
-		part.Write([]byte("test content"))
+		part.Write([]byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01})
 		writer.Close()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/models/news/invalid-uuid/media", &b)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -141,9 +140,6 @@ func TestMediaDownload(t *testing.T) {
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	user := createTestUserForMedia(t, suite.DB)
-
-	// Setup storage
 	tempDir, err := os.MkdirTemp("", "media-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
@@ -155,26 +151,23 @@ func TestMediaDownload(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Create test file in storage
-	testContent := []byte("test-image-data-jpeg-header-for-download-test")
-	err = storageDriver.Store(nil, "news/"+uuid.New().String()+"/test-file.jpg", bytes.NewReader(testContent))
-	require.NoError(t, err)
-
 	mediaRepo := repository.NewMediaRepository(suite.DB)
 	mediaService := service.NewMediaService(mediaRepo, enforcer, storageDriver, "test-signing-secret")
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
+
+	jpegBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01}
 
 	t.Run("download existing media", func(t *testing.T) {
 		suite.SetupTest(t)
 		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
 
-		// Create a media record
 		media := &domain.Media{
 			ModelType:        "news",
 			ModelID:          uuid.New(),
@@ -183,19 +176,21 @@ func TestMediaDownload(t *testing.T) {
 			Filename:         "test-file.jpg",
 			OriginalFilename: "test-file.jpg",
 			MimeType:         "image/jpeg",
-			Size:             int64(len(testContent)),
+			Size:             int64(len(jpegBytes)),
 			Path:             "news/" + uuid.New().String() + "/test-file.jpg",
 			UploadedByID:     user.ID,
 		}
 		err := suite.DB.Create(media).Error
 		require.NoError(t, err)
 
-		// Store file
-		err = storageDriver.Store(nil, media.Path, bytes.NewReader(testContent))
+		err = storageDriver.Store(nil, media.Path, bytes.NewReader(jpegBytes))
 		require.NoError(t, err)
 
-		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s/download", media.ID), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		signer := storage.NewSigner("test-signing-secret")
+		signedURL, err := signer.Generate(media.ID.String(), media.Path, time.Hour)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1%s", signedURL.URL), nil)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -206,9 +201,13 @@ func TestMediaDownload(t *testing.T) {
 
 	t.Run("download non-existent media", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
 
-		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s/download", uuid.New()), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		signer := storage.NewSigner("test-signing-secret")
+		signedURL, err := signer.Generate(uuid.New().String(), "news/fake/path.jpg", time.Hour)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1%s", signedURL.URL), nil)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -227,8 +226,6 @@ func TestMediaDelete(t *testing.T) {
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	user := createTestUserForMedia(t, suite.DB)
-
 	tempDir, err := os.MkdirTemp("", "media-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
@@ -244,14 +241,16 @@ func TestMediaDelete(t *testing.T) {
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
 
 	t.Run("delete own media", func(t *testing.T) {
 		suite.SetupTest(t)
 		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
 		media := &domain.Media{
 			ModelType:        "news",
@@ -268,14 +267,13 @@ func TestMediaDelete(t *testing.T) {
 		suite.DB.Create(media)
 
 		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%s", media.ID), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
 
-		// Verify soft delete
 		var deletedMedia domain.Media
 		err := suite.DB.Unscoped().First(&deletedMedia, "id = ?", media.ID).Error
 		require.NoError(t, err)
@@ -284,9 +282,12 @@ func TestMediaDelete(t *testing.T) {
 
 	t.Run("delete non-existent media", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
 		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/media/%s", uuid.New()), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -305,8 +306,6 @@ func TestMediaList(t *testing.T) {
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	user := createTestUserForMedia(t, suite.DB)
-
 	tempDir, _ := os.MkdirTemp("", "media-test-*")
 	defer os.RemoveAll(tempDir)
 
@@ -321,14 +320,16 @@ func TestMediaList(t *testing.T) {
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
 
 	t.Run("list media for model", func(t *testing.T) {
 		suite.SetupTest(t)
 		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
 		modelID := uuid.New()
 
@@ -350,7 +351,7 @@ func TestMediaList(t *testing.T) {
 		}
 
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/models/news/%s/media", modelID), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -370,8 +371,6 @@ func TestMediaSignedURL(t *testing.T) {
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	user := createTestUserForMedia(t, suite.DB)
-
 	tempDir, _ := os.MkdirTemp("", "media-test-*")
 	defer os.RemoveAll(tempDir)
 
@@ -386,14 +385,16 @@ func TestMediaSignedURL(t *testing.T) {
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
 
 	t.Run("generate signed URL", func(t *testing.T) {
 		suite.SetupTest(t)
 		createMediaTables(t, suite.DB)
+		user := createTestUserForMedia(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
 
 		media := &domain.Media{
 			ModelType:        "news",
@@ -410,7 +411,7 @@ func TestMediaSignedURL(t *testing.T) {
 		suite.DB.Create(media)
 
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/media/%s/url", media.ID), nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(user.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -431,9 +432,6 @@ func TestMediaAdminEndpoints(t *testing.T) {
 	e := echo.New()
 	enforcer := setupTestEnforcer(t, suite.DB)
 
-	// Create admin user
-	adminUser := createTestUserForMedia(t, suite.DB)
-
 	tempDir, _ := os.MkdirTemp("", "media-test-*")
 	defer os.RemoveAll(tempDir)
 
@@ -448,16 +446,20 @@ func TestMediaAdminEndpoints(t *testing.T) {
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 
-	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer)
+	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")
-	mediaHandler.RegisterRoutes(v1, "test-jwt-secret")
+	mediaHandler.RegisterRoutes(v1, mediaJWTSeret)
 
 	t.Run("admin stats", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		adminUser := createTestUserForMedia(t, suite.DB, enforcer)
+		addMediaManagePermission(t, suite.DB, enforcer, adminUser.ID)
+		token := generateTestTokenForMedia(adminUser.ID)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/media/stats", nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(adminUser.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -468,9 +470,13 @@ func TestMediaAdminEndpoints(t *testing.T) {
 
 	t.Run("admin cleanup", func(t *testing.T) {
 		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		adminUser := createTestUserForMedia(t, suite.DB, enforcer)
+		addMediaManagePermission(t, suite.DB, enforcer, adminUser.ID)
+		token := generateTestTokenForMedia(adminUser.ID)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/media/cleanup?cutoff_hours=24", nil)
-		req.Header.Set("Authorization", "Bearer "+generateTestTokenForMedia(adminUser.ID))
+		req.Header.Set("Authorization", "Bearer "+token)
 
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
@@ -482,7 +488,6 @@ func TestMediaAdminEndpoints(t *testing.T) {
 
 // createMediaTables creates the necessary media tables for testing
 func createMediaTables(t *testing.T, db *gorm.DB) {
-	// Media tables migration
 	migration := `
 CREATE TABLE IF NOT EXISTS media (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -541,14 +546,135 @@ CREATE INDEX IF NOT EXISTS idx_media_downloads_downloaded_at ON media_downloads(
 }
 
 // createTestUserForMedia creates a test user
-func createTestUserForMedia(t *testing.T, db *gorm.DB) *domain.User {
+func createTestUserForMedia(t *testing.T, db *gorm.DB, enforcer *permission.Enforcer) *domain.User {
 	user := &domain.User{
 		Email:        fmt.Sprintf("test-%s@example.com", uuid.New().String()),
 		PasswordHash: "$2a$12$hashedpassword",
 	}
 	err := db.Create(user).Error
 	require.NoError(t, err)
+
+	// Grant media:upload, media:view, media:download, media:list permissions so media endpoints succeed
+	roleName := "media-user-" + user.ID.String()
+	err = db.Exec(`
+		INSERT INTO roles (id, name, description, created_at, updated_at)
+		VALUES (gen_random_uuid(), ?, 'Media user', NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`, roleName).Error
+	require.NoError(t, err)
+
+	actions := []string{"upload", "view", "download", "list", "manage"}
+	for _, action := range actions {
+		permName := "media:" + action
+		err = db.Exec(`
+			INSERT INTO permissions (id, name, resource, action, scope, created_at, updated_at)
+			VALUES (gen_random_uuid(), ?, 'media', ?, 'all', NOW(), NOW())
+			ON CONFLICT DO NOTHING
+		`, permName, action).Error
+		require.NoError(t, err)
+
+		var permIDStr string
+		err = db.Raw("SELECT id FROM permissions WHERE name = ?", permName).Scan(&permIDStr).Error
+		require.NoError(t, err)
+		permID, err := uuid.Parse(permIDStr)
+		require.NoError(t, err)
+
+		var roleIDStr string
+		err = db.Raw("SELECT id FROM roles WHERE name = ?", roleName).Scan(&roleIDStr).Error
+		require.NoError(t, err)
+		roleID, err := uuid.Parse(roleIDStr)
+		require.NoError(t, err)
+
+		err = db.Exec(`
+			INSERT INTO user_roles (user_id, role_id, assigned_at)
+			VALUES (?, ?, NOW())
+			ON CONFLICT DO NOTHING
+		`, user.ID, roleID).Error
+		require.NoError(t, err)
+		err = db.Exec(`
+			INSERT INTO role_permissions (role_id, permission_id, assigned_at)
+			VALUES (?, ?, NOW())
+			ON CONFLICT DO NOTHING
+		`, roleID, permID).Error
+		require.NoError(t, err)
+
+		if enforcer != nil {
+			_ = enforcer.AddPolicy(roleName, "default", "media", action)
+		}
+	}
+
+	if enforcer != nil {
+		_ = enforcer.AddRoleForUser(user.ID.String(), roleName, "default")
+		// In-memory policies already added above; LoadPolicy() would lose them
+		// because casbin_rule is empty after SetupTest truncation.
+	}
+
 	return user
+}
+
+// generateTestTokenForMedia creates a real JWT token for testing
+func generateTestTokenForMedia(userID uuid.UUID) string {
+	token, _ := auth.GenerateAccessTokenWithClaims(
+		userID.String(),
+		"test@example.com",
+		mediaJWTSeret,
+		15*time.Minute,
+		"",
+		"",
+	)
+	return token
+}
+
+// addMediaManagePermission creates a role with media:manage permission for the user
+func addMediaManagePermission(t *testing.T, db *gorm.DB, enforcer *permission.Enforcer, userID uuid.UUID) {
+	roleName := "media-admin-" + userID.String()
+	err := db.Exec(`
+		INSERT INTO roles (id, name, description, created_at, updated_at)
+		VALUES (gen_random_uuid(), ?, 'Media admin', NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`, roleName).Error
+	require.NoError(t, err)
+
+	permName := "media:manage"
+	err = db.Exec(`
+		INSERT INTO permissions (id, name, resource, action, scope, created_at, updated_at)
+		VALUES (gen_random_uuid(), ?, 'media', 'manage', 'all', NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`, permName).Error
+	require.NoError(t, err)
+
+	var roleIDStr string
+	err = db.Raw("SELECT id FROM roles WHERE name = ?", roleName).Scan(&roleIDStr).Error
+	require.NoError(t, err)
+	roleID, err := uuid.Parse(roleIDStr)
+	require.NoError(t, err)
+
+	var permIDStr string
+	err = db.Raw("SELECT id FROM permissions WHERE name = ?", permName).Scan(&permIDStr).Error
+	require.NoError(t, err)
+	permID, err := uuid.Parse(permIDStr)
+	require.NoError(t, err)
+
+	err = db.Exec(`
+		INSERT INTO user_roles (user_id, role_id, assigned_at)
+		VALUES (?, ?, NOW())
+		ON CONFLICT DO NOTHING
+	`, userID, roleID).Error
+	require.NoError(t, err)
+
+	err = db.Exec(`
+		INSERT INTO role_permissions (role_id, permission_id, assigned_at)
+		VALUES (?, ?, NOW())
+		ON CONFLICT DO NOTHING
+	`, roleID, permID).Error
+	require.NoError(t, err)
+
+	if enforcer != nil {
+		_ = enforcer.AddRoleForUser(userID.String(), roleName, "default")
+		_ = enforcer.AddPolicy(roleName, "default", "media", "manage")
+		// Do NOT call LoadPolicy() here: truncation from SetupTest() wiped casbin_rule,
+		// and reloading from DB would discard the in-memory policies we just added.
+	}
 }
 
 // setupTestEnforcer creates a test permission enforcer
@@ -556,11 +682,4 @@ func setupTestEnforcer(t *testing.T, db *gorm.DB) *permission.Enforcer {
 	enforcer, err := permission.NewEnforcer(db)
 	require.NoError(t, err)
 	return enforcer
-}
-
-// generateTestTokenForMedia creates a JWT token for testing
-func generateTestTokenForMedia(userID uuid.UUID) string {
-	// Simplified token generation for tests
-	// In production, use proper JWT library
-	return "test-token-for-" + userID.String()
 }

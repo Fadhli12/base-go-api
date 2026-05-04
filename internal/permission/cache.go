@@ -14,6 +14,9 @@ import (
 // CacheKeyPrefix is the prefix for all permission cache keys.
 const CacheKeyPrefix = "perm:"
 
+// ErrCacheMiss indicates that the requested key was not found in the cache.
+var ErrCacheMiss = fmt.Errorf("cache miss")
+
 // Cache provides cache-based caching for permission decisions.
 type Cache struct {
 	driver cache.Driver
@@ -41,7 +44,7 @@ func NewCache(driver cache.Driver, ttl time.Duration) *Cache {
 }
 
 // Get retrieves a cached permission decision.
-// Returns the decision and true if found, false and error if not found or on error.
+// Returns (allowed, ErrCacheMiss) on cache miss, (allowed, nil) on cache hit.
 func (c *Cache) Get(ctx context.Context, key string) (bool, error) {
 	result, err := c.driver.Get(ctx, key)
 	if err != nil {
@@ -50,7 +53,7 @@ func (c *Cache) Get(ctx context.Context, key string) (bool, error) {
 
 	if result == nil {
 		// Cache miss
-		return false, nil
+		return false, ErrCacheMiss
 	}
 
 	// Parse the result

@@ -3,16 +3,17 @@
 -- Created: 2026-04-22
 
 -- Create audit_logs table
+-- Note: resource_id is VARCHAR(100) to support both UUID and non-UUID resource identifiers
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
-    action VARCHAR(100) NOT NULL,
-    resource VARCHAR(100) NOT NULL,
-    resource_id UUID,
+    actor_id UUID,
+    action VARCHAR(20) NOT NULL,
+    resource VARCHAR(50) NOT NULL,
+    resource_id VARCHAR(100),
     before JSONB,
     after JSONB,
     ip_address VARCHAR(45),
-    user_agent TEXT,
+    user_agent VARCHAR(500),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 

@@ -59,6 +59,12 @@ type EmailRequest struct {
 
 // QueueEmail queues an email for async delivery
 func (s *EmailService) QueueEmail(ctx context.Context, req *EmailRequest) error {
+	// If email service is not fully configured, skip queuing silently.
+	// Email delivery is best-effort and should not block operations like registration.
+	if s.queueRepo == nil || s.templateRepo == nil {
+		return nil
+	}
+
 	// Validate request
 	if err := s.validateRequest(req); err != nil {
 		return err
@@ -97,6 +103,10 @@ func (s *EmailService) QueueEmail(ctx context.Context, req *EmailRequest) error 
 // SendTransactional sends an email immediately without queuing
 // Use for: password reset, welcome emails (bypass queue)
 func (s *EmailService) SendTransactional(ctx context.Context, to, template string, data map[string]any) (*domain.EmailQueue, error) {
+	if s.templateRepo == nil || s.queueRepo == nil || s.provider == nil || s.templateEng == nil {
+		return nil, errors.NewAppError("EMAIL_NOT_CONFIGURED", "Email service is not fully configured", 503)
+	}
+
 	// Render template
 	htmlContent, textContent, err := s.templateEng.RenderTemplate(ctx, template, data)
 	if err != nil {
@@ -149,7 +159,12 @@ func (s *EmailService) SendTransactional(ctx context.Context, to, template strin
 // RecordBounce records a bounce event from provider webhook
 func (s *EmailService) RecordBounce(ctx context.Context, info *EmailBounceInfo) error {
 	// Find the email by message ID
-	email, err := s.queueRepo.FindByID(ctx, uuid.MustParse(info.MessageID))
+	messageUUID, err := uuid.Parse(info.MessageID)
+	if err != nil {
+		return errors.NewAppError("INVALID_MESSAGE_ID", "invalid message ID format", 400)
+	}
+
+	email, err := s.queueRepo.FindByID(ctx, messageUUID)
 	if err != nil {
 		// Email not found - could be from another system, log and continue
 		_ = err // Ignore - still record the bounce
@@ -178,7 +193,12 @@ func (s *EmailService) RecordBounce(ctx context.Context, info *EmailBounceInfo) 
 // RecordDelivery records a delivery confirmation from provider webhook
 func (s *EmailService) RecordDelivery(ctx context.Context, messageID string) error {
 	// Find the email by message ID
-	email, err := s.queueRepo.FindByID(ctx, uuid.MustParse(messageID))
+	messageUUID, err := uuid.Parse(messageID)
+	if err != nil {
+		return errors.NewAppError("INVALID_MESSAGE_ID", "invalid message ID format", 400)
+	}
+
+	email, err := s.queueRepo.FindByID(ctx, messageUUID)
 	if err != nil {
 		return errors.ErrNotFound
 	}

@@ -29,7 +29,7 @@ const (
 // Note: The actual file is handled separately by Echo's multipart form handling
 type UploadMediaRequest struct {
 	Collection       string          `form:"collection" validate:"omitempty,max=255"`
-	CustomProperties json.RawMessage `form:"custom_properties,omitempty" validate:"omitempty,json"`
+	CustomProperties json.RawMessage `form:"custom_properties,omitempty" validate:"omitempty,json" swaggertype:"object"`
 }
 
 // Validate validates the UploadMediaRequest struct
@@ -115,7 +115,7 @@ func (q *ListMediaQuery) GetSortFieldAndOrder() (field string, desc bool) {
 
 // UpdateMediaMetadataRequest represents a request to update media metadata
 type UpdateMediaMetadataRequest struct {
-	CustomProperties json.RawMessage `json:"custom_properties" validate:"required"`
+	CustomProperties json.RawMessage `json:"custom_properties" validate:"required" swaggertype:"object"`
 }
 
 // Validate validates the UpdateMediaMetadataRequest struct

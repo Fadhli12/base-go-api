@@ -1,0 +1,21 @@
+{"time":"2026-04-28T00:26:41.1231093+08:00","level":"INFO","msg":"Configuration loaded successfully","database_host":"localhost","redis_host":"localhost","server_port":8080}
+{"time":"2026-04-28T00:26:41.1871997+08:00","level":"INFO","msg":"Connected to PostgreSQL database","host":"localhost","port":5432,"dbname":"go_api_base"}
+{"time":"2026-04-28T00:26:41.2095222+08:00","level":"INFO","msg":"Connected to Redis","host":"localhost","port":6379,"db":0,"pool_size":100}
+{"time":"2026-04-28T00:26:41.2923767+08:00","level":"INFO","msg":"Casbin enforcer initialized successfully"}
+{"time":"2026-04-28T00:26:41.296839+08:00","level":"INFO","msg":"Swagger documentation enabled","path":"/swagger"}
+{"time":"2026-04-28T00:26:41.3002136+08:00","level":"INFO","msg":"Initializing email worker..."}
+{"time":"2026-04-28T00:26:41.3002136+08:00","level":"INFO","msg":"Email worker initialized","provider":"smtp","worker_concurrency":10,"retry_max":5}
+{"time":"2026-04-28T00:26:41.3002136+08:00","level":"INFO","msg":"Starting email worker..."}
+{"time":"2026-04-28T00:26:41.3007561+08:00","level":"INFO","msg":"Email worker started","workers":10,"retry_max":5}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":4}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":3}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":2}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":5}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":7}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":9}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":1}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":0}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":8}
+{"time":"2026-04-28T00:26:41.3012995+08:00","level":"INFO","msg":"Email worker started","worker_id":6}
+{"time":"2026-04-28T00:26:41.3023251+08:00","level":"INFO","msg":"Starting HTTP server","address":":8080"}
+{"time":"2026-04-28T00:26:41.3114009+08:00","level":"INFO","msg":"Subscribed to permission invalidation channel","channel":"permission:invalidate"}

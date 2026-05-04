@@ -69,8 +69,8 @@ func (s *Signer) Generate(resourceID string, path string, expiry time.Duration) 
 	expiresAt := time.Now().Add(expiry)
 	expiresUnix := expiresAt.Unix()
 
-	// Generate signature
-	signature := s.sign(resourceID, path, expiresUnix)
+	// Generate signature (use signBasic for download validation compatibility)
+	signature := s.signBasic(resourceID, expiresUnix)
 
 	// Build URL
 	u := &url.URL{
