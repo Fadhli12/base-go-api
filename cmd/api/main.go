@@ -35,6 +35,7 @@ import (
 	"github.com/example/go-api-base/internal/cache"
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/database"
+	"github.com/example/go-api-base/internal/domain"
 	apphttp "github.com/example/go-api-base/internal/http"
 	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/permission"
@@ -213,6 +214,44 @@ func runServer() error {
 		server.SetEmailWorker(emailWorker)
 	}
 
+	// Initialize WebhookWorker for background webhook delivery
+	webhookWorker := initWebhookWorker(cfg, db, redisClient, server)
+	if webhookWorker != nil {
+		server.SetWebhookWorker(webhookWorker)
+	}
+
+	// Wire webhook service with Redis queue and rate limiter for event dispatch
+	if webhookService := server.WebhookService(); webhookService != nil {
+		webhookQueue := service.NewWebhookRedisQueue(redisClient)
+		webhookRateLimiter := service.NewWebhookRateLimiter(redisClient, cfg.Webhook.RateLimit)
+		webhookService.SetQueue(webhookQueue)
+		webhookService.SetRateLimiter(webhookRateLimiter)
+	}
+
+	// Initialize EventBus for webhook event dispatch
+	eventBus := domain.NewEventBus(256)
+	server.SetEventBus(eventBus)
+
+	// Subscribe webhook service to events for automatic dispatch
+	if webhookService := server.WebhookService(); webhookService != nil {
+		webhookService.SubscribeToEventBus(eventBus)
+		slog.Info("Webhook service subscribed to event bus")
+	}
+
+	// Wire EventBus into domain services for event emission
+	if userService := server.UserService(); userService != nil {
+		userService.SetEventBus(eventBus)
+		slog.Info("User service wired to event bus")
+	}
+	if invoiceService := server.InvoiceService(); invoiceService != nil {
+		invoiceService.SetEventBus(eventBus)
+		slog.Info("Invoice service wired to event bus")
+	}
+	if newsService := server.NewsService(); newsService != nil {
+		newsService.SetEventBus(eventBus)
+		slog.Info("News service wired to event bus")
+	}
+
 	// Add health check routes (using the server's Echo instance)
 	e := server.Echo()
 	e.GET("/healthz", func(c echo.Context) error {
@@ -254,6 +293,20 @@ func runServer() error {
 		}
 	}
 
+	// Start webhook worker in background (if initialized)
+	if webhookWorker := server.WebhookWorker(); webhookWorker != nil {
+		slog.Info("Starting webhook worker...")
+		webhookWorker.Start()
+	}
+
+	// Start event bus in background
+	if eventBus := server.EventBus(); eventBus != nil {
+		slog.Info("Starting event bus...")
+		if err := eventBus.Start(ctx); err != nil {
+			slog.Error("Failed to start event bus", "error", err)
+		}
+	}
+
 	// Start server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
@@ -275,7 +328,25 @@ func runServer() error {
 	// Cancel the invalidation listener context
 	cancel()
 
-	// Stop email worker gracefully
+	// 1. Stop HTTP server first to stop accepting new requests
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	slog.Info("Shutting down HTTP server...")
+	if err := server.Stop(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+	slog.Info("HTTP server stopped")
+
+	// 2. Stop event bus to prevent new event dispatches
+	if eventBus := server.EventBus(); eventBus != nil {
+		slog.Info("Stopping event bus...")
+		if err := eventBus.Stop(); err != nil {
+			slog.Error("Failed to stop event bus", "error", err)
+		}
+	}
+
+	// 3. Stop workers to finish in-flight processing
 	if emailWorker := server.EmailWorker(); emailWorker != nil {
 		slog.Info("Stopping email worker...")
 		if err := emailWorker.Stop(); err != nil {
@@ -283,18 +354,10 @@ func runServer() error {
 		}
 	}
 
-	// Create a deadline to wait for (30 seconds as per constitution)
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	slog.Info("Shutting down HTTP server...")
-
-	// Attempt graceful shutdown
-	if err := server.Stop(shutdownCtx); err != nil {
-		slog.Error("Server forced to shutdown", "error", err)
+	if webhookWorker := server.WebhookWorker(); webhookWorker != nil {
+		slog.Info("Stopping webhook worker...")
+		webhookWorker.Stop()
 	}
-
-	slog.Info("HTTP server stopped")
 
 	// Close permission enforcer
 	if err := enforcer.Close(); err != nil {
@@ -376,6 +439,38 @@ func initEmailWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client,
 	return emailWorker
 }
 
+// initWebhookWorker initializes the webhook worker for background delivery processing.
+func initWebhookWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, server *apphttp.Server) *service.WebhookWorker {
+	slog.Info("Initializing webhook worker...")
+
+	// Initialize webhook repositories
+	webhookRepo := repository.NewWebhookRepository(db)
+	webhookDeliveryRepo := repository.NewWebhookDeliveryRepository(db)
+
+	// Initialize webhook Redis queue
+	webhookQueue := service.NewWebhookRedisQueue(redisClient)
+
+	// Initialize webhook rate limiter
+	webhookRateLimiter := service.NewWebhookRateLimiter(redisClient, cfg.Webhook.RateLimit)
+
+	// Initialize webhook worker
+	webhookWorker := service.NewWebhookWorker(
+		&cfg.Webhook,
+		webhookDeliveryRepo,
+		webhookRepo,
+		webhookQueue,
+		webhookRateLimiter,
+	)
+
+	slog.Info("Webhook worker initialized",
+		"worker_concurrency", cfg.Webhook.WorkerConcurrency,
+		"retry_max", cfg.Webhook.RetryMax,
+		"rate_limit", cfg.Webhook.RateLimit,
+	)
+
+	return webhookWorker
+}
+
 // PermissionManifest defines the structure of the permissions.yaml file.
 type PermissionManifest struct {
 	Permissions []PermissionEntry `yaml:"permissions"`
@@ -409,12 +504,18 @@ func DefaultPermissions() *PermissionManifest {
 			{Name: "email_queue:read", Description: "View email queue status", Resource: "email_queue", Action: "read"},
 			{Name: "email_queue:manage", Description: "Manage email queue", Resource: "email_queue", Action: "manage"},
 			{Name: "email_bounces:read", Description: "View bounce history", Resource: "email_bounces", Action: "read"},
-		},
+		{Name: "settings:view_user", Description: "View user settings", Resource: "settings", Action: "view_user"},
+		{Name: "settings:manage_user", Description: "Update user settings", Resource: "settings", Action: "manage_user"},
+		{Name: "settings:view_system", Description: "View system settings", Resource: "settings", Action: "view_system"},
+		{Name: "settings:manage_system", Description: "Update system settings", Resource: "settings", Action: "manage_system"},
+		{Name: "webhooks:view", Description: "View webhooks and delivery history", Resource: "webhooks", Action: "view"},
+		{Name: "webhooks:manage", Description: "Manage webhooks and replay deliveries", Resource: "webhooks", Action: "manage"},
+	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system"},
 			},
 		},
 	}
@@ -591,7 +692,7 @@ func runMigrations() error {
 			// After forcing, check again - if we still have tables and version > 0, skip Up
 			newVersion, newDirty, _ := m.Version()
 			if !newDirty && newVersion > 0 && tableCount > 10 {
-				slog.Info("Database now clean at version", "version", newVersion, "- skipping migrations")
+				slog.Info("Database now clean, skipping migrations", "version", newVersion)
 				return nil
 			}
 		}
@@ -701,6 +802,10 @@ func runSeed() error {
 		// Notification permissions
 		{"notifications:view", "notifications", "view", "own", "View own notifications", false},
 		{"notifications:manage", "notifications", "manage", "own", "Manage own notifications", false},
+
+		// Webhook permissions
+		{"webhooks:view", "webhooks", "view", "all", "View webhooks and delivery history", false},
+		{"webhooks:manage", "webhooks", "manage", "all", "Manage webhooks and replay deliveries", false},
 	}
 
 	slog.Info("Seeding permissions", "count", len(permissions))
@@ -815,6 +920,7 @@ func runSeed() error {
 		"invoices:view:all", "invoices:create", "invoices:update:all", "invoices:delete:all", "invoices:manage",
 		"audit:view",
 		"notifications:view", "notifications:manage",
+		"webhooks:view", "webhooks:manage",
 	}
 	slog.Info("Assigning permissions to admin role")
 	for _, permName := range adminPermissions {
@@ -837,6 +943,7 @@ func runSeed() error {
 		"permissions:view",
 		"invoices:view", "invoices:create",
 		"notifications:view", "notifications:manage",
+		"webhooks:view",
 	}
 	slog.Info("Assigning permissions to viewer role")
 	for _, permName := range viewerPermissions {

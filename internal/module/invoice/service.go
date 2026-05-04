@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/permission"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 type Service struct {
 	repo     Repository
 	enforcer *permission.Enforcer
+	eventBus *domain.EventBus
 }
 
 // NewService creates a new Service instance
@@ -21,6 +23,11 @@ func NewService(repo Repository, enforcer *permission.Enforcer) *Service {
 		repo:     repo,
 		enforcer: enforcer,
 	}
+}
+
+// SetEventBus sets the event bus for publishing domain events.
+func (s *Service) SetEventBus(eventBus *domain.EventBus) {
+	s.eventBus = eventBus
 }
 
 // CreateInvoiceRequest represents a request to create an invoice
@@ -69,6 +76,14 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, number, customer
 
 	if err := s.repo.Create(ctx, invoice); err != nil {
 		return nil, err
+	}
+
+	// Publish invoice.created event (best-effort)
+	if s.eventBus != nil {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "invoice.created",
+			Payload: invoice.ToResponse(),
+		})
 	}
 
 	return invoice, nil
@@ -186,7 +201,19 @@ func (s *Service) UpdateStatus(ctx context.Context, id uuid.UUID, status Invoice
 	}
 
 	invoice.Status = status
-	return s.repo.Update(ctx, invoice)
+	if err := s.repo.Update(ctx, invoice); err != nil {
+		return err
+	}
+
+	// Publish invoice.paid event when status changes to paid (best-effort)
+	if s.eventBus != nil && status == InvoiceStatusPaid {
+		_ = s.eventBus.Publish(domain.WebhookEvent{
+			Type:    "invoice.paid",
+			Payload: invoice.ToResponse(),
+		})
+	}
+
+	return nil
 }
 
 // CheckPermission checks if a user has permission for an action on invoices
