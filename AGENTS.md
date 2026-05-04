@@ -1,11 +1,11 @@
 # Go API Base - Agent Instructions
 
-**Generated:** 2026-04-24 | **Commit:** HEAD | **Branch:** 004-email-service
+**Generated:** 2026-05-03 | **Commit:** HEAD | **Branch:** 006-webhook-system
 
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/004-email-service/plan.md](specs/004-email-service/plan.md) - Email Service  
+**Current Feature**: [specs/006-webhook-system/plan.md](specs/006-webhook-system/plan.md) - Webhook System  
 **Latest Feature**: [specs/005-log-writer/spec.md](specs/005-log-writer/spec.md) - Structured Logging System (✅ COMPLETE)
 <!-- SPECKIT END -->
 
@@ -30,6 +30,10 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | Integration tests | `tests/integration/` | testcontainers-go suite |
 | **Logging system** | **`internal/logger/`** | **Structured logging with slog, context propagation, multiple writers** |
 | **Logging middleware** | **`internal/http/middleware/structured_logging.go`** | **Request/response logging, automatic context extraction** |
+| **Webhook system** | **`internal/service/webhook*.go`** | **CRUD, worker, queue, rate limiter, signing, event dispatch** |
+| **Webhook handler** | **`internal/http/handler/webhook.go`** | **8 endpoints: CRUD + delivery tracking + replay** |
+| **Webhook domain** | **`internal/domain/webhook.go`, `webhook_events.go`** | **Entities, DTOs, EventBus with Go channels** |
+| **Webhook migrations** | **`migrations/000010_webhooks*.sql`** | **Webhooks and webhook_deliveries tables** |
 
 ## CODE MAP
 
@@ -40,6 +44,9 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | `NewTestSuite` | func | `tests/integration/testsuite.go:43` | Ephemeral Postgres+Redis |
 | `Enforcer` | struct | `internal/permission/enforcer.go` | Casbin RBAC |
 | `Server` | struct | `internal/http/server.go:28` | Echo + middleware chain |
+| `WebhookService` | struct | `internal/service/webhook.go` | Webhook CRUD + dispatch + delivery |
+| `WebhookWorker` | struct | `internal/service/webhook_worker.go` | Background delivery processor |
+| `EventBus` | struct | `internal/domain/webhook_events.go` | In-process event publisher/subscriber |
 
 ## COMMANDS
 
@@ -146,7 +153,7 @@ func (u *User) ToResponse() UserResponse { ... } // Strip PasswordHash
 1. **Migrations NOT automatic** - Run `make migrate` after `docker-compose up`
 2. **Seed ≠ Sync** - `make seed` creates roles; `permission:sync` reloads Casbin
 3. **Integration tests need Docker** - testcontainers ephemeral containers
-4. **Graceful shutdown: 30s** - Order: server → enforcer → db → redis
+4. **Graceful shutdown: 30s** - Order: server → eventBus → workers → enforcer → db → redis
 
 ### Init Order
 
@@ -424,3 +431,112 @@ log.Info(ctx, "user created", log.String("id", userID))
 - [Spec](specs/005-log-writer/spec.md) - Feature specification
 - [Quickstart](specs/005-log-writer/quickstart.md) - Usage guide
 - [Contract](specs/005-log-writer/contracts/logger.md) - Interface contracts
+
+---
+
+## WEBHOOK SYSTEM FEATURE
+
+### 006-webhook-system: Webhook Delivery System
+
+The webhook system enables users to register HTTP endpoints that receive event notifications when specific actions occur in the API.
+
+**Architecture:**
+```
+Domain Service → EventBus.Publish(event) → WebhookService.SubscribeToEventBus()
+                                                   → DispatchEvent()
+                                                      → FindForEventDispatch(orgID) [global + org-scoped]
+                                                      → RateLimiter.Allow()
+                                                      → Queue.Enqueue(delivery)
+                                                                              → Worker.Process()
+                                                                                → HTTP POST (signed)
+                                                                                → Repo.UpdateStatus()
+```
+
+**Key Components:**
+- **Domain**: `internal/domain/webhook.go` - Webhook + WebhookDelivery entities, DTOs, business methods
+- **EventBus**: `internal/domain/webhook_events.go` - In-process Go channel pub/sub (Subscribe, Publish, Start, Stop). Events carry optional `OrgID` for org-scoped dispatch.
+- **Repository**: `internal/repository/webhook.go` - WebhookRepository + WebhookDeliveryRepository interfaces + GORM impl. `FindForEventDispatch(orgID)` returns global + org-scoped webhooks.
+- **Service**: `internal/service/webhook.go` - WebhookService CRUD + DispatchEvent + SubscribeToEventBus + delivery methods. `DispatchEvent` uses `FindForEventDispatch` to match both global and org-scoped webhooks.
+- **Worker**: `internal/service/webhook_worker.go` - Background delivery processor (goroutine pool, Start/Stop)
+- **Queue**: `internal/service/webhook_queue.go` + `webhook_queue_redis.go` - WebhookQueue interface + Redis sorted set impl
+- **Rate Limiter**: `internal/service/webhook_rate_limiter.go` + `webhook_rate_limiter_iface.go` - Sliding window, fails open
+- **Signing**: `internal/service/webhook_sign.go` - HMAC-SHA256 signature generation (avoids circular import)
+- **Handler**: `internal/http/handler/webhook.go` - 8 HTTP endpoints
+- **Migrations**: `migrations/000010_webhooks.up.sql` + `000010_webhooks.down.sql`
+
+**Event Emission (T028):**
+Services emit events by calling `EventBus.Publish()` after successful operations:
+- `UserService.Create()` → `user.created` (payload: `UserResponse`)
+- `UserService.SoftDelete()` → `user.deleted` (payload: `{id}`)
+- `invoice.Service.Create()` → `invoice.created` (payload: `InvoiceResponse`)
+- `invoice.Service.UpdateStatus(paid)` → `invoice.paid` (payload: `InvoiceResponse`)
+- `NewsService.UpdateStatus(published)` → `news.published` (payload: `NewsResponse`)
+- `NewsService.Delete()` → `news.deleted` (payload: `{id}`)
+
+EventBus is injected via `SetEventBus()` setter on each service (avoids constructor changes).
+
+**Startup Wiring (cmd/api/main.go):**
+```go
+eventBus := domain.NewEventBus(256)
+server.SetEventBus(eventBus)
+webhookService.SubscribeToEventBus(eventBus)
+userService.SetEventBus(eventBus)
+invoiceService.SetEventBus(eventBus)
+newsService.SetEventBus(eventBus)
+// Start event bus in background
+eventBus.Start(ctx)
+// ... graceful shutdown: eventBus.Stop()
+```
+
+**Webhook Signature (HMAC-SHA256):**
+```
+X-Webhook-Signature: sha256=<hex-hmac>
+X-Webhook-Timestamp: <unix-seconds>
+X-Webhook-Event: <event-type>
+X-Webhook-Delivery-ID: <uuid>
+```
+Secret prefix `whsec_` is stripped before HMAC computation.
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/webhooks` | Create webhook |
+| GET | `/api/v1/webhooks` | List webhooks |
+| GET | `/api/v1/webhooks/:id` | Get webhook |
+| PUT | `/api/v1/webhooks/:id` | Update webhook |
+| DELETE | `/api/v1/webhooks/:id` | Delete webhook |
+| GET | `/api/v1/webhooks/:id/deliveries` | List deliveries |
+| GET | `/api/v1/webhooks/deliveries/:id` | Get delivery |
+| POST | `/api/v1/webhooks/deliveries/:id/replay` | Replay delivery |
+
+**Configuration (Environment Variables):**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WEBHOOK_WORKER_CONCURRENCY` | 5 | Number of concurrent delivery workers |
+| `WEBHOOK_RETRY_MAX` | 3 | Maximum delivery retry attempts |
+| `WEBHOOK_RATE_LIMIT` | 100 | Max deliveries per webhook per minute |
+| `WEBHOOK_ALLOW_HTTP` | false | Allow HTTP URLs (default: HTTPS only) |
+| `WEBHOOK_DELIVERY_TIMEOUT` | 10s | HTTP request timeout per delivery |
+| `WEBHOOK_DELIVERY_RETENTION_DAYS` | 90 | Days to retain delivery records |
+| `WEBHOOK_MAX_PAYLOAD_SIZE` | 1048576 | Maximum payload size in bytes (1MB) |
+
+**Backoff Strategy:**
+- Attempt 1 → +1min (next_retry_at)
+- Attempt 2 → +5min
+- Attempt 3+ → +30min
+
+**Stuck Delivery Recovery:**
+- Worker reaper runs every 60s
+- Finds deliveries stuck in `processing` status for >5min
+- Resets to `queued` with incremented attempt_number
+
+**Design Decisions:**
+- `signWebhookPayload` is duplicated in `service/webhook_sign.go` to avoid circular import (service → http/middleware → service)
+- `WebhookQueue` and `WebhookRateLimiterInterface` interfaces enable testability without Redis
+- `SetQueue()`/`SetRateLimiter()` setters on WebhookService for post-construction Redis wiring
+- Handler-level ownership check (NOT service-level Enforce)
+- `CanReplay()` = status NOT IN (queued, processing); distinct from `CanRetry()` (worker automatic retry)
+- `processing_started_at` field for stuck-delivery recovery
+- `WebhookEvent.OrgID` propagates org context through EventBus; `DispatchEvent` uses `FindForEventDispatch` to match global + org-scoped webhooks
+- Global webhooks always receive all events (even org-scoped ones); org-scoped webhooks only receive events for their org
+- Shutdown order: server → eventBus → workers → enforcer → db → redis
