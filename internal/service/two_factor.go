@@ -158,14 +158,7 @@ func (s *TwoFactorService) VerifyAndEnable(ctx context.Context, userID uuid.UUID
 
 	// Audit log
 	if s.auditSvc != nil {
-		s.auditSvc.LogAction(ctx, &domain.AuditLog{
-			ActorID:    userID,
-			Action:     "disable_2fa",
-			Resource:   "user",
-			ResourceID: userID.String(),
-			IPAddress:  "",
-			UserAgent:  "",
-		})
+		s.auditSvc.LogAction(ctx, userID, "enable_2fa", "user", userID.String(), nil, nil, "", "")
 	}
 
 	return nil, nil
@@ -252,12 +245,7 @@ func (s *TwoFactorService) Disable(ctx context.Context, userID uuid.UUID, totpCo
 	}
 
 	if s.auditSvc != nil {
-		s.auditSvc.LogAction(ctx, &domain.AuditLog{
-			ActorID:    userID,
-			Action:     "disable_2fa",
-			Resource:   "user",
-			ResourceID: userID.String(),
-		})
+		s.auditSvc.LogAction(ctx, userID, "disable_2fa", "user", userID.String(), nil, nil, "", "")
 	}
 
 	return nil
@@ -341,14 +329,7 @@ func (s *TwoFactorService) Verify2FALogin(ctx context.Context, pendingToken stri
 	}
 
 	if s.auditSvc != nil {
-		s.auditSvc.LogAction(ctx, &domain.AuditLog{
-			ActorID:    userID,
-			Action:     "verify_2fa_login",
-			Resource:   "user",
-			ResourceID: userID.String(),
-			IPAddress:  "",
-			UserAgent:  "",
-		})
+		s.auditSvc.LogAction(ctx, userID, "verify_2fa_login", "user", userID.String(), nil, nil, "", "")
 	}
 
 	return &domain.LoginResult{
@@ -446,14 +427,7 @@ func (s *TwoFactorService) UseRecoveryCode(ctx context.Context, pendingToken str
 	}
 
 	if s.auditSvc != nil {
-		s.auditSvc.LogAction(ctx, &domain.AuditLog{
-			ActorID:    userID,
-			Action:     "use_recovery_code",
-			Resource:   "user",
-			ResourceID: userID.String(),
-			IPAddress:  "",
-			UserAgent:  "",
-		})
+		s.auditSvc.LogAction(ctx, userID, "use_recovery_code", "user", userID.String(), nil, nil, "", "")
 	}
 
 	_ = remainingCount
@@ -530,14 +504,7 @@ func (s *TwoFactorService) RegenerateCodes(ctx context.Context, userID uuid.UUID
 
 	// Audit log
 	if s.auditSvc != nil {
-		s.auditSvc.LogAction(ctx, &domain.AuditLog{
-			ActorID:    userID,
-			Action:     "regenerate_2fa_codes",
-			Resource:   "user",
-			ResourceID: userID.String(),
-			IPAddress:  "",
-			UserAgent:  "",
-		})
+		s.auditSvc.LogAction(ctx, userID, "regenerate_2fa_codes", "user", userID.String(), nil, nil, "", "")
 	}
 
 	return plainCodes, nil
