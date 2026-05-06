@@ -177,7 +177,7 @@ This document tracks which features from `FEATURE_RECOMMENDATIONS.md` have been 
 
 ### 2.3 Search & Filtering
 
-**Status:** ⚠️ PARTIALLY IMPLEMENTED - Code complete but routes NOT registered
+**Status:** ✅ FULLY IMPLEMENTED
 
 **What Exists:**
 | Component | Location | Status |
@@ -185,12 +185,14 @@ This document tracks which features from `FEATURE_RECOMMENDATIONS.md` have been 
 | Domain entity | `internal/domain/saved_search.go` | ✅ SavedSearch + Response DTO |
 | Repository | `internal/repository/search.go` | ✅ SavedSearchRepository interface + GORM impl |
 | Service | `internal/service/search.go` | ✅ SearchService (6 methods) |
-| Handler | `internal/http/handler/search.go` | ✅ 6 handler methods (NOT wired to router) |
+| Handler | `internal/http/handler/search.go` | ✅ 6 handler methods |
 | Request DTOs | `internal/http/request/search.go` | ✅ SearchRequest, SavedSearchCreateRequest, etc. |
 | Response DTOs | `internal/http/response/search.go` | ✅ SearchResponse, SearchItem, Facets |
 | Tests | `tests/unit/search_service_test.go` | ✅ Unit tests |
 | Migration (news FTS) | `migrations/000016_add_news_search.up.sql` | ✅ tsvector column + GIN index |
 | Migration (saved searches) | `migrations/000017_saved_searches.up.sql` | ✅ saved_searches table |
+| Route registration | `internal/http/server.go:678-708` | ✅ RegisterSearchRoutes() method |
+| Service initialization | `internal/http/server.go:566-570` | ✅ In RegisterRoutes() |
 
 **What's Implemented:**
 - PostgreSQL full-text search with `tsvector`/`tsquery`
@@ -201,8 +203,10 @@ This document tracks which features from `FEATURE_RECOMMENDATIONS.md` have been 
 - Prefix matching via `:*` operator
 - Saved searches CRUD (max 50 per user)
 - Pagination (default 20, max 100)
+- JWT authentication on all endpoints
+- Audit logging on mutating operations (POST/PUT/DELETE)
 
-**Endpoints (6 defined in handler):**
+**Endpoints (6 fully wired and accessible):**
 - `GET /api/v1/search` - Full-text search with ranking/highlighting
 - `POST /api/v1/saved-searches` - Create saved search
 - `GET /api/v1/saved-searches` - List saved searches
@@ -210,11 +214,11 @@ This document tracks which features from `FEATURE_RECOMMENDATIONS.md` have been 
 - `PUT /api/v1/saved-searches/:id` - Update saved search
 - `DELETE /api/v1/saved-searches/:id` - Soft delete saved search
 
-**What's Missing:**
-| Component | Status |
-|-----------|--------|
-| Route registration in `server.go` | ❌ SearchHandler not wired |
-| SearchService initialization in RegisterRoutes() | ❌ Missing |
+**Wiring Details:**
+- Route registration: `internal/http/server.go:678-708` (RegisterSearchRoutes method)
+- Service initialization: `internal/http/server.go:566-570` (in RegisterRoutes)
+- Middleware: JWT on all routes, Audit on mutations
+- Commit: `2279ab6 feat(search): wire SearchHandler to router`
 
 ---
 
