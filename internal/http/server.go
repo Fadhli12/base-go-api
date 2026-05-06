@@ -562,6 +562,12 @@ func (s *Server) RegisterRoutes() {
 	notificationService := service.NewNotificationService(notificationRepo, notificationPrefRepo, emailService, userRepo, s.cache, slog.Default())
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	s.RegisterNotificationRoutes(v1, notificationHandler)
+
+	// Search routes
+	savedSearchRepo := repository.NewSavedSearchRepository(s.db)
+	searchService := service.NewSearchService(s.db, savedSearchRepo, slog.Default())
+	searchHandler := handler.NewSearchHandler(searchService, auditService)
+	s.RegisterSearchRoutes(v1, searchHandler)
 }
 
 // RegisterEmailRoutes registers email-related routes
@@ -667,6 +673,38 @@ func (s *Server) RegisterNotificationRoutes(api *echo.Group, notifHandler *handl
 	notifications.DELETE("/:id", notifHandler.Archive)
 	notifications.GET("/preferences", notifHandler.GetPreferences)
 	notifications.PUT("/preferences", notifHandler.UpdatePreference)
+}
+
+// RegisterSearchRoutes registers search and saved search routes.
+// Uses JWT middleware for authentication. Ownership is enforced at the service/repository layer.
+func (s *Server) RegisterSearchRoutes(api *echo.Group, searchHandler *handler.SearchHandler) {
+	search := api.Group("/search")
+
+	search.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	search.GET("", searchHandler.Search)
+
+	savedSearches := api.Group("/saved-searches")
+	savedSearches.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	if s.auditSvc != nil {
+		savedSearches.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	savedSearches.POST("", searchHandler.CreateSavedSearch)
+	savedSearches.GET("", searchHandler.ListSavedSearches)
+	savedSearches.GET("/:id", searchHandler.GetSavedSearch)
+	savedSearches.PUT("/:id", searchHandler.UpdateSavedSearch)
+	savedSearches.DELETE("/:id", searchHandler.DeleteSavedSearch)
 }
 
 // RegisterPermissionRoutes registers permission-related routes
