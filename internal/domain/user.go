@@ -15,6 +15,12 @@ type User struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Two-Factor Authentication fields
+	TwoFactorEnabled   bool       `gorm:"default:false" json:"two_factor_enabled,omitempty"`
+	TwoFactorStatus     string    `gorm:"size:20;default:'disabled'" json:"two_factor_status,omitempty"`
+	TwoFactorSecret     string    `gorm:"size:255" json:"-"`
+	TwoFactorVerifiedAt *time.Time `json:"two_factor_verified_at,omitempty"`
 }
 
 // TableName returns the table name for the User model

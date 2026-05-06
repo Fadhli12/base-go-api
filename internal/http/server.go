@@ -23,8 +23,8 @@ import (
 	"github.com/example/go-api-base/internal/storage"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/labstack/echo/v4"
-	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/redis/go-redis/v9"
+	echoSwagger "github.com/swaggo/echo-swagger"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +46,7 @@ type Server struct {
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
+	jobService     *service.JobService
 	eventBus       *domain.EventBus
 }
 
@@ -325,6 +326,14 @@ func (s *Server) SetNewsService(newsService *service.NewsService) {
 	s.newsService = newsService
 }
 
+func (s *Server) JobService() *service.JobService {
+	return s.jobService
+}
+
+func (s *Server) SetJobService(jobService *service.JobService) {
+	s.jobService = jobService
+}
+
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	address := fmt.Sprintf(":%d", s.config.Server.Port)
@@ -381,11 +390,11 @@ func (s *Server) RegisterRoutes() {
 		s.config.JWT.RefreshExpiry,
 	)
 	passwordHasher := service.NewPasswordHasher()
-	
+
 	// HIGH-002: Audit service for auth events
 	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
 	s.SetAuditService(auditService)
-	
+
 	// CRIT-002: Auth service now includes password reset token repository
 	authService := service.NewAuthService(
 		userRepo,
@@ -403,7 +412,7 @@ func (s *Server) RegisterRoutes() {
 	s.userService = userService
 	permissionService := service.NewPermissionService(permissionRepo)
 	roleService := service.NewRoleService(roleRepo, rolePermissionRepo, permissionRepo)
-	
+
 	// Initialize organization service
 	orgService := service.NewOrganizationService(organizationRepo, userRepo, s.enforcer, auditService, emailService, slog.Default())
 
@@ -568,6 +577,8 @@ func (s *Server) RegisterRoutes() {
 	searchService := service.NewSearchService(s.db, savedSearchRepo, slog.Default())
 	searchHandler := handler.NewSearchHandler(searchService, auditService)
 	s.RegisterSearchRoutes(v1, searchHandler)
+
+	s.RegisterJobRoutes(v1)
 }
 
 // RegisterEmailRoutes registers email-related routes
@@ -579,7 +590,22 @@ func (s *Server) RegisterEmailRoutes(api *echo.Group) {
 	emailBounceRepo := repository.NewEmailBounceRepository(s.db)
 
 	// Initialize email services
-	smtpProvider := service.NewSMTPProvider(&s.config.Email)
+	var emailProvider service.EmailProvider
+	switch s.config.Email.Provider {
+	case "sendgrid":
+		emailProvider = service.NewSendGridProvider(&s.config.Email)
+	case "ses":
+		sesCfg := &config.SESConfig{
+			Region:          s.config.Email.AWSRegion,
+			AccessKeyID:     s.config.Email.AWSAccessKeyID,
+			SecretAccessKey: s.config.Email.AWSSecretAccessKey,
+			FromAddress:     s.config.Email.SESFromAddress,
+			FromName:        s.config.Email.SESFromName,
+		}
+		emailProvider = service.NewSESProvider(sesCfg)
+	default:
+		emailProvider = service.NewSMTPProvider(&s.config.Email)
+	}
 	templateEngine := service.NewTemplateEngine(emailTemplateRepo)
 	emailService := service.NewEmailService(
 		&s.config.Email,
@@ -587,7 +613,7 @@ func (s *Server) RegisterEmailRoutes(api *echo.Group) {
 		emailQueueRepo,
 		emailBounceRepo,
 		templateEngine,
-		smtpProvider,
+		emailProvider,
 	)
 
 	// Initialize handlers
@@ -711,7 +737,7 @@ func (s *Server) RegisterSearchRoutes(api *echo.Group, searchHandler *handler.Se
 // Requires JWT authentication and permission:manage permission for write operations
 func (s *Server) RegisterPermissionRoutes(api *echo.Group, permHandler *handler.PermissionHandler) {
 	permissions := api.Group("/permissions")
-	
+
 	// All permission routes require JWT authentication
 	permissions.Use(middleware.JWT(middleware.JWTConfig{
 		Secret:     s.config.JWT.Secret,
@@ -739,7 +765,7 @@ func (s *Server) RegisterPermissionRoutes(api *echo.Group, permHandler *handler.
 // Requires JWT authentication and role:manage permission
 func (s *Server) RegisterRoleRoutes(api *echo.Group, roleHandler *handler.RoleHandler) {
 	roles := api.Group("/roles")
-	
+
 	// All role routes require JWT authentication
 	roles.Use(middleware.JWT(middleware.JWTConfig{
 		Secret:     s.config.JWT.Secret,
@@ -772,7 +798,7 @@ func (s *Server) RegisterRoleRoutes(api *echo.Group, roleHandler *handler.RoleHa
 // Requires JWT authentication and user:manage permission
 func (s *Server) RegisterUserRoutes(api *echo.Group, userHandler *handler.UserHandler) {
 	users := api.Group("/users")
-	
+
 	// All user routes require JWT authentication
 	users.Use(middleware.JWT(middleware.JWTConfig{
 		Secret:     s.config.JWT.Secret,
@@ -858,7 +884,7 @@ func (s *Server) RegisterInvoiceRoutes(api *echo.Group, invoiceHandler *invoice.
 	}
 
 	// CRUD routes - permission checks handled in handler (ownership scope)
-	invoices.POST("", invoiceHandler.Create)        // invoice:create checked via ownership
+	invoices.POST("", invoiceHandler.Create)       // invoice:create checked via ownership
 	invoices.GET("", invoiceHandler.List)          // invoice:view checked via ownership
 	invoices.GET("/:id", invoiceHandler.GetByID)   // invoice:view checked via ownership
 	invoices.PUT("/:id", invoiceHandler.Update)    // invoice:update checked via ownership
@@ -885,13 +911,13 @@ func (s *Server) RegisterOrganizationRoutes(api *echo.Group, orgHandler *handler
 	}
 
 	// CRUD routes - permission checks handled in handler (organization scope)
-	orgs.POST("", orgHandler.Create)                       // Create organization (auth required)
-	orgs.GET("", orgHandler.List)                          // List user's organizations (auth required)
-	orgs.GET("/:id", orgHandler.GetByID)                   // Get organization (auth + membership check)
-	orgs.PUT("/:id", orgHandler.Update)                    // Update organization (auth + manage permission)
-	orgs.DELETE("/:id", orgHandler.Delete)                 // Delete organization (auth + manage permission)
-	orgs.POST("/:id/members", orgHandler.AddMember)        // Add member (auth + invite permission)
-	orgs.GET("/:id/members", orgHandler.GetMembers)         // Get members (auth + membership check)
+	orgs.POST("", orgHandler.Create)                              // Create organization (auth required)
+	orgs.GET("", orgHandler.List)                                 // List user's organizations (auth required)
+	orgs.GET("/:id", orgHandler.GetByID)                          // Get organization (auth + membership check)
+	orgs.PUT("/:id", orgHandler.Update)                           // Update organization (auth + manage permission)
+	orgs.DELETE("/:id", orgHandler.Delete)                        // Delete organization (auth + manage permission)
+	orgs.POST("/:id/members", orgHandler.AddMember)               // Add member (auth + invite permission)
+	orgs.GET("/:id/members", orgHandler.GetMembers)               // Get members (auth + membership check)
 	orgs.DELETE("/:id/members/:user_id", orgHandler.RemoveMember) // Remove member (auth + remove permission)
 }
 
@@ -918,14 +944,14 @@ func (s *Server) RegisterWebhookRoutes(api *echo.Group, webhookHandler *handler.
 	}
 
 	// CRUD routes - permission checks handled in handler (webhook scope)
-	webhooks.POST("", webhookHandler.Create)        // Create webhook (auth + webhooks:manage)
-	webhooks.GET("", webhookHandler.List)            // List webhooks (auth + webhooks:view)
-	webhooks.GET("/:id", webhookHandler.GetByID)      // Get webhook (auth + webhooks:view + ownership)
-	webhooks.PUT("/:id", webhookHandler.Update)      // Update webhook (auth + webhooks:manage + ownership)
+	webhooks.POST("", webhookHandler.Create)           // Create webhook (auth + webhooks:manage)
+	webhooks.GET("", webhookHandler.List)              // List webhooks (auth + webhooks:view)
+	webhooks.GET("/:id", webhookHandler.GetByID)       // Get webhook (auth + webhooks:view + ownership)
+	webhooks.PUT("/:id", webhookHandler.Update)        // Update webhook (auth + webhooks:manage + ownership)
 	webhooks.DELETE("/:id", webhookHandler.SoftDelete) // Delete webhook (auth + webhooks:manage + ownership)
 
 	// Delivery routes - permission checks handled in handler
-	webhooks.GET("/:id/deliveries", webhookHandler.ListDeliveries)                     // List deliveries (auth + webhooks:view + ownership)
+	webhooks.GET("/:id/deliveries", webhookHandler.ListDeliveries)                      // List deliveries (auth + webhooks:view + ownership)
 	webhooks.GET("/:id/deliveries/:delivery_id", webhookHandler.GetDelivery)            // Get delivery (auth + webhooks:view + ownership)
 	webhooks.POST("/:id/deliveries/:delivery_id/replay", webhookHandler.ReplayDelivery) // Replay delivery (auth + webhooks:manage + ownership)
 }
@@ -942,15 +968,43 @@ func (s *Server) RegisterSettingsRoutes(api *echo.Group, settingsHandler *handle
 	}))
 
 	// User settings routes
-	settings.GET("/user", settingsHandler.GetUserSettings)       // Get user settings
-	settings.PUT("/user", settingsHandler.UpdateUserSettings)    // Update user settings
+	settings.GET("/user", settingsHandler.GetUserSettings)    // Get user settings
+	settings.PUT("/user", settingsHandler.UpdateUserSettings) // Update user settings
 
 	// Effective settings (merged system + user)
 	settings.GET("/effective", settingsHandler.GetEffectiveSettings)
 
 	// System settings routes
-	settings.GET("/system", settingsHandler.GetSystemSettings)       // Get system settings
-	settings.PUT("/system", settingsHandler.UpdateSystemSettings)    // Update system settings (manage_system permission enforced by handler/middleware)
+	settings.GET("/system", settingsHandler.GetSystemSettings)    // Get system settings
+	settings.PUT("/system", settingsHandler.UpdateSystemSettings) // Update system settings (manage_system permission enforced by handler/middleware)
+}
+
+func (s *Server) RegisterJobRoutes(api *echo.Group) {
+	jobRepo := repository.NewJobRepository(s.redis)
+	jobService := service.NewJobService(jobRepo, &s.config.Job, s.logger)
+	s.jobService = jobService
+
+	jobHandler := handler.NewJobHandler(jobService, s.enforcer, s.logger)
+
+	jobs := api.Group("/jobs")
+
+	jobs.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	if s.auditSvc != nil {
+		jobs.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	jobs.POST("", jobHandler.Submit)
+	jobs.GET("", jobHandler.List)
+	jobs.GET("/:id", jobHandler.GetByID)
+	jobs.DELETE("/:id", jobHandler.Cancel)
+	jobs.POST("/:id/resubmit", jobHandler.ResubmitJob)
 }
 
 // HealthCheck performs health checks on dependencies

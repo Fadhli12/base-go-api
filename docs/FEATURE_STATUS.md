@@ -71,27 +71,39 @@ This document tracks which features from `FEATURE_RECOMMENDATIONS.md` have been 
 
 ### 1.3 Email Service
 
-**Status:** ⚠️ PARTIALLY IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED (SMTP + SendGrid + SES)
 
 **What Exists:**
 | Component | Location |
 |-----------|----------|
 | Domain entities | `internal/domain/email_template.go`, `internal/domain/email_queue.go`, `internal/domain/email_bounce.go` |
+| Repository | `internal/repository/email_template.go`, `internal/repository/email_queue.go`, `internal/repository/email_bounce.go` |
 | Service | `internal/service/email.go`, `internal/service/email_provider.go` |
-| SMTP Provider | `internal/service/email_smtp_provider.go` |
+| SMTP Provider | `internal/service/email_smtp_provider.go` ✅ |
+| SendGrid Provider | `internal/service/email_sendgrid_provider.go` ✅ |
+| SES Provider | `internal/service/email_ses_provider.go` ✅ |
+| SendGrid Config | `internal/config/email_sendgrid.go` ✅ |
+| SES Config | `internal/config/email_ses.go` ✅ |
 | Queue (Redis) | `internal/service/email_queue_redis.go` |
 | Worker | `internal/service/email_worker.go` |
 | Template Engine | `internal/service/email_template_engine.go` |
-| Config | `internal/config/email.go` |
-| Migrations | `migrations/000008_email_service.up.sql` |
+| HTTP Handlers | `internal/http/handler/email.go`, `internal/http/handler/email_template.go` |
+| Routes wired | `internal/http/server.go:575-645` ✅ |
+| Migration | `migrations/000008_email_service.up.sql` ✅ |
+| Config | `internal/config/email.go` (includes SendGrid + SES fields) ✅ |
 
-**What's Missing:**
-| Component | Status |
-|-----------|--------|
-| HTTP Handler | ❌ No `internal/http/handler/email.go` |
-| Repository | ❌ No `internal/repository/email.go` |
-| Template files | ❌ No actual `.html`/`.txt` template files on disk |
-| SendGrid/SES providers | ❌ Only SMTP implemented |
+**What's Implemented:**
+- SMTP provider (baseline) - fully working
+- SendGrid provider - HTTP-based with rate limit backoff ✅
+- SES provider - AWS SDK v2 with credential chain ✅
+- `EmailProvider` interface supports multiple providers
+- Provider selection via `config.EmailConfig.Provider` (switch/case in server.go)
+- Unit tests for both providers (using httptest mocks)
+
+**Configuration:**
+Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
+- SendGrid: `EMAIL_SENDGRID_API_KEY`
+- SES: `EMAIL_SES_REGION`, `EMAIL_SES_ACCESS_KEY`, `EMAIL_SES_SECRET_KEY`, `EMAIL_SES_FROM_EMAIL`
 
 ---
 
@@ -231,12 +243,51 @@ These features from the recommendations were not checked in this analysis (lower
 - **2.5 Tagging System** - Not checked
 - **2.6 Activity Feed / Timeline** - Not checked
 
+### 3.2 Background Job Queue
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entity | `internal/domain/job.go` (Job, JobStatus enum, JobResponse) |
+| Repository | `internal/repository/job.go` (JobRepository interface) |
+| Service | `internal/service/job.go` (JobService: submit, get, list, cancel, resubmit) |
+| Handler Service | `internal/service/job_handler.go` (JobHandler interface, NoopHandler, EchoHandler, EmailJobHandler) |
+| Worker Pool | `internal/service/job_worker.go` (BZPOPMIN pattern, N pollers + M workers) |
+| Job Reaper | `internal/service/job_reaper.go` (stuck job recovery) |
+| Callback | `internal/service/job_callback.go` (HTTP callback delivery) |
+| Handler | `internal/http/handler/job.go` (Submit, List, GetByID, Cancel, Resubmit) |
+| Request DTO | `internal/http/handler/request/job.go` (SubmitJobRequest) |
+| Config | `internal/config/job.go` (JobConfig with all env vars) |
+| Unit Tests | `tests/unit/job_service_test.go`, `tests/unit/job_worker_test.go` |
+
+**Endpoints:**
+- `POST /api/v1/jobs` - Submit job
+- `GET /api/v1/jobs` - List jobs
+- `GET /api/v1/jobs/:id` - Get job by ID
+- `DELETE /api/v1/jobs/:id` - Cancel job
+- `POST /api/v1/jobs/:id/resubmit` - Resubmit dead job
+
+**Architecture:**
+- Redis sorted set for queue (`jobs:queue`)
+- Redis hashes for job data (`jobs:data:{id}`)
+- Redis sorted sets for user indexes (`jobs:user:{id}`)
+- BZPOPMIN blocking pop with ticker fallback
+- Worker pool (configurable N workers)
+- Automatic retry with exponential backoff (1m → 5m → 30m cap)
+- Stuck job reaper (runs every 60s, recovers jobs stuck > 5min)
+- HTTP callbacks on job completion/failure
+
+**Commit:** This feature on branch `009-background-job-queue`
+
+---
+
 ## Priority 3: Features Not Analyzed
 
 These features from the recommendations were not checked in this analysis:
 
 - **3.1 Real-time Communication (WebSocket)** - Not checked
-- **3.2 Background Job Queue** - Not checked
+
 - **3.3 Analytics Dashboard** - Not checked
 - **3.4 Import/Export System** - Not checked
 - **3.5 Settings & Configuration** - Not checked

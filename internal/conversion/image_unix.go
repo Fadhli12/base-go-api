@@ -184,8 +184,8 @@ func (h *ImageConversionHandler) ExtractImageMetadata(ctx context.Context, reade
 	}
 
 	// Get EXIF data if available
-	exifData, err := img.GetExif()
-	if err == nil && exifData != nil {
+	exifData := img.GetExif()
+	if exifData != nil {
 		metadata["exif"] = exifData
 	}
 

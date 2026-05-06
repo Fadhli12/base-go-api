@@ -5,8 +5,8 @@
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/006-webhook-system/plan.md](specs/006-webhook-system/plan.md) - Webhook System  
-**Latest Feature**: [specs/005-log-writer/spec.md](specs/005-log-writer/spec.md) - Structured Logging System (✅ COMPLETE)
+**Current Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue
+**Latest Feature**: [specs/007-email-providers/spec.md](specs/007-email-providers/spec.md) - Email Providers (SendGrid + SES) ✅
 <!-- SPECKIT END -->
 
 ---
@@ -34,6 +34,8 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | **Webhook handler** | **`internal/http/handler/webhook.go`** | **8 endpoints: CRUD + delivery tracking + replay** |
 | **Webhook domain** | **`internal/domain/webhook.go`, `webhook_events.go`** | **Entities, DTOs, EventBus with Go channels** |
 | **Webhook migrations** | **`migrations/000010_webhooks*.sql`** | **Webhooks and webhook_deliveries tables** |
+| **SendGrid provider** | **`internal/service/email_sendgrid_provider.go`** | **SendGrid email integration** |
+| **SES provider** | **`internal/service/email_ses_provider.go`** | **AWS SES email integration** |
 
 ## CODE MAP
 

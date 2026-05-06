@@ -47,6 +47,59 @@ func (s *EmailService) SetProvider(provider EmailProvider) {
 	s.provider = provider
 }
 
+// Send sends an email directly without using a template.
+// Use for job handler email sends.
+func (s *EmailService) Send(ctx context.Context, to, subject, body, providerName string) (*domain.EmailQueue, error) {
+	if s.provider == nil {
+		return nil, errors.NewAppError("EMAIL_NOT_CONFIGURED", "Email provider not configured", 503)
+	}
+
+	// Validate email format
+	if !isValidEmail(to) {
+		return nil, errors.NewAppError("VALIDATION_ERROR", "invalid email address format", 400)
+	}
+
+	// Create email queue entry for tracking
+	email := &domain.EmailQueue{
+		ToAddress:   to,
+		Subject:    subject,
+		Status:     domain.EmailStatusProcessing,
+		MaxAttempts: s.config.RetryMax,
+	}
+
+	if err := s.queueRepo.Create(ctx, email); err != nil {
+		return nil, errors.WrapInternal(err)
+	}
+
+	// Prepare message
+	message := &EmailMessage{
+		To:      to,
+		Subject: subject,
+	}
+
+	// Determine content type - treat body as HTML if it looks like HTML
+	if strings.Contains(body, "<") && strings.Contains(body, ">") {
+		message.HTMLContent = body
+	} else {
+		message.TextContent = body
+	}
+
+	// Send via provider
+	messageID, err := s.provider.Send(ctx, message)
+	if err != nil {
+		_ = s.queueRepo.MarkFailed(ctx, email.ID, err)
+		return nil, errors.NewAppError("SEND_FAILED", err.Error(), 500)
+	}
+
+	// Mark as sent
+	if err := s.queueRepo.MarkSent(ctx, email.ID, s.provider.Name(), messageID); err != nil {
+		return nil, errors.WrapInternal(err)
+	}
+
+	// Fetch updated record
+	return s.queueRepo.FindByID(ctx, email.ID)
+}
+
 // EmailRequest represents a request to send an email
 type EmailRequest struct {
 	To          string                 // Recipient email address
