@@ -104,6 +104,7 @@ type Config struct {
 	Cache         CacheConfig         `mapstructure:"cache"`
 	Email         EmailConfig         `mapstructure:"email"`
 	Webhook       WebhookConfig       `mapstructure:"webhook"`
+	Job          JobConfig           `mapstructure:"job"`
 }
 
 var (

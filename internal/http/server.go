@@ -981,10 +981,10 @@ func (s *Server) RegisterSettingsRoutes(api *echo.Group, settingsHandler *handle
 
 func (s *Server) RegisterJobRoutes(api *echo.Group) {
 	jobRepo := repository.NewJobRepository(s.redis)
-	jobService := service.NewJobService(jobRepo, &s.config.Job, s.logger)
+	jobService := service.NewJobService(jobRepo, &s.config.Job, slog.Default())
 	s.jobService = jobService
 
-	jobHandler := handler.NewJobHandler(jobService, s.enforcer, s.logger)
+	jobHandler := handler.NewJobHandler(jobService, s.enforcer, slog.Default())
 
 	jobs := api.Group("/jobs")
 
