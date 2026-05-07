@@ -2,7 +2,7 @@ package request
 
 import "github.com/go-playground/validator/v10"
 
-var validate = validator.New()
+var jobValidate = validator.New()
 
 type JobInput struct {
 	Type       string
@@ -19,7 +19,7 @@ type SubmitJobRequest struct {
 }
 
 func (r *SubmitJobRequest) Validate() error {
-	return validate.Struct(r)
+	return jobValidate.Struct(r)
 }
 
 func (r *SubmitJobRequest) ToJobInput() *JobInput {
