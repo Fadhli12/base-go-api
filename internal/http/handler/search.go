@@ -232,15 +232,7 @@ func (h *SearchHandler) CreateSavedSearch(c echo.Context) error {
 	if h.auditService != nil {
 		go func() {
 			bgCtx := context.Background()
-			h.auditService.LogAction(bgCtx, &domain.AuditLog{
-				ActorID:    userID,
-				Action:     domain.AuditActionCreate,
-				Resource:   "saved_search",
-				ResourceID: savedSearch.ID.String(),
-				After:      savedSearch.ToResponse(),
-				IPAddress:  c.RealIP(),
-				UserAgent:  c.Request().Header.Get("User-Agent"),
-			})
+			h.auditService.LogAction(bgCtx, userID, domain.AuditActionCreate, "saved_search", savedSearch.ID.String(), nil, savedSearch.ToResponse(), c.RealIP(), c.Request().Header.Get("User-Agent"))
 		}()
 	}
 
@@ -436,6 +428,13 @@ func (h *SearchHandler) UpdateSavedSearch(c echo.Context) error {
 		log.String("id", id.String()),
 	)
 
+	if h.auditService != nil {
+		go func() {
+			bgCtx := context.Background()
+			h.auditService.LogAction(bgCtx, userID, domain.AuditActionUpdate, "saved_search", id.String(), nil, search.ToResponse(), c.RealIP(), c.Request().Header.Get("User-Agent"))
+		}()
+	}
+
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, search.ToResponse()))
 }
 
@@ -499,14 +498,7 @@ func (h *SearchHandler) DeleteSavedSearch(c echo.Context) error {
 	if h.auditService != nil {
 		go func() {
 			bgCtx := context.Background()
-			h.auditService.LogAction(bgCtx, &domain.AuditLog{
-				ActorID:    userID,
-				Action:     domain.AuditActionDelete,
-				Resource:   "saved_search",
-				ResourceID: id.String(),
-				IPAddress:  c.RealIP(),
-				UserAgent:  c.Request().Header.Get("User-Agent"),
-			})
+			h.auditService.LogAction(bgCtx, userID, domain.AuditActionDelete, "saved_search", id.String(), nil, nil, c.RealIP(), c.Request().Header.Get("User-Agent"))
 		}()
 	}
 

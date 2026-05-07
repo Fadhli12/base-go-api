@@ -189,7 +189,7 @@ Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
 
 ### 2.3 Search & Filtering
 
-**Status:** ✅ FULLY IMPLEMENTED
+**Status:** ⚠️ COMPILATION ERRORS FIXED - Routes wired, code compiles
 
 **What Exists:**
 | Component | Location | Status |
@@ -197,40 +197,26 @@ Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
 | Domain entity | `internal/domain/saved_search.go` | ✅ SavedSearch + Response DTO |
 | Repository | `internal/repository/search.go` | ✅ SavedSearchRepository interface + GORM impl |
 | Service | `internal/service/search.go` | ✅ SearchService (6 methods) |
-| Handler | `internal/http/handler/search.go` | ✅ 6 handler methods |
-| Request DTOs | `internal/http/request/search.go` | ✅ SearchRequest, SavedSearchCreateRequest, etc. |
-| Response DTOs | `internal/http/response/search.go` | ✅ SearchResponse, SearchItem, Facets |
+| Handler | `internal/http/handler/search.go` | ✅ All audit calls fixed to 9-param signature |
+| Request DTOs | `internal/http/request/search.go` | ✅ |
+| Response DTOs | `internal/http/response/search.go` | ✅ |
 | Tests | `tests/unit/search_service_test.go` | ✅ Unit tests |
-| Migration (news FTS) | `migrations/000016_add_news_search.up.sql` | ✅ tsvector column + GIN index |
-| Migration (saved searches) | `migrations/000017_saved_searches.up.sql` | ✅ saved_searches table |
-| Route registration | `internal/http/server.go:678-708` | ✅ RegisterSearchRoutes() method |
-| Service initialization | `internal/http/server.go:566-570` | ✅ In RegisterRoutes() |
+| Migration (news FTS) | `migrations/000016_add_news_search.up.sql` | ✅ |
+| Migration (saved searches) | `migrations/000017_saved_searches.up.sql` | ✅ |
+| Route registration | `internal/http/server.go:678-708` | ✅ |
 
-**What's Implemented:**
-- PostgreSQL full-text search with `tsvector`/`tsquery`
-- `ts_rank_cd()` for relevance ranking
-- `ts_headline()` for result highlighting/snippets
-- Weighted fields: title (A) > content (B)
-- Faceted filtering (status, author_id, date_from, date_to)
-- Prefix matching via `:*` operator
-- Saved searches CRUD (max 50 per user)
-- Pagination (default 20, max 100)
-- JWT authentication on all endpoints
-- Audit logging on mutating operations (POST/PUT/DELETE)
+**What Was Fixed (2026-05-07):**
+- `search.go:235` - CreateSavedSearch: LogAction struct → 9 params ✅
+- `search.go:494` - DeleteSavedSearch: LogAction struct → 9 params ✅
+- `search.go:431-436` - UpdateSavedSearch: Added audit logging ✅
 
-**Endpoints (6 fully wired and accessible):**
+**Endpoints (6 fully wired):**
 - `GET /api/v1/search` - Full-text search with ranking/highlighting
 - `POST /api/v1/saved-searches` - Create saved search
 - `GET /api/v1/saved-searches` - List saved searches
 - `GET /api/v1/saved-searches/:id` - Get saved search
 - `PUT /api/v1/saved-searches/:id` - Update saved search
 - `DELETE /api/v1/saved-searches/:id` - Soft delete saved search
-
-**Wiring Details:**
-- Route registration: `internal/http/server.go:678-708` (RegisterSearchRoutes method)
-- Service initialization: `internal/http/server.go:566-570` (in RegisterRoutes)
-- Middleware: JWT on all routes, Audit on mutations
-- Commit: `2279ab6 feat(search): wire SearchHandler to router`
 
 ---
 
