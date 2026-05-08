@@ -5,8 +5,8 @@
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue
-**Latest Feature**: [specs/007-email-providers/spec.md](specs/007-email-providers/spec.md) - Email Providers (SendGrid + SES) ✅
+**Current Feature**: [specs/010-file-versioning/plan.md](specs/010-file-versioning/plan.md) - File Versioning
+**Latest Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue ✅
 <!-- SPECKIT END -->
 
 ---
