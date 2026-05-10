@@ -5,8 +5,8 @@
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue
-**Latest Feature**: [specs/007-email-providers/spec.md](specs/007-email-providers/spec.md) - Email Providers (SendGrid + SES) ✅
+**Current Feature**: [specs/010-file-versioning/plan.md](specs/010-file-versioning/plan.md) - File Versioning
+**Latest Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue ✅
 <!-- SPECKIT END -->
 
 ---
@@ -542,3 +542,106 @@ Secret prefix `whsec_` is stripped before HMAC computation.
 - `WebhookEvent.OrgID` propagates org context through EventBus; `DispatchEvent` uses `FindForEventDispatch` to match global + org-scoped webhooks
 - Global webhooks always receive all events (even org-scoped ones); org-scoped webhooks only receive events for their org
 - Shutdown order: server → eventBus → workers → enforcer → db → redis
+
+---
+
+## FILE VERSIONING FEATURE
+
+### 010-file-versioning: File Versioning System
+
+The file versioning system enables versioned uploads of media files, allowing users to upload new versions, view version history, download specific versions, restore previous versions, and delete individual versions.
+
+**Architecture:**
+```
+Upload → MediaVersion → VersionService → Storage Driver → Audit Log
+                 │
+                 ▼
+    Retroactive v1 creation on first upload (if none exists)
+    SHA-256 checksum deduplication (409 on identical content)
+    Optimistic locking via current_version field
+```
+
+**Key Components:**
+| Component | File | Purpose | Dependencies |
+|-----------|------|---------|--------------|
+| Domain | `internal/domain/media_version.go` | MediaVersion entity, response DTOs, business methods | Media, User |
+| Domain (extended) | `internal/domain/media.go` | Extended Media with CurrentVersion, Versions relation | MediaVersion |
+| Repository | `internal/repository/media_version.go` | 9-method repository (Create, FindByMediaID, FindByID, FindByMediaAndVersion, UpdateCurrentVersion, SoftDelete, FindLatestVersion, GetVersionCount, FindVersionByChecksum) | GORM, MediaVersion |
+| Service | `internal/service/media_version.go` | VersionService: UploadVersion, ListVersions, GetVersion, DownloadVersion, GetVersionSignedURL, RestoreVersion, DeleteVersion | MediaVersionRepo, MediaRepo, StorageDriver, AuditService, Enforcer |
+| Checksum utility | `internal/service/media_version.go:ComputeSHA256Checksum` | SHA-256 hash computation for deduplication | crypto/sha256 |
+| Handler | `internal/http/handler/media_version.go` | 7 HTTP endpoints with handler-level permission checks | VersionService, MediaService, AuditService, Enforcer |
+| Migration | `migrations/000019_create_media_versions.up.sql` | media_versions table + current_version column on media | PostgreSQL |
+
+**Permissions (DB + permission:sync):**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `media_version:upload` | media_version | upload | Upload new versions |
+| `media_version:view` | media_version | view | View version history and metadata |
+| `media_version:download` | media_version | download | Download specific versions |
+| `media_version:restore` | media_version | restore | Restore previous versions |
+| `media_version:delete` | media_version | delete | Delete specific versions (admin only) |
+
+**Startup Wiring (cmd/api/main.go):**
+```go
+// No EventBus integration — versioning is synchronous
+mediaVersionRepo := repository.NewMediaVersionRepository(db)
+versionService := service.NewVersionService(
+    mediaRepo, mediaVersionRepo, storageDriver, signingKey, auditService, enforcer,
+)
+versionHandler := handler.NewMediaVersionHandler(versionService, mediaService, auditService, enforcer)
+versionHandler.RegisterRoutes(v1, jwtSecret)
+```
+
+**Versioned Storage Path:**
+```
+{base_path}/{media_id}/v{version}/{uuid_filename}.{ext}
+```
+Files are stored in version-specific directories under the media root. Each version gets a UUID-based filename to avoid collisions. The original filename is preserved in the database record.
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/media/:media_id/versions` | Upload a new version (multipart form, field: "file") |
+| GET | `/api/v1/media/:media_id/versions` | List all versions for a media file |
+| GET | `/api/v1/media/:media_id/versions/:version` | Get version metadata by version number |
+| GET | `/api/v1/media/:media_id/versions/:version/download` | Download a specific version's file |
+| GET | `/api/v1/media/:media_id/versions/:version/url` | Get a signed URL for a specific version |
+| POST | `/api/v1/media/:media_id/versions/:version/restore` | Restore a previous version as current |
+| DELETE | `/api/v1/media/:media_id/versions/:version` | Soft-delete a specific version |
+
+**Configuration:**
+Versioning reuses the existing media storage configuration. No versioning-specific environment variables.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STORAGE_DRIVER` | local | Storage backend: local, s3, or minio |
+| `STORAGE_LOCAL_PATH` | ./storage/uploads | Local storage base path |
+| `STORAGE_BASE_URL` | http://localhost:8080/storage | Public URL for storage |
+| `STORAGE_S3_BUCKET` | "" | S3/MinIO bucket name |
+| `STORAGE_SIGNING_KEY` | (JWT secret fallback) | Key for generating signed URLs |
+
+**Optimistic Locking:**
+```go
+// VersionService checks media.CurrentVersion before writing
+// If CurrentVersion changed between read and write, 409 Conflict
+if media.CurrentVersion != expectedVersion {
+    return nil, ErrOptimisticLockFailed
+}
+```
+
+**Key Design Decisions:**
+- Retroactive v1 creation: If a media file has no versions yet, the first upload creates v1 automatically (no separate "create" endpoint).
+- SHA-256 checksum deduplication: Before writing a new version, the service checks if the uploaded file's checksum matches any existing version of the same media. If so, returns 409 Conflict (no duplicate content storage).
+- Optimistic locking: The `current_version` field on media prevents race conditions between concurrent uploads and restores.
+- Restore = pointer update: Restoring a version only updates `media.current_version` to the restored version number. No new version record or file is created.
+- Delete = soft-delete + physical removal: Deleting a version soft-deletes the database record and removes the physical file from storage. Version numbers are never reused.
+- Current version cannot be deleted: The version matching `media.current_version` is protected from deletion.
+- Handler-level permission checks: Permissions are enforced via middleware groups in the handler (not service-level Enforce calls). Each endpoint group has its own permission requirement (view, upload, download, restore, delete).
+
+**Checksum Deduplication Pattern:**
+```go
+// Service: Check before upload
+existingVersion, _ := s.versionRepo.FindVersionByChecksum(ctx, mediaID, checksum)
+if existingVersion != nil {
+    return nil, errors.NewAppError("CONFLICT", "Version with identical content already exists", 409)
+}
+```

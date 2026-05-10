@@ -94,6 +94,17 @@ func (s *JobHandlerService) SupportedTypes() []string {
 	return s.registry.SupportedTypes()
 }
 
+// JobHandlerServiceInterface abstracts the JobHandlerService for dependency injection.
+// This allows mock implementations in unit tests.
+type JobHandlerServiceInterface interface {
+	Handle(ctx context.Context, jobType string, payload map[string]interface{}) ([]byte, error)
+	SupportedTypes() []string
+	Register(jobType string, handler JobHandler)
+}
+
+// Compile-time assertion that *JobHandlerService implements JobHandlerServiceInterface.
+var _ JobHandlerServiceInterface = (*JobHandlerService)(nil)
+
 // NoopHandler is a test handler that accepts "test.nop" jobs.
 // It logs the job and returns an empty result.
 type NoopHandler struct {

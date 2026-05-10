@@ -1,8 +1,8 @@
 # Feature Implementation Status
 
-**Generated:** 2026-05-06
-**Source:** `docs/FEATURE_RECOMMENDATIONS.md` analysis
-**Analysis Method:** Parallel background agents searching all layers (domain, service, repository, handler, middleware, migrations)
+**Generated:** 2026-05-08
+**Last Verified:** 2026-05-08 via parallel background agent verification
+**Build Status:** `go build ./...` ✅ PASSES
 
 ---
 
@@ -189,7 +189,7 @@ Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
 
 ### 2.3 Search & Filtering
 
-**Status:** ⚠️ COMPILATION ERRORS FIXED - Routes wired, code compiles
+**Status:** ✅ FULLY IMPLEMENTED (verified 2026-05-08)
 
 **What Exists:**
 | Component | Location | Status |
@@ -220,14 +220,56 @@ Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
 
 ---
 
-## Priority 2: Features Not Analyzed
+## Priority 2: Enhanced Features (Partial Analysis)
 
 These features from the recommendations were not checked in this analysis (lower priority):
 
-- **2.2 File Versioning** - Not checked
+- **2.2 File Versioning** - ✅ FULLY IMPLEMENTED (see below)
 - **2.4 Comment System** - Not checked
 - **2.5 Tagging System** - Not checked
 - **2.6 Activity Feed / Timeline** - Not checked
+
+---
+
+### 2.2 File Versioning
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entity | `internal/domain/media_version.go` (MediaVersion entity, DTOs, business methods) |
+| Extended media domain | `internal/domain/media.go` (CurrentVersion, Versions relation) |
+| Repository | `internal/repository/media_version.go` (9-method interface + GORM impl: Create, FindByMediaID, FindByID, FindByMediaAndVersion, UpdateCurrentVersion, SoftDelete, FindLatestVersion, GetVersionCount, FindVersionByChecksum) |
+| Service | `internal/service/media_version.go` (VersionService: UploadVersion, ListVersions, GetVersion, DownloadVersion, GetVersionSignedURL, RestoreVersion, DeleteVersion) |
+| Checksum utility | `internal/service/media_version.go:ComputeSHA256Checksum` (SHA-256 deduplication) |
+| Handler | `internal/http/handler/media_version.go` (7 endpoints, handler-level permission middleware) |
+| DI wiring | `internal/http/server.go:467-479, 547-549` |
+| Permissions seed | `cmd/api/main.go:513-517, 523` (5 permissions: upload, view, download, restore, delete) |
+| Migration | `migrations/000019_create_media_versions.up.sql` (media_versions table + current_version column) |
+| Unit tests | `tests/unit/media_version_service_test.go` |
+| Integration tests | `tests/integration/media_version_test.go` (scaffold) |
+
+**Endpoints (7 fully wired):**
+- `POST /api/v1/media/:media_id/versions` - Upload new version (multipart form)
+- `GET /api/v1/media/:media_id/versions` - List all versions
+- `GET /api/v1/media/:media_id/versions/:version` - Get version metadata
+- `GET /api/v1/media/:media_id/versions/:version/download` - Download version file
+- `GET /api/v1/media/:media_id/versions/:version/url` - Get signed URL for version
+- `POST /api/v1/media/:media_id/versions/:version/restore` - Restore version as current
+- `DELETE /api/v1/media/:media_id/versions/:version` - Soft-delete version
+
+**Key Design Decisions:**
+- Retroactive v1 creation on first upload (no separate create endpoint)
+- SHA-256 checksum deduplication (409 Conflict on identical content)
+- Optimistic locking via `media.current_version` field
+- Restore = pointer update only (no new version record)
+- Delete = soft-delete record + physical file removal
+- Current version cannot be deleted (protected)
+- Handler-level permission checks (not service-level Enforce calls)
+- No EventBus integration (synchronous only)
+- Versioned storage path: `{base_path}/{media_id}/v{version}/{uuid_filename}.{ext}`
+
+---
 
 ### 3.2 Background Job Queue
 
@@ -268,7 +310,7 @@ These features from the recommendations were not checked in this analysis (lower
 
 ---
 
-## Priority 3: Features Not Analyzed
+## Priority 3: Features
 
 These features from the recommendations were not checked in this analysis:
 
@@ -283,31 +325,34 @@ These features from the recommendations were not checked in this analysis:
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (9 features)
+### ✅ Implemented (9 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
 | Organization/Team | P1 | ✅ Complete |
 | API Key Auth | P1 | ✅ Complete |
-| Email Service (partial) | P1 | ⚠️ Partial |
+| Email Service (SMTP + SendGrid + SES) | P1 | ✅ Complete |
 | Notification System | P1 | ✅ Complete |
 | Webhook System | P1 | ✅ Complete |
 | 2FA | P2 | ✅ Complete |
+| Search & Filtering | P2 | ✅ Complete |
+| Background Job Queue | P2 | ✅ Complete |
+| File Versioning | P2 | ✅ Complete |
 
-### ❌ Not Fully Implemented (features checked)
+### ❌ Not Checked in This Analysis
+
+These features from `FEATURE_RECOMMENDATIONS.md` were not evaluated (lower priority / out of scope):
 
 | Feature | Priority | Status |
 |---------|----------|--------|
-| Search & Filtering | P2 | ⚠️ Partial - code complete, routes not registered |
-| Email Service Handler/Repository | P1 | ⚠️ Partial - needs handler/repo |
-| File Versioning | P2 | ❌ Not checked |
 | Comment System | P2 | ❌ Not checked |
 | Tagging System | P2 | ❌ Not checked |
-| Activity Feed | P2 | ❌ Not checked |
-
-### ❓ Priority 3 Features (not analyzed)
-
-All Priority 3 features (WebSocket, Job Queue, Analytics, Import/Export, Settings, Feature Flags) were not checked.
+| Activity Feed / Timeline | P2 | ❌ Not checked |
+| Real-time (WebSocket) | P3 | ❌ Not checked |
+| Analytics Dashboard | P3 | ❌ Not checked |
+| Import/Export System | P3 | ❌ Not checked |
+| Settings & Configuration | P3 | ❌ Not checked |
+| Feature Flags | P3 | ❌ Not checked |
 
 ---
 
@@ -315,10 +360,8 @@ All Priority 3 features (WebSocket, Job Queue, Analytics, Import/Export, Setting
 
 Based on the analysis, the following should be prioritized:
 
-1. **Complete Search & Filter** - Wire SearchHandler to router in `server.go`
-2. **Complete Email Service** - Add HTTP handler and repository layer to make email service fully functional
-3. **Add unit tests** - Several features (API Key, Organization) lack unit tests despite having integration tests
-4. **Analyze Priority 2/3 features** - Complete the analysis for remaining features
+1. **Add unit tests** - Several features lack unit tests despite having integration tests
+2. **Analyze Priority 2/3 features** - Complete the analysis for remaining features
 
 ---
 

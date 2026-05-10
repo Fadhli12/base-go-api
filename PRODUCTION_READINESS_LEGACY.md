@@ -1,5 +1,7 @@
 # Production Readiness Checklist - Go API Base
 
+> ⚠️ **DEPRECATED** - This file is outdated. The current production readiness guide is at `docs/PRODUCTION_READINESS.md`.
+
 **Generated:** 2026-04-28
 **Last Updated:** 2026-04-28
 

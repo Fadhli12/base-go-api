@@ -16,7 +16,7 @@ import (
 // JobWorker processes jobs from the Redis queue using a pool of workers.
 type JobWorker struct {
 	jobRepo     repository.JobRepository
-	jobHandler  JobHandler
+	jobHandler  JobHandlerServiceInterface
 	callbackSvc *JobCallbackService
 	redis       *redis.Client
 	config      *config.JobConfig
@@ -43,7 +43,7 @@ func NewJobWorker(
 }
 
 // SetJobHandler sets the job handler service.
-func (w *JobWorker) SetJobHandler(handler JobHandler) {
+func (w *JobWorker) SetJobHandler(handler JobHandlerServiceInterface) {
 	w.jobHandler = handler
 }
 
