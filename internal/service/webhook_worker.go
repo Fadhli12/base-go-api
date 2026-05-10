@@ -25,6 +25,7 @@ type WebhookWorker struct {
 	webhookRepo  repository.WebhookRepository
 	redisQueue   WebhookQueue
 	rateLimiter  WebhookRateLimiterInterface
+	httpClient   *http.Client // nil = use NewHTTPClient (SSRF-protected)
 
 	// Lifecycle management
 	ctx    context.Context
@@ -52,6 +53,11 @@ func NewWebhookWorker(
 		redisQueue:   redisQueue,
 		rateLimiter:  rateLimiter,
 	}
+}
+
+// SetHTTPClient injects a custom HTTP client for testing.
+func (w *WebhookWorker) SetHTTPClient(client *http.Client) {
+	w.httpClient = client
 }
 
 // Start begins the worker goroutine pool and background maintenance tasks.
@@ -252,7 +258,10 @@ func (w *WebhookWorker) processDelivery(deliveryID uuid.UUID) error {
 	req.Header.Set("X-Webhook-Signature", signature)
 
 	// Execute HTTP request
-	client := w.newHTTPClient()
+	client := w.httpClient
+	if client == nil {
+		client = w.NewHTTPClient()
+	}
 	start := time.Now()
 	resp, err := client.Do(req)
 	durationMs := time.Since(start).Milliseconds()
@@ -447,8 +456,8 @@ func (w *WebhookWorker) retentionCleanup() {
 	}
 }
 
-// newHTTPClient creates an HTTP client with SSRF protection.
-func (w *WebhookWorker) newHTTPClient() *http.Client {
+// NewHTTPClient creates an HTTP client with SSRF protection.
+func (w *WebhookWorker) NewHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: w.config.DeliveryTimeout,
 		Transport: &http.Transport{
