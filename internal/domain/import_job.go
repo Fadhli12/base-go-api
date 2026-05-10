@@ -98,3 +98,18 @@ type ImportPreviewEntityType struct {
 	EntityType string `json:"entity_type"`
 	RowCount   int    `json:"row_count"`
 }
+
+type ImportResult struct {
+	EntityTypes     map[string]EntityTypeResult `json:"entity_types"`
+	TotalCreated    int                         `json:"total_created"`
+	TotalSkipped    int                         `json:"total_skipped"`
+	TotalFailed     int                         `json:"total_failed"`
+	TotalOverwritten int                        `json:"total_overwritten"`
+}
+
+type EntityTypeResult struct {
+	Created     int `json:"created"`
+	Skipped     int `json:"skipped"`
+	Failed      int `json:"failed"`
+	Overwritten int `json:"overwritten"`
+}
