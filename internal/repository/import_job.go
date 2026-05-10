@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/pkg/errors"
@@ -19,6 +20,9 @@ type ImportJobRepository interface {
 	UpdateSourceFilePath(ctx context.Context, id uuid.UUID, path string) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, orgID *uuid.UUID, page, pageSize int) ([]*domain.ImportJob, int64, error)
+	FindQueued(ctx context.Context, limit int) ([]*domain.ImportJob, error)
+	FindStuckProcessing(ctx context.Context, timeout time.Duration) ([]*domain.ImportJob, error)
+	UpdateProcessingStartedAt(ctx context.Context, id uuid.UUID, startedAt time.Time) error
 }
 
 type importJobRepository struct {
@@ -142,4 +146,40 @@ func (r *importJobRepository) List(ctx context.Context, orgID *uuid.UUID, page, 
 	}
 
 	return jobs, total, nil
+}
+
+func (r *importJobRepository) FindQueued(ctx context.Context, limit int) ([]*domain.ImportJob, error) {
+	var jobs []*domain.ImportJob
+	err := r.db.WithContext(ctx).
+		Where("status = ?", domain.ImportQueued).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&jobs).Error
+	if err != nil {
+		return nil, errors.WrapInternal(err)
+	}
+	return jobs, nil
+}
+
+func (r *importJobRepository) FindStuckProcessing(ctx context.Context, timeout time.Duration) ([]*domain.ImportJob, error) {
+	var jobs []*domain.ImportJob
+	cutoff := time.Now().Add(-timeout)
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND processing_started_at < ?", domain.ImportProcessing, cutoff).
+		Find(&jobs).Error
+	if err != nil {
+		return nil, errors.WrapInternal(err)
+	}
+	return jobs, nil
+}
+
+func (r *importJobRepository) UpdateProcessingStartedAt(ctx context.Context, id uuid.UUID, startedAt time.Time) error {
+	result := r.db.WithContext(ctx).Model(&domain.ImportJob{}).Where("id = ?", id).Update("processing_started_at", startedAt)
+	if result.Error != nil {
+		return errors.WrapInternal(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.ErrNotFound
+	}
+	return nil
 }

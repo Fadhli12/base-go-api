@@ -10,21 +10,22 @@ import (
 )
 
 type ImportJob struct {
-	ID               uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Status           string         `gorm:"type:varchar(20);not null;default:'queued'" json:"status"`
-	EntityTypes      pq.StringArray `gorm:"type:text[];not null" json:"entity_types"`
-	Format           string         `gorm:"type:varchar(10);not null;default:'json'" json:"format"`
-	OrgID            *uuid.UUID     `gorm:"type:uuid" json:"org_id"`
-	CreatedBy        uuid.UUID      `gorm:"type:uuid;not null" json:"created_by"`
-	ConflictStrategy string         `gorm:"type:varchar(10);not null;default:'skip'" json:"conflict_strategy"`
-	DryRun           bool           `gorm:"not null;default:false" json:"dry_run"`
-	SourceFilePath   *string        `gorm:"type:varchar(500)" json:"source_file_path"`
-	IdempotencyKey   *string        `gorm:"type:varchar(64);unique" json:"idempotency_key"`
-	Result           datatypes.JSON `gorm:"type:jsonb" json:"result"`
-	ErrorMessage     *string        `json:"error_message"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                  uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Status              string         `gorm:"type:varchar(20);not null;default:'queued'" json:"status"`
+	EntityTypes         pq.StringArray `gorm:"type:text[];not null" json:"entity_types"`
+	Format              string         `gorm:"type:varchar(10);not null;default:'json'" json:"format"`
+	OrgID               *uuid.UUID     `gorm:"type:uuid" json:"org_id"`
+	CreatedBy           uuid.UUID      `gorm:"type:uuid;not null" json:"created_by"`
+	ConflictStrategy    string         `gorm:"type:varchar(10);not null;default:'skip'" json:"conflict_strategy"`
+	DryRun              bool           `gorm:"not null;default:false" json:"dry_run"`
+	SourceFilePath      *string        `gorm:"type:varchar(500)" json:"source_file_path"`
+	IdempotencyKey      *string        `gorm:"type:varchar(64);unique" json:"idempotency_key"`
+	Result              datatypes.JSON `gorm:"type:jsonb" json:"result"`
+	ErrorMessage        *string        `json:"error_message"`
+	ProcessingStartedAt *time.Time     `gorm:"index" json:"processing_started_at,omitempty"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	DeletedAt           gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (ImportJob) TableName() string { return "import_jobs" }

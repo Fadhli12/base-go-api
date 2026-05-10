@@ -378,12 +378,14 @@ func (s *exportService) createSyncExport(ctx context.Context, req *ExportRequest
 		return nil, apperrors.WrapInternal(err)
 	}
 
+	s.publishExportCreated(ctx, job.ID, job.OrgID, job.EntityTypes)
+
 	// Stream export data into a buffer and sign.
 	var buf bytes.Buffer
 	if err := s.StreamExport(ctx, req, &buf); err != nil {
-		// Update job as failed.
 		errMsg := err.Error()
 		_ = s.exportJobRepo.UpdateStatus(ctx, job.ID, domain.ExportFailed, &errMsg)
+		s.publishExportFailed(ctx, job.ID, job.OrgID, job.EntityTypes)
 		return nil, err
 	}
 
@@ -395,8 +397,7 @@ func (s *exportService) createSyncExport(ctx context.Context, req *ExportRequest
 		s.logger.Error(ctx, "failed to update sync export job", logger.Err(err))
 	}
 
-	// Publish event.
-	s.publishEvent(ctx, job)
+	s.publishExportCompleted(ctx, job.ID, job.OrgID, job.EntityTypes)
 
 	return job, nil
 }
@@ -419,6 +420,8 @@ func (s *exportService) createAsyncExport(ctx context.Context, req *ExportReques
 		return nil, apperrors.WrapInternal(err)
 	}
 
+	s.publishExportCreated(ctx, job.ID, job.OrgID, job.EntityTypes)
+
 	// Enqueue the job for async processing.
 	if s.queue != nil {
 		if err := s.queue.Enqueue(ctx, job.ID.String()); err != nil {
@@ -426,9 +429,9 @@ func (s *exportService) createAsyncExport(ctx context.Context, req *ExportReques
 				logger.String("job_id", job.ID.String()),
 				logger.Err(err),
 			)
-			// Roll back the job status to failed.
 			errMsg := "failed to enqueue job"
 			_ = s.exportJobRepo.UpdateStatus(ctx, job.ID, domain.ExportFailed, &errMsg)
+			s.publishExportFailed(ctx, job.ID, job.OrgID, job.EntityTypes)
 			return nil, apperrors.WrapInternal(err)
 		}
 	}
@@ -474,19 +477,33 @@ func contentTypeForFormat(format string) (string, string) {
 	}
 }
 
-// publishEvent emits a domain event for the completed export job.
-func (s *exportService) publishEvent(ctx context.Context, job *domain.ExportJob) {
+func (s *exportService) publishExportCreated(ctx context.Context, jobID uuid.UUID, orgID *uuid.UUID, entityTypes []string) {
 	if s.eventBus == nil {
 		return
 	}
-	if err := s.eventBus.Publish(domain.WebhookEvent{
-		Type:    "export.completed",
-		Payload: job.ToResponse(),
-		OrgID:   job.OrgID,
-	}); err != nil {
-		s.logger.Warn(ctx, "failed to publish export.completed event",
-			logger.Err(err),
-		)
+	event := domain.NewExportCreatedEvent(jobID, orgID, entityTypes)
+	if err := s.eventBus.Publish(event.ToWebhookEvent()); err != nil {
+		s.logger.Warn(ctx, "failed to publish export.created event", logger.Err(err))
+	}
+}
+
+func (s *exportService) publishExportCompleted(ctx context.Context, jobID uuid.UUID, orgID *uuid.UUID, entityTypes []string) {
+	if s.eventBus == nil {
+		return
+	}
+	event := domain.NewExportCompletedEvent(jobID, orgID, entityTypes)
+	if err := s.eventBus.Publish(event.ToWebhookEvent()); err != nil {
+		s.logger.Warn(ctx, "failed to publish export.completed event", logger.Err(err))
+	}
+}
+
+func (s *exportService) publishExportFailed(ctx context.Context, jobID uuid.UUID, orgID *uuid.UUID, entityTypes []string) {
+	if s.eventBus == nil {
+		return
+	}
+	event := domain.NewExportFailedEvent(jobID, orgID, entityTypes)
+	if err := s.eventBus.Publish(event.ToWebhookEvent()); err != nil {
+		s.logger.Warn(ctx, "failed to publish export.failed event", logger.Err(err))
 	}
 }
 
