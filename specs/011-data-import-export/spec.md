@@ -2,7 +2,7 @@
 
 **Feature Branch**: `011-data-import-export`
 **Created**: 2026-05-10
-**Status**: Draft
+**Status**: Draft (Reviewed by Momus — 1 CRITICAL, 2 HIGH, 4 MEDIUM fixes applied)
 **Input**: User description: "Data Import/Export system for base-go-api with JSON/CSV format support, async processing via Asynq, RBAC enforcement, UUID mapping, and dry-run validation. Derived from adversarial multi-agent planning (Hyperplan) with input from Pragmatist, Architect, Strategist, Innovator, Metis, and Momus perspectives."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -365,3 +365,36 @@ CREATE INDEX idx_import_id_maps_external ON import_id_maps(entity_type, external
 - Import idempotency (duplicate file rejection)
 - Large dataset export (10K+ records)
 - Large dataset import (5K+ records with batch processing)
+- Concurrent import race conditions (two imports creating same user)
+- Import cancellation semantics (partial commit verification)
+- Export file auto-cleanup after 24h TTL
+- Cross-entity-type export ordering verification
+- NDJSON import file ordering enforcement (out-of-order rejection)
+
+## Momus Review Fixes *(applied 2026-05-10)*
+
+### CRITICAL Fixes
+
+1. **import_jobs.org_id FK with NULL** — org_id is NULLABLE. NULL indicates a global (non-org-scoped) import. PostgreSQL FK allows NULL per SQL standard. Migration must use `org_id UUID REFERENCES organizations(id)` (no NOT NULL constraint).
+
+### HIGH Fixes
+
+2. **ExportCursor is per-entity-type** — ExportCursor is instantiated per-entity-type, not across all types simultaneously. The ExportService iterates entity types sequentially in topological order, creating one cursor per type. The outer loop is entity type order; the inner loop is keyset-paginated within that type.
+
+3. **NDJSON import file ordering** — NDJSON and JSON import files MUST list entity types in topological order (organizations → roles → permissions → users → org_members → user_roles → user_permissions). The decoder validates ordering at parse time and rejects out-of-order files with a descriptive error. Alternative: service buffers all records and reorders, but this has memory implications for large imports (documented).
+
+### MEDIUM Fixes
+
+4. **Dry-run reads DB but doesn't write** — Dry-run performs read-only validation against the database (conflict detection via SELECT queries, schema checks) but makes no writes. Previous wording "metadata-only validation" was misleading — it should say "read-only validation."
+
+5. **Per-entity permission validation** — For imports, Enforce() is called per-entity-type (not per-record). Before processing each entity type batch, a single Enforce() call validates the user can import that entity type. This limits Casbin calls to ~7 per import (one per entity type), not N per record.
+
+6. **CSV format for junction tables** — CSV import supports flat entity types only (users, roles, permissions, organizations). Junction tables (user_roles, user_permissions, organization_members) are CSV-unsupported in v1 and require JSON format. The CSV decoder rejects these entity types with a clear error message.
+
+7. **Export file cleanup** — Export files are auto-cleaned by an Asynq scheduled task that runs hourly, deleting files where file_expires_at < NOW(). This reuses the existing Asynq scheduler pattern.
+
+8. **Concurrent import race conditions** — import_id_maps has UNIQUE(job_id, entity_type, external_id) which is per-job. Cross-import races on unique constraints (e.g., email) are handled by the conflict_strategy: "skip" ignores the error, "overwrite" updates, "fail" aborts. For truly concurrent imports creating the same user, PostgreSQL's unique constraint prevents duplicates at the DB level regardless of the application-level check.
+
+9. **CancelImport semantics** — Cancelling a processing import stops after the current entity type batch completes. Partially committed entity types remain. The ImportResult reports exactly which types succeeded and which were skipped. This is documented behavior, not a bug — the per-entity-type transaction model means partial success is by design.
+
+10. **Exportable interface requirement** — All 7 MVP entity types MUST implement the Exportable interface (GetEntityType(), ToExportResponse(piiHash bool)) before the export feature ships. This is a prerequisite, not optional.

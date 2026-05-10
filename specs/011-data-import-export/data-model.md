@@ -12,9 +12,9 @@ CREATE TABLE export_jobs (
     entity_types TEXT[] NOT NULL,
     format VARCHAR(10) NOT NULL DEFAULT 'json',
     -- 'json', 'csv'
-    org_id UUID,
-    created_by UUID NOT NULL,
-    file_path VARCHAR(500),
+    org_id UUID REFERENCES organizations(id),
+    -- NULLABLE: NULL means global (non-org-scoped) export. FK allows NULL per PostgreSQL semantics.
+    created_by UUID NOT NULL, VARCHAR(500),
     file_expires_at TIMESTAMP,
     record_count INTEGER,
     error_message TEXT,
@@ -40,9 +40,9 @@ CREATE TABLE import_jobs (
     -- 'queued', 'validating', 'processing', 'completed', 'failed', 'cancelled'
     entity_types TEXT[] NOT NULL,
     format VARCHAR(10) NOT NULL DEFAULT 'json',
-    org_id UUID,
-    created_by UUID NOT NULL,
-    conflict_strategy VARCHAR(10) NOT NULL DEFAULT 'skip',
+    org_id UUID REFERENCES organizations(id),
+    -- NULLABLE: NULL means global (non-org-scoped) import. FK allows NULL per PostgreSQL semantics.
+    created_by UUID NOT NULL, VARCHAR(10) NOT NULL DEFAULT 'skip',
     -- 'skip', 'overwrite', 'fail'
     dry_run BOOLEAN NOT NULL DEFAULT FALSE,
     source_file_path VARCHAR(500),
