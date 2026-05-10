@@ -80,10 +80,10 @@ func (s *SearchService) Search(
 		args = append(args, tsq)
 	}
 
-	args = appendFilter(parts, args, "n.status = ?", filters, "status")
-	args = appendFilter(parts, args, "n.author_id = ?", filters, "author_id")
-	args = appendFilter(parts, args, "n.created_at >= ?::timestamptz", filters, "date_from")
-	args = appendFilter(parts, args, "n.created_at <= ?::timestamptz", filters, "date_to")
+	parts, args = appendFilter(parts, args, "n.status = ?", filters, "status")
+	parts, args = appendFilter(parts, args, "n.author_id = ?", filters, "author_id")
+	parts, args = appendFilter(parts, args, "n.created_at >= ?::timestamptz", filters, "date_from")
+	parts, args = appendFilter(parts, args, "n.created_at <= ?::timestamptz", filters, "date_to")
 
 	whereClause := strings.Join(parts, " AND ")
 
@@ -114,10 +114,15 @@ func (s *SearchService) Search(
 	order := orderClause(query, tsq, sortBy, sortDir)
 
 	offset := (page - 1) * pageSize
-	execArgs := append([]interface{}{}, args...)
+	// Build execArgs in the order ? appears in the final SQL:
+	// SELECT columns come before WHERE, so tsq args for rank/headline come first,
+	// then WHERE clause args, then LIMIT/OFFSET.
+	var execArgs []interface{}
 	if query != "" && tsq != "" {
+		// rank and headline to_tsquery placeholders (in SELECT clause)
 		execArgs = append(execArgs, tsq, tsq)
 	}
+	execArgs = append(execArgs, args...) // WHERE clause args (including tsq for search_vector match)
 	execArgs = append(execArgs, pageSize, offset)
 
 	selectSQL := strings.Join(cols, ", ")
@@ -356,25 +361,24 @@ func buildTSQuery(raw string) string {
 
 // appendFilter conditionally appends a WHERE clause fragment and its argument.
 func appendFilter(parts []string, args []interface{}, clause string,
-	filters map[string]interface{}, key string) []interface{} {
+	filters map[string]interface{}, key string) ([]string, []interface{}) {
 	if filters == nil {
-		return args
+		return parts, args
 	}
 	v, ok := filters[key]
 	if !ok {
-		return args
+		return parts, args
 	}
 	switch val := v.(type) {
 	case string:
 		if val == "" {
-			return args
+			return parts, args
 		}
 	case nil:
-		return args
+		return parts, args
 	}
-	parts[len(parts)-1] = parts[len(parts)-1]
 	parts = append(parts, clause)
-	return append(args, v)
+	return parts, append(args, v)
 }
 
 // orderClause returns a safe ORDER BY fragment.

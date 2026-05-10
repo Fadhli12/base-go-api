@@ -14,9 +14,9 @@ import (
 
 const (
 	// Redis key prefixes
-	jobQueueKey    = "jobs:queue"
-	jobDataKeyFmt  = "jobs:data:%s"
-	jobUserKeyFmt  = "jobs:user:%s"
+	defaultQueueKey  = "jobs:queue"
+	jobDataKeyFmt    = "jobs:data:%s"
+	jobUserKeyFmt    = "jobs:user:%s"
 	jobStatusKeyFmt = "jobs:status:%s"
 
 	// Job data TTL (7 days)
@@ -56,18 +56,33 @@ type JobRepository interface {
 	// GetStuckJobs finds jobs in processing state longer than threshold.
 	GetStuckJobs(ctx context.Context, threshold time.Duration) ([]*domain.Job, error)
 
+	// ResetStuckJob resets a stuck job from processing to pending and updates Redis indexes.
+	ResetStuckJob(ctx context.Context, job *domain.Job, nextRetryAt time.Time) error
+
 	// Delete removes a job (for dead letter cleanup).
 	Delete(ctx context.Context, jobID uuid.UUID) error
 }
 
 // jobRedisRepository implements JobRepository using Redis.
 type jobRedisRepository struct {
-	client *redis.Client
+	client   *redis.Client
+	queueKey string
 }
 
 // NewJobRepository creates a new JobRepository with Redis backend.
 func NewJobRepository(client *redis.Client) JobRepository {
-	return &jobRedisRepository{client: client}
+	return &jobRedisRepository{
+		client:   client,
+		queueKey: defaultQueueKey,
+	}
+}
+
+// NewJobRepositoryWithQueueKey creates a JobRepository with a custom queue key.
+func NewJobRepositoryWithQueueKey(client *redis.Client, queueKey string) JobRepository {
+	return &jobRedisRepository{
+		client:   client,
+		queueKey: queueKey,
+	}
 }
 
 // Submit creates a new job in pending state and enqueues it.
@@ -99,7 +114,7 @@ func (r *jobRedisRepository) Submit(ctx context.Context, job *domain.Job) error 
 
 	// Enqueue in priority order (next_retry_at = now for new jobs)
 	nextRetry := job.CreatedAt
-	pipe.ZAdd(ctx, jobQueueKey, redis.Z{Score: float64(nextRetry.UnixMilli()), Member: job.ID.String()})
+	pipe.ZAdd(ctx, r.queueKey, redis.Z{Score: float64(nextRetry.UnixMilli()), Member: job.ID.String()})
 
 	_, err = pipe.Exec(ctx)
 	if err != nil {
@@ -190,7 +205,7 @@ func (r *jobRedisRepository) ListByUser(ctx context.Context, userID uuid.UUID, s
 
 // Enqueue adds a job to the queue (for initial submit and retry).
 func (r *jobRedisRepository) Enqueue(ctx context.Context, jobID uuid.UUID, nextRetryAt time.Time) error {
-	err := r.client.ZAdd(ctx, jobQueueKey, redis.Z{
+	err := r.client.ZAdd(ctx, r.queueKey, redis.Z{
 		Score:  float64(nextRetryAt.UnixMilli()),
 		Member: jobID.String(),
 	}).Err()
@@ -204,7 +219,7 @@ func (r *jobRedisRepository) Enqueue(ctx context.Context, jobID uuid.UUID, nextR
 // Returns nil if queue is empty or times out.
 func (r *jobRedisRepository) Dequeue(ctx context.Context, timeout time.Duration) (*domain.Job, error) {
 	// Use ZPOPMIN to get the next job due for processing
-	result, err := r.client.ZPopMin(ctx, jobQueueKey, 1).Result()
+	result, err := r.client.ZPopMin(ctx, r.queueKey, 1).Result()
 	if err != nil {
 		return nil, errors.WrapInternal(err)
 	}
@@ -233,8 +248,9 @@ func (r *jobRedisRepository) SetProcessing(ctx context.Context, jobID uuid.UUID)
 		return nil, err
 	}
 
-	// Check if job is in pending state (can be claimed)
-	if job.Status != domain.JobStatusPending {
+	previousStatus := job.Status
+
+	if previousStatus != domain.JobStatusPending && !(previousStatus == domain.JobStatusFailed && job.AttemptCount < job.MaxRetries) {
 		return nil, errors.ErrConflict
 	}
 
@@ -244,6 +260,17 @@ func (r *jobRedisRepository) SetProcessing(ctx context.Context, jobID uuid.UUID)
 
 	if err := r.Update(ctx, job); err != nil {
 		return nil, err
+	}
+
+	pipe := r.client.Pipeline()
+	oldStatusKey := fmt.Sprintf(jobStatusKeyFmt, previousStatus)
+	pipe.SRem(ctx, oldStatusKey, jobID.String())
+	newStatusKey := fmt.Sprintf(jobStatusKeyFmt, domain.JobStatusProcessing)
+	pipe.SAdd(ctx, newStatusKey, jobID.String())
+	pipe.Expire(ctx, newStatusKey, jobDataTTL)
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return nil, errors.WrapInternal(err)
 	}
 
 	return job, nil
@@ -293,8 +320,9 @@ func (r *jobRedisRepository) SetFailed(ctx context.Context, jobID uuid.UUID, err
 
 	job.LastError = errMsg
 
-	if job.IsRetryable() && nextRetryAt != nil {
+	if job.AttemptCount < job.MaxRetries && nextRetryAt != nil {
 		// Schedule retry
+		job.AttemptCount++
 		job.Status = domain.JobStatusFailed
 		job.NextRetryAt = nextRetryAt
 
@@ -302,13 +330,26 @@ func (r *jobRedisRepository) SetFailed(ctx context.Context, jobID uuid.UUID, err
 			return err
 		}
 
+		pipe := r.client.Pipeline()
+		oldStatusKey := fmt.Sprintf(jobStatusKeyFmt, domain.JobStatusProcessing)
+		pipe.SRem(ctx, oldStatusKey, jobID.String())
+		newStatusKey := fmt.Sprintf(jobStatusKeyFmt, domain.JobStatusFailed)
+		pipe.SAdd(ctx, newStatusKey, jobID.String())
+		pipe.Expire(ctx, newStatusKey, jobDataTTL)
+		_, err = pipe.Exec(ctx)
+		if err != nil {
+			return errors.WrapInternal(err)
+		}
+
 		// Re-enqueue with delay
 		return r.Enqueue(ctx, jobID, *nextRetryAt)
 	}
 
 	// No retries left - mark as dead
+	job.AttemptCount++
 	job.Status = domain.JobStatusDead
 	job.CompletedAt = func() *time.Time { now := time.Now(); return &now }()
+	job.NextRetryAt = nil
 
 	if err := r.Update(ctx, job); err != nil {
 		return err
@@ -360,6 +401,30 @@ func (r *jobRedisRepository) GetStuckJobs(ctx context.Context, threshold time.Du
 	return stuckJobs, nil
 }
 
+func (r *jobRedisRepository) ResetStuckJob(ctx context.Context, job *domain.Job, nextRetryAt time.Time) error {
+	job.Status = domain.JobStatusPending
+	job.AttemptCount++
+	job.NextRetryAt = &nextRetryAt
+
+	if err := r.Update(ctx, job); err != nil {
+		return err
+	}
+
+	processingKey := fmt.Sprintf(jobStatusKeyFmt, domain.JobStatusProcessing)
+	pendingKey := fmt.Sprintf(jobStatusKeyFmt, domain.JobStatusPending)
+
+	pipe := r.client.Pipeline()
+	pipe.SRem(ctx, processingKey, job.ID.String())
+	pipe.SAdd(ctx, pendingKey, job.ID.String())
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return errors.WrapInternal(err)
+	}
+
+	return nil
+}
+
 // Delete removes a job (for dead letter cleanup).
 func (r *jobRedisRepository) Delete(ctx context.Context, jobID uuid.UUID) error {
 	job, err := r.GetByID(ctx, jobID)
@@ -374,7 +439,7 @@ func (r *jobRedisRepository) Delete(ctx context.Context, jobID uuid.UUID) error 
 	pipe.Del(ctx, dataKey)
 
 	// Remove from queue if present
-	pipe.ZRem(ctx, jobQueueKey, jobID.String())
+	pipe.ZRem(ctx, r.queueKey, jobID.String())
 
 	// Remove from user index
 	userKey := fmt.Sprintf(jobUserKeyFmt, job.UserID.String())

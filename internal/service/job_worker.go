@@ -16,7 +16,7 @@ import (
 // JobWorker processes jobs from the Redis queue using a pool of workers.
 type JobWorker struct {
 	jobRepo     repository.JobRepository
-	jobHandler  *JobHandlerService
+	jobHandler  JobHandler
 	callbackSvc *JobCallbackService
 	redis       *redis.Client
 	config      *config.JobConfig
@@ -43,7 +43,7 @@ func NewJobWorker(
 }
 
 // SetJobHandler sets the job handler service.
-func (w *JobWorker) SetJobHandler(handler *JobHandlerService) {
+func (w *JobWorker) SetJobHandler(handler JobHandler) {
 	w.jobHandler = handler
 }
 
@@ -280,7 +280,7 @@ func (w *JobWorker) handleError(ctx context.Context, workerID int, job *domain.J
 		slog.Int("max_retries", job.MaxRetries),
 	)
 
-	if job.IsRetryable() {
+	if job.AttemptCount < job.MaxRetries {
 		nextRetry := calculateBackoff(job.AttemptCount, w.config)
 		if err := w.jobRepo.SetFailed(ctx, job.ID, jobErr.Error(), &nextRetry); err != nil {
 			w.logger.Error("failed to set failed with retry",

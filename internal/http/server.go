@@ -47,6 +47,7 @@ type Server struct {
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
 	jobService     *service.JobService
+	twoFactorSvc   *service.TwoFactorService
 	eventBus       *domain.EventBus
 }
 
@@ -334,6 +335,10 @@ func (s *Server) SetJobService(jobService *service.JobService) {
 	s.jobService = jobService
 }
 
+func (s *Server) SetTwoFactorService(twoFactorSvc *service.TwoFactorService) {
+	s.twoFactorSvc = twoFactorSvc
+}
+
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	address := fmt.Sprintf(":%d", s.config.Server.Port)
@@ -514,6 +519,20 @@ func (s *Server) RegisterRoutes() {
 	sessions.GET("", authHandler.ListSessions)
 	sessions.DELETE("/:id", authHandler.RevokeSession)
 	sessions.DELETE("/others", authHandler.RevokeAllOtherSessions)
+
+	// 2FA routes (protected)
+	if s.twoFactorSvc != nil {
+		twoFactorHandler := handler.NewTwoFactorHandler(s.twoFactorSvc)
+		twoFactor := v1.Group("/auth/2fa")
+		twoFactor.Use(middleware.JWT(middleware.JWTConfig{
+			Secret: s.config.JWT.Secret,
+		}))
+		twoFactor.POST("/setup", twoFactorHandler.InitiateSetup)
+		twoFactor.POST("/verify-enable", twoFactorHandler.VerifyAndEnable)
+		twoFactor.GET("/status", twoFactorHandler.GetStatus)
+		twoFactor.DELETE("", twoFactorHandler.Disable)
+		twoFactor.POST("/regenerate-codes", twoFactorHandler.RegenerateCodes)
+	}
 
 	// MED-006: Auth metrics endpoint (protected, admin-only in production)
 	metricsHandler := handler.NewMetricsHandler()
@@ -980,7 +999,7 @@ func (s *Server) RegisterSettingsRoutes(api *echo.Group, settingsHandler *handle
 }
 
 func (s *Server) RegisterJobRoutes(api *echo.Group) {
-	jobRepo := repository.NewJobRepository(s.redis)
+	jobRepo := repository.NewJobRepositoryWithQueueKey(s.redis, s.config.Job.QueueKey)
 	jobService := service.NewJobService(jobRepo, &s.config.Job, slog.Default())
 	s.jobService = jobService
 

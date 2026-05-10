@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/example/go-api-base/internal/config"
-	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/repository"
 )
 
@@ -38,14 +37,9 @@ func (r *JobReaper) Reap(ctx context.Context) (int, error) {
 
 	recovered := 0
 	for _, job := range stuckJobs {
-		// Reset to pending and re-enqueue
-		job.Status = domain.JobStatusPending
-		job.AttemptCount++ // Increment to avoid infinite loop
-
 		nextRetry := time.Now().Add(time.Duration(r.config.JobTimeoutSeconds) * time.Second)
-		job.NextRetryAt = &nextRetry
 
-		if err := r.jobRepo.Update(ctx, job); err != nil {
+		if err := r.jobRepo.ResetStuckJob(ctx, job, nextRetry); err != nil {
 			r.logger.Error("failed to reset stuck job",
 				slog.String("job_id", job.ID.String()),
 				slog.String("error", err.Error()),
@@ -53,7 +47,7 @@ func (r *JobReaper) Reap(ctx context.Context) (int, error) {
 			continue
 		}
 
-		if err := r.jobRepo.Enqueue(ctx, job.ID, *job.NextRetryAt); err != nil {
+		if err := r.jobRepo.Enqueue(ctx, job.ID, nextRetry); err != nil {
 			r.logger.Error("failed to enqueue stuck job",
 				slog.String("job_id", job.ID.String()),
 				slog.String("error", err.Error()),
