@@ -241,9 +241,10 @@ func (h *TwoFactorHandler) GetStatus(c echo.Context) error {
 	}
 
 	resp := StatusResponse{
-		Enabled:   result.Secret != "" || result.QRCodeURL != "",
+		Enabled:   result.Enabled,
 		Secret:    result.Secret,
 		QRCodeURL: result.QRCodeURL,
+		Status:    result.Status,
 	}
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, resp))

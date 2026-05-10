@@ -21,7 +21,7 @@ type RefreshToken struct {
 	UserAgent  string `gorm:"size:500" json:"user_agent,omitempty"`  // Browser/client info
 	IPAddress  string `gorm:"size:45" json:"ip_address,omitempty"`   // Login IP address
 	DeviceName    string `gorm:"size:255" json:"device_name,omitempty"` // User-friendly device name
-	Is2FAPending  bool   `gorm:"default:false"`
+	Is2FAPending  bool   `gorm:"column:is_2fa_pending;default:false"`
 
 	// BelongsTo relationship
 	User User `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE" json:"user,omitempty"`

@@ -15,9 +15,11 @@ const (
 
 // TwoFactorSetupResponse contains the secret and QR code for setting up 2FA
 type TwoFactorSetupResponse struct {
-	Secret        string   `json:"secret"`
-	QRCodeURL     string   `json:"qr_code_url"`
-	RecoveryCodes []string `json:"recovery_codes"`
+	Secret        string   `json:"secret,omitempty"`
+	QRCodeURL     string   `json:"qr_code_url,omitempty"`
+	RecoveryCodes []string `json:"recovery_codes,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	Status        string   `json:"status,omitempty"`
 }
 
 // LoginResult represents the result of a login attempt

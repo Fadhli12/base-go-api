@@ -43,7 +43,7 @@ func (r *twoFactorRecoveryCodeRepository) Create(ctx context.Context, code *doma
 func (r *twoFactorRecoveryCodeRepository) FindByUserAndHash(ctx context.Context, userID uuid.UUID, codeHash string) (*domain.TwoFactorRecoveryCode, error) {
 	var code domain.TwoFactorRecoveryCode
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND code_hash = ? AND used_at IS NULL AND deleted_at IS NULL").
+		Where("user_id = ? AND code_hash = ? AND used_at IS NULL", userID, codeHash).
 		First(&code).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
@@ -58,7 +58,7 @@ func (r *twoFactorRecoveryCodeRepository) MarkUsed(ctx context.Context, id uuid.
 	now := time.Now()
 	result := r.db.WithContext(ctx).
 		Model(&domain.TwoFactorRecoveryCode{}).
-		Where("id = ? AND deleted_at IS NULL").
+		Where("id = ?", id).
 		Update("used_at", now)
 	if result.Error != nil {
 		return errors.WrapInternal(result.Error)
@@ -72,7 +72,7 @@ func (r *twoFactorRecoveryCodeRepository) MarkUsed(ctx context.Context, id uuid.
 // DeleteAllByUser soft deletes all recovery codes for a user
 func (r *twoFactorRecoveryCodeRepository) DeleteAllByUser(ctx context.Context, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
-		Where("user_id = ? AND deleted_at IS NULL").
+		Where("user_id = ?", userID).
 		Delete(&domain.TwoFactorRecoveryCode{})
 	if result.Error != nil {
 		return errors.WrapInternal(result.Error)
@@ -85,7 +85,7 @@ func (r *twoFactorRecoveryCodeRepository) CountUnusedByUser(ctx context.Context,
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&domain.TwoFactorRecoveryCode{}).
-		Where("user_id = ? AND used_at IS NULL AND deleted_at IS NULL").
+		Where("user_id = ? AND used_at IS NULL", userID).
 		Count(&count).Error; err != nil {
 		return 0, errors.WrapInternal(err)
 	}

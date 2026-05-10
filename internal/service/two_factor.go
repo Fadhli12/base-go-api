@@ -151,9 +151,21 @@ func (s *TwoFactorService) VerifyAndEnable(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 
-	// Soft-delete all recovery codes
+	// Soft-delete all existing recovery codes
 	if err := s.twoFactorRecoveryCodeRepo.DeleteAllByUser(ctx, userID); err != nil {
 		return nil, err
+	}
+
+	// Generate new recovery codes and store hashed versions
+	plainCodes, hashedCodes := GenerateRecoveryCodes()
+	for _, hash := range hashedCodes {
+		code := &domain.TwoFactorRecoveryCode{
+			UserID:   userID,
+			CodeHash: hash,
+		}
+		if err := s.twoFactorRecoveryCodeRepo.Create(ctx, code); err != nil {
+			return nil, err
+		}
 	}
 
 	// Audit log
@@ -161,7 +173,11 @@ func (s *TwoFactorService) VerifyAndEnable(ctx context.Context, userID uuid.UUID
 		s.auditSvc.LogAction(ctx, userID, "enable_2fa", "user", userID.String(), nil, nil, "", "")
 	}
 
-	return nil, nil
+	return &domain.TwoFactorSetupResponse{
+		RecoveryCodes: plainCodes,
+		Enabled:       true,
+		Status:        string(domain.TwoFactorStatusEnabled),
+	}, nil
 }
 
 // GetStatus returns the current 2FA status for a user.
@@ -198,6 +214,8 @@ func (s *TwoFactorService) GetStatus(ctx context.Context, userID uuid.UUID) (*do
 	return &domain.TwoFactorSetupResponse{
 		Secret:    secret,
 		QRCodeURL: qrCodeURL,
+		Enabled:   user.TwoFactorEnabled,
+		Status:     string(user.TwoFactorStatus),
 	}, nil
 }
 
