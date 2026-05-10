@@ -41,12 +41,14 @@ type Media struct {
 	OriginalFilename string             `gorm:"type:varchar(500);not null" json:"original_filename"`
 	MimeType         string             `gorm:"type:varchar(100);not null;index" json:"mime_type"`
 	Size             int64              `gorm:"not null" json:"size"`
+	CurrentVersion   int                `gorm:"default:1;not null" json:"current_version"`
 	Path             string             `gorm:"type:varchar(2000);not null" json:"path"`
 	Metadata         datatypes.JSONMap  `gorm:"type:jsonb" json:"metadata,omitempty"`
 	CustomProperties datatypes.JSONMap  `gorm:"type:jsonb" json:"custom_properties,omitempty"`
 	UploadedByID     uuid.UUID          `gorm:"type:uuid;not null;index" json:"uploaded_by_id"`
 	UploadedBy       *User              `gorm:"foreignKey:UploadedByID;constraint:OnDelete:RESTRICT" json:"uploaded_by,omitempty"`
 	Conversions      []*MediaConversion `gorm:"foreignKey:MediaID;constraint:OnDelete:CASCADE" json:"conversions,omitempty"`
+	Versions         []*MediaVersion    `gorm:"foreignKey:MediaID;constraint:OnDelete:CASCADE" json:"versions,omitempty"`
 	CreatedAt        time.Time          `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt        time.Time          `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt        gorm.DeletedAt     `gorm:"index" json:"-"`
@@ -83,8 +85,11 @@ type MediaResponse struct {
 	Filename         string                     `json:"filename"`
 	MimeType         string                     `json:"mime_type"`
 	Size             int64                      `json:"size"`
+	CurrentVersion   int                        `json:"current_version"`
+	VersionCount     int                        `json:"version_count"`
 	URL              string                     `json:"url"`
 	Conversions      []*MediaConversionResponse `json:"conversions,omitempty"`
+	Versions         []*MediaVersionResponse    `json:"versions,omitempty"`
 	CustomProperties map[string]interface{}     `json:"custom_properties,omitempty"`
 	CreatedAt        time.Time                  `json:"created_at"`
 }
@@ -104,6 +109,11 @@ func (m *Media) ToResponse() *MediaResponse {
 		conversions[i] = c.ToResponse()
 	}
 
+	versions := make([]*MediaVersionResponse, len(m.Versions))
+	for i, v := range m.Versions {
+		versions[i] = v.ToResponse(m.CurrentVersion)
+	}
+
 	return &MediaResponse{
 		ID:               m.ID,
 		ModelType:        m.ModelType,
@@ -111,7 +121,11 @@ func (m *Media) ToResponse() *MediaResponse {
 		Filename:         m.OriginalFilename,
 		MimeType:         m.MimeType,
 		Size:             m.Size,
+		CurrentVersion:   m.CurrentVersion,
+		VersionCount:     len(m.Versions),
+		URL:              "", // URL is set by the handler
 		Conversions:      conversions,
+		Versions:         versions,
 		CustomProperties: m.CustomProperties,
 		CreatedAt:        m.CreatedAt,
 	}

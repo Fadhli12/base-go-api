@@ -510,12 +510,17 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "settings:manage_system", Description: "Update system settings", Resource: "settings", Action: "manage_system"},
 		{Name: "webhooks:view", Description: "View webhooks and delivery history", Resource: "webhooks", Action: "view"},
 		{Name: "webhooks:manage", Description: "Manage webhooks and replay deliveries", Resource: "webhooks", Action: "manage"},
+		{Name: "media_version:upload", Description: "Upload new media versions", Resource: "media_version", Action: "upload"},
+		{Name: "media_version:view", Description: "View media version history", Resource: "media_version", Action: "view"},
+		{Name: "media_version:download", Description: "Download specific media versions", Resource: "media_version", Action: "download"},
+		{Name: "media_version:restore", Description: "Restore previous media versions", Resource: "media_version", Action: "restore"},
+		{Name: "media_version:delete", Description: "Delete specific media versions (admin only)", Resource: "media_version", Action: "delete"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete"},
 			},
 		},
 	}

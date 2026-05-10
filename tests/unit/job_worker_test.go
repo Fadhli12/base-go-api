@@ -12,33 +12,51 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"log/slog"
 )
 
-// MockJobHandlerService implements a mock job handler for testing.
+// MockJobHandlerService implements service.JobHandlerServiceInterface for testing.
 type MockJobHandlerService struct {
-	handlers map[string]func(ctx context.Context, payload map[string]interface{}) ([]byte, error)
+	handlers map[string]service.JobHandler
 	log      *slog.Logger
 }
 
 func NewMockJobHandlerService(log *slog.Logger) *MockJobHandlerService {
 	return &MockJobHandlerService{
-		handlers: make(map[string]func(ctx context.Context, payload map[string]interface{}) ([]byte, error)),
+		handlers: make(map[string]service.JobHandler),
 		log:      log,
 	}
 }
 
-func (h *MockJobHandlerService) Register(jobType string, fn func(ctx context.Context, payload map[string]interface{}) ([]byte, error)) {
-	h.handlers[jobType] = fn
+// funcJobHandler wraps a simple function as a service.JobHandler.
+type funcJobHandler struct {
+	fn      func(ctx context.Context, payload map[string]interface{}) ([]byte, error)
+	jobType string
+}
+
+func (f *funcJobHandler) Handle(ctx context.Context, jobType string, payload map[string]interface{}) ([]byte, error) {
+	return f.fn(ctx, payload)
+}
+
+func (f *funcJobHandler) SupportedTypes() []string {
+	return []string{f.jobType}
+}
+
+func (h *MockJobHandlerService) Register(jobType string, handler service.JobHandler) {
+	h.handlers[jobType] = handler
+}
+
+// RegisterFunc registers a handler function for a job type, wrapping it in a funcJobHandler.
+func (h *MockJobHandlerService) RegisterFunc(jobType string, fn func(ctx context.Context, payload map[string]interface{}) ([]byte, error)) {
+	h.handlers[jobType] = &funcJobHandler{fn: fn, jobType: jobType}
 }
 
 func (h *MockJobHandlerService) Handle(ctx context.Context, jobType string, payload map[string]interface{}) ([]byte, error) {
-	fn, ok := h.handlers[jobType]
+	handler, ok := h.handlers[jobType]
 	if !ok {
 		return nil, service.ErrJobHandlerNotFound(jobType)
 	}
-	return fn(ctx, payload)
+	return handler.Handle(ctx, jobType, payload)
 }
 
 func (h *MockJobHandlerService) SupportedTypes() []string {
@@ -127,7 +145,7 @@ func TestWorkerPool_ProcessesJob(t *testing.T) {
 	result := []byte(`{"status":"ok"}`)
 
 	// Set up handler
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return result, nil
 	})
 
@@ -169,7 +187,7 @@ func TestWorkerPool_ProcessesJobIntegration(t *testing.T) {
 
 	result := []byte(`{"status":"ok"}`)
 
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return result, nil
 	})
 
@@ -227,7 +245,7 @@ func TestWorkerPool_HandlesError(t *testing.T) {
 		UserID:       uuid.New(),
 	}
 
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return nil, assert.AnError
 	})
 
@@ -280,7 +298,7 @@ func TestWorkerPool_ExhaustedRetries(t *testing.T) {
 		UserID:       uuid.New(),
 	}
 
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return nil, assert.AnError
 	})
 
@@ -362,7 +380,7 @@ func TestWorkerPool_ProcessesMultipleJobs(t *testing.T) {
 
 	result := []byte(`{"status":"ok"}`)
 
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return result, nil
 	})
 
@@ -435,7 +453,7 @@ func TestWorkerPool_InvalidPayload(t *testing.T) {
 	}
 
 	// Register handler (should not be called due to parse error)
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		t.Fatal("handler should not be called for invalid payload")
 		return nil, nil
 	})
@@ -540,7 +558,7 @@ func TestWorkerPool_SetProcessingFailure(t *testing.T) {
 		UserID:       uuid.New(),
 	}
 
-	h.handler.Register("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
+	h.handler.RegisterFunc("test.job", func(ctx context.Context, payload map[string]interface{}) ([]byte, error) {
 		return []byte(`{}`), nil
 	})
 

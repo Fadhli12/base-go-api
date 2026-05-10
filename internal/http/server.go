@@ -464,6 +464,7 @@ func (s *Server) RegisterRoutes() {
 
 	// Initialize media handler if media service is available
 	var mediaHandler *handler.MediaHandler
+	var versionHandler *handler.MediaVersionHandler
 	if mediaService != nil {
 		// Use configured signing key or fallback to JWT secret for backwards compatibility
 		signingKey := s.config.Storage.SigningKey
@@ -471,6 +472,11 @@ func (s *Server) RegisterRoutes() {
 			signingKey = s.config.JWT.Secret // Fallback to JWT secret
 		}
 		mediaHandler = handler.NewMediaHandler(mediaService, auditService, s.enforcer, signingKey)
+
+		// Initialize media version dependencies
+		mediaVersionRepo := repository.NewMediaVersionRepository(s.db)
+		versionService := service.NewVersionService(mediaRepo, mediaVersionRepo, storageDriver, signingKey, auditService, s.enforcer)
+		versionHandler = handler.NewMediaVersionHandler(versionService, mediaService, s.enforcer)
 	}
 
 	// Swagger documentation (conditional based on config)
@@ -535,6 +541,11 @@ func (s *Server) RegisterRoutes() {
 	// Media routes (if handler initialized)
 	if mediaHandler != nil {
 		mediaHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
+
+	// Media version routes (if handler initialized)
+	if versionHandler != nil {
+		versionHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 	}
 
 	// API Key routes
