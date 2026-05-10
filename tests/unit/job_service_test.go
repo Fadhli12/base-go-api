@@ -86,6 +86,11 @@ func (m *MockJobRepository) GetStuckJobs(ctx context.Context, threshold time.Dur
 	return args.Get(0).([]*domain.Job), args.Error(1)
 }
 
+func (m *MockJobRepository) ResetStuckJob(ctx context.Context, job *domain.Job, nextRetryAt time.Time) error {
+	args := m.Called(ctx, job, nextRetryAt)
+	return args.Error(0)
+}
+
 func (m *MockJobRepository) Delete(ctx context.Context, jobID uuid.UUID) error {
 	args := m.Called(ctx, jobID)
 	return args.Error(0)
@@ -352,7 +357,10 @@ func TestCancel_InvalidStateTransition(t *testing.T) {
 	err := svc.Cancel(ctx, jobID, userID)
 
 	require.Error(t, err)
-	assert.True(t, apperrors.IsConflict(err))
+	appErr := apperrors.GetAppError(err)
+	require.NotNil(t, appErr)
+	assert.Equal(t, 409, appErr.HTTPStatus)
+	assert.Equal(t, "INVALID_STATE_TRANSITION", appErr.Code)
 	mockRepo.AssertExpectations(t)
 }
 
@@ -376,7 +384,10 @@ func TestCancel_CompletedJob(t *testing.T) {
 	err := svc.Cancel(ctx, jobID, userID)
 
 	require.Error(t, err)
-	assert.True(t, apperrors.IsConflict(err))
+	appErr := apperrors.GetAppError(err)
+	require.NotNil(t, appErr)
+	assert.Equal(t, 409, appErr.HTTPStatus)
+	assert.Equal(t, "INVALID_STATE_TRANSITION", appErr.Code)
 	mockRepo.AssertExpectations(t)
 }
 
