@@ -515,12 +515,17 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "media_version:download", Description: "Download specific media versions", Resource: "media_version", Action: "download"},
 		{Name: "media_version:restore", Description: "Restore previous media versions", Resource: "media_version", Action: "restore"},
 		{Name: "media_version:delete", Description: "Delete specific media versions (admin only)", Resource: "media_version", Action: "delete"},
+		{Name: "data_portability:export_create", Description: "Create data export jobs", Resource: "data_portability", Action: "export:create"},
+		{Name: "data_portability:export_download", Description: "Download export files", Resource: "data_portability", Action: "export:download"},
+		{Name: "data_portability:import_create", Description: "Create data import jobs", Resource: "data_portability", Action: "import:create"},
+		{Name: "data_portability:import_view", Description: "View import job status and results", Resource: "data_portability", Action: "import:view"},
+		{Name: "data_portability:import_cancel", Description: "Cancel import and export jobs", Resource: "data_portability", Action: "import:cancel"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel"},
 			},
 		},
 	}

@@ -3,9 +3,9 @@
 
 ## Priority Context
 <!-- ALWAYS loaded. Keep under 500 chars. Critical discoveries only. -->
-CURRENT ISSUE: None
-SESSION_ID: ses_1fa1ba82cffetkuYbxxsy2UHb3
-NEXT_STEPS: COMPLETED - Feature verification + docs creation done. Oracle verified.
+CURRENT ISSUE: Completed Hyperplan for import/export feature (011-data-import-export)
+SESSION_ID: ses_1eec809acffe2Nv3q60SBJ5e19
+NEXT_STEPS: Run /speckit.plan, then /speckit.tasks, then /speckit.implement to build the feature. Spec is committed on branch 011-data-import-export.
 
 ## Working Memory
 <!-- Session notes. Auto-pruned after 7 days. -->
