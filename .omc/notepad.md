@@ -3,9 +3,11 @@
 
 ## Priority Context
 <!-- ALWAYS loaded. Keep under 500 chars. Critical discoveries only. -->
-CURRENT ISSUE: Completed Hyperplan for import/export feature (011-data-import-export)
-SESSION_ID: ses_1eec809acffe2Nv3q60SBJ5e19
-NEXT_STEPS: Run /speckit.plan, then /speckit.tasks, then /speckit.implement to build the feature. Spec is committed on branch 011-data-import-export.
+COMPLETED: ExportService implementation in internal/service/export_service.go
+- Sync (streaming) and async (queued) export paths
+- Compiles successfully, follows webhook setter patterns
+- NEXT: T013 (ExportWorker), T017 (ExportHandler), export cursor repository integration
+- Branch: 011-data-import-export
 
 ## Working Memory
 <!-- Session notes. Auto-pruned after 7 days. -->
