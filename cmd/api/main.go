@@ -228,6 +228,22 @@ func runServer() error {
 		webhookService.SetRateLimiter(webhookRateLimiter)
 	}
 
+	// Initialize data portability workers (export + import)
+	var exportWorker *service.ExportWorker
+	var importWorker *service.ImportWorker
+	if exportSvc := server.ExportService(); exportSvc != nil {
+		exportJobRepo := repository.NewExportJobRepository(db)
+		exportWorker = service.NewExportWorker(exportSvc, exportJobRepo, server.StorageDriver(), log, cfg.DataPortability.ExportWorkerConcurrency)
+		server.SetExportWorker(exportWorker)
+		slog.Info("Export worker initialized", "concurrency", cfg.DataPortability.ExportWorkerConcurrency)
+	}
+	if importSvc := server.ImportService(); importSvc != nil {
+		importJobRepo := repository.NewImportJobRepository(db)
+		importWorker = service.NewImportWorker(importSvc, importJobRepo, log, cfg.DataPortability.ImportWorkerConcurrency)
+		server.SetImportWorker(importWorker)
+		slog.Info("Import worker initialized", "concurrency", cfg.DataPortability.ImportWorkerConcurrency)
+	}
+
 	// Initialize EventBus for webhook event dispatch
 	eventBus := domain.NewEventBus(256)
 	server.SetEventBus(eventBus)
@@ -250,6 +266,24 @@ func runServer() error {
 	if newsService := server.NewsService(); newsService != nil {
 		newsService.SetEventBus(eventBus)
 		slog.Info("News service wired to event bus")
+	}
+
+	// Wire EventBus into data portability services
+	if exportSvc := server.ExportService(); exportSvc != nil {
+		if setter, ok := any(exportSvc).(interface{ SetEventBus(*domain.EventBus) }); ok {
+			setter.SetEventBus(eventBus)
+			slog.Info("Export service wired to event bus")
+		}
+	}
+	if importSvc := server.ImportService(); importSvc != nil {
+		if setter, ok := any(importSvc).(interface{ SetEventBus(*domain.EventBus) }); ok {
+			setter.SetEventBus(eventBus)
+			slog.Info("Import service wired to event bus")
+		}
+	}
+	if importWorker := server.ImportWorker(); importWorker != nil {
+		importWorker.SetEventBus(eventBus)
+		slog.Info("Import worker wired to event bus")
 	}
 
 	// Add health check routes (using the server's Echo instance)
@@ -297,6 +331,18 @@ func runServer() error {
 	if webhookWorker := server.WebhookWorker(); webhookWorker != nil {
 		slog.Info("Starting webhook worker...")
 		webhookWorker.Start()
+	}
+
+	// Start export worker in background (if initialized)
+	if exportWorker := server.ExportWorker(); exportWorker != nil {
+		slog.Info("Starting export worker...")
+		exportWorker.Start(ctx)
+	}
+
+	// Start import worker in background (if initialized)
+	if importWorker := server.ImportWorker(); importWorker != nil {
+		slog.Info("Starting import worker...")
+		importWorker.Start(ctx)
 	}
 
 	// Start event bus in background
@@ -357,6 +403,16 @@ func runServer() error {
 	if webhookWorker := server.WebhookWorker(); webhookWorker != nil {
 		slog.Info("Stopping webhook worker...")
 		webhookWorker.Stop()
+	}
+
+	if exportWorker := server.ExportWorker(); exportWorker != nil {
+		slog.Info("Stopping export worker...")
+		exportWorker.Stop()
+	}
+
+	if importWorker := server.ImportWorker(); importWorker != nil {
+		slog.Info("Stopping import worker...")
+		importWorker.Stop()
 	}
 
 	// Close permission enforcer

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/pkg/errors"
@@ -19,6 +20,8 @@ type ExportJobRepository interface {
 	UpdateFilePath(ctx context.Context, id uuid.UUID, filePath string, recordCount int, hmacSignature string) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, orgID *uuid.UUID, page, pageSize int) ([]*domain.ExportJob, int64, error)
+	FindExpired(ctx context.Context) ([]*domain.ExportJob, error)
+	ClearFileRefs(ctx context.Context, id uuid.UUID) error
 }
 
 type exportJobRepository struct {
@@ -175,4 +178,30 @@ func (r *exportJobRepository) List(ctx context.Context, orgID *uuid.UUID, page, 
 	}
 
 	return jobs, total, nil
+}
+
+func (r *exportJobRepository) FindExpired(ctx context.Context) ([]*domain.ExportJob, error) {
+	var jobs []*domain.ExportJob
+	now := time.Now()
+	err := r.db.WithContext(ctx).
+		Where("file_expires_at IS NOT NULL AND file_expires_at < ? AND file_path IS NOT NULL AND deleted_at IS NULL", now).
+		Find(&jobs).Error
+	if err != nil {
+		return nil, errors.WrapInternal(err)
+	}
+	return jobs, nil
+}
+
+func (r *exportJobRepository) ClearFileRefs(ctx context.Context, id uuid.UUID) error {
+	result := r.db.WithContext(ctx).Model(&domain.ExportJob{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"file_path":      nil,
+		"hmac_signature": nil,
+	})
+	if result.Error != nil {
+		return errors.WrapInternal(result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.ErrNotFound
+	}
+	return nil
 }

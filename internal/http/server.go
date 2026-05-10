@@ -48,6 +48,11 @@ type Server struct {
 	newsService    *service.NewsService
 	jobService     *service.JobService
 	twoFactorSvc   *service.TwoFactorService
+	exportService   service.ExportService
+	importService   service.ImportService
+	exportWorker     *service.ExportWorker
+	importWorker     *service.ImportWorker
+	storageDriver   storage.Driver
 	eventBus       *domain.EventBus
 }
 
@@ -339,6 +344,38 @@ func (s *Server) SetTwoFactorService(twoFactorSvc *service.TwoFactorService) {
 	s.twoFactorSvc = twoFactorSvc
 }
 
+func (s *Server) SetExportWorker(exportWorker *service.ExportWorker) {
+	s.exportWorker = exportWorker
+}
+
+func (s *Server) ExportWorker() *service.ExportWorker {
+	return s.exportWorker
+}
+
+func (s *Server) SetImportWorker(importWorker *service.ImportWorker) {
+	s.importWorker = importWorker
+}
+
+func (s *Server) ImportWorker() *service.ImportWorker {
+	return s.importWorker
+}
+
+func (s *Server) ExportService() service.ExportService {
+	return s.exportService
+}
+
+func (s *Server) ImportService() service.ImportService {
+	return s.importService
+}
+
+func (s *Server) SetStorageDriver(driver storage.Driver) {
+	s.storageDriver = driver
+}
+
+func (s *Server) StorageDriver() storage.Driver {
+	return s.storageDriver
+}
+
 // Start starts the HTTP server
 func (s *Server) Start() error {
 	address := fmt.Sprintf(":%d", s.config.Server.Port)
@@ -446,6 +483,7 @@ func (s *Server) RegisterRoutes() {
 		// Continue without media functionality if storage fails
 		storageDriver = nil
 	}
+	s.SetStorageDriver(storageDriver)
 
 	// Initialize media service
 	var mediaService service.MediaService
@@ -483,6 +521,35 @@ func (s *Server) RegisterRoutes() {
 		versionService := service.NewVersionService(mediaRepo, mediaVersionRepo, storageDriver, signingKey, auditService, s.enforcer)
 		versionHandler = handler.NewMediaVersionHandler(versionService, mediaService, s.enforcer)
 	}
+
+	// Initialize data portability services and handler
+	dpValidator := service.NewDataPortabilityValidator()
+	dpRateLimiter := service.NewDataPortabilityRateLimiter(s.redis, s.config.DataPortability.ExportRateLimit, s.config.DataPortability.ImportRateLimit, s.config.DataPortability.ImportRateLimitRecords)
+	entityRegistry := domain.NewEntityRegistry()
+
+	exportJobRepo := repository.NewExportJobRepository(s.db)
+	importJobRepo := repository.NewImportJobRepository(s.db)
+	importIDMapRepo := repository.NewImportIDMapRepository(s.db)
+
+	exportConfig := service.DefaultExportConfig()
+	if s.config.Storage.SigningKey != "" {
+		exportConfig.SigningKey = s.config.Storage.SigningKey
+	} else {
+		exportConfig.SigningKey = s.config.JWT.Secret
+	}
+
+	importConfig := service.DefaultImportConfig()
+
+	var exportSvc service.ExportService
+	var importSvc service.ImportService
+	if storageDriver != nil {
+		exportSvc = service.NewExportService(exportJobRepo, s.enforcer, dpRateLimiter, entityRegistry, s.logger, exportConfig)
+		importSvc = service.NewImportService(importJobRepo, importIDMapRepo, dpValidator, dpRateLimiter, s.enforcer, entityRegistry, auditService, s.db, importConfig, s.logger)
+		s.exportService = exportSvc
+		s.importService = importSvc
+	}
+
+	dpHandler := handler.NewDataPortabilityHandler(exportSvc, importSvc, s.enforcer, dpRateLimiter, s.logger)
 
 	// Swagger documentation (conditional based on config)
 	if s.config.Swagger.Enabled {
@@ -588,6 +655,11 @@ func (s *Server) RegisterRoutes() {
 
 	// Webhook routes
 	s.RegisterWebhookRoutes(v1, webhookHandler)
+
+	// Data portability routes (export + import)
+	if exportSvc != nil || importSvc != nil {
+		dpHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
 
 	// Settings routes
 	s.RegisterSettingsRoutes(v1, settingsHandler)

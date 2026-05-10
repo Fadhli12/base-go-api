@@ -104,7 +104,8 @@ type Config struct {
 	Cache         CacheConfig         `mapstructure:"cache"`
 	Email         EmailConfig         `mapstructure:"email"`
 	Webhook       WebhookConfig       `mapstructure:"webhook"`
-	Job          JobConfig           `mapstructure:"job"`
+	Job              JobConfig              `mapstructure:"job"`
+	DataPortability  DataPortabilityConfig  `mapstructure:"data_portability"`
 }
 
 var (
@@ -188,6 +189,10 @@ func loadConfig() (*Config, error) {
 	}
 	if err := parsePasswordResetConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse password reset config: %w", err)
+	}
+
+	if err := parseDataPortabilityConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse data portability config: %w", err)
 	}
 
 	// Validate required fields
@@ -303,6 +308,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("webhook.delivery_timeout", "10s")
 	v.SetDefault("webhook.delivery_retention_days", 90)
 	v.SetDefault("webhook.max_payload_size", 1048576)
+
+	// Data portability defaults
+	v.SetDefault("data_portability.export_worker_concurrency", 5)
+	v.SetDefault("data_portability.export_rate_limit", 10)
+	v.SetDefault("data_portability.import_worker_concurrency", 5)
+	v.SetDefault("data_portability.import_rate_limit", 5)
+	v.SetDefault("data_portability.import_rate_limit_records", 50000)
 }
 
 // loadYAMLConfig attempts to load configuration from YAML files.
@@ -714,6 +726,15 @@ func parseWebhookConfig(v *viper.Viper, cfg *Config) error {
 	}
 	cfg.Webhook.DeliveryTimeout = duration
 
+	return nil
+}
+
+func parseDataPortabilityConfig(v *viper.Viper, cfg *Config) error {
+	cfg.DataPortability.ExportWorkerConcurrency = getEnvIntOrDefault("DATA_PORTABILITY_EXPORT_WORKER_CONCURRENCY", v.GetInt("data_portability.export_worker_concurrency"))
+	cfg.DataPortability.ExportRateLimit = getEnvIntOrDefault("DATA_PORTABILITY_EXPORT_RATE_LIMIT", v.GetInt("data_portability.export_rate_limit"))
+	cfg.DataPortability.ImportWorkerConcurrency = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_WORKER_CONCURRENCY", v.GetInt("data_portability.import_worker_concurrency"))
+	cfg.DataPortability.ImportRateLimit = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT", v.GetInt("data_portability.import_rate_limit"))
+	cfg.DataPortability.ImportRateLimitRecords = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT_RECORDS", v.GetInt("data_portability.import_rate_limit_records"))
 	return nil
 }
 
