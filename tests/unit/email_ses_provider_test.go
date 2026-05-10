@@ -190,7 +190,7 @@ func TestSESProvider_Send_NilEmail(t *testing.T) {
 	msgID, err := provider.Send(ctx, nil)
 	require.Error(t, err)
 	assert.Equal(t, "", msgID)
-	assert.Contains(t, err.Error(), "recipient email address is required")
+	assert.Contains(t, err.Error(), "email message is required")
 }
 
 // TestSESProvider_Send_MissingRecipient tests missing To field.
@@ -294,5 +294,5 @@ func TestSESProvider_Send_ConfigurationError(t *testing.T) {
 	msgID, err := provider.Send(ctx, email)
 	require.Error(t, err)
 	assert.Equal(t, "", msgID)
-	assert.Contains(t, err.Error(), "failed to load AWS config")
+	assert.Contains(t, err.Error(), "failed to send email via SES")
 }

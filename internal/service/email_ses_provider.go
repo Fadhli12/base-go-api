@@ -99,6 +99,10 @@ func (p *SESProvider) buildInput(email *EmailMessage) *ses.SendEmailInput {
 
 // Send sends an email via AWS SES and returns the message ID
 func (p *SESProvider) Send(ctx context.Context, email *EmailMessage) (string, error) {
+	if email == nil {
+		return "", fmt.Errorf("email message is required")
+	}
+
 	if email.To == "" {
 		return "", fmt.Errorf("recipient email address is required")
 	}
