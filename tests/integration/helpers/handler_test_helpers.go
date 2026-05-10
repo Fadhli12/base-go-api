@@ -15,13 +15,14 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
- 	"github.com/example/go-api-base/internal/auth"
- 	appcache "github.com/example/go-api-base/internal/cache"
- 	"github.com/example/go-api-base/internal/config"
- 	apphttp "github.com/example/go-api-base/internal/http"
- 	"github.com/example/go-api-base/internal/http/response"
- 	"github.com/example/go-api-base/internal/logger"
- 	"github.com/example/go-api-base/internal/permission"
+  	"github.com/example/go-api-base/internal/auth"
+  	appcache "github.com/example/go-api-base/internal/cache"
+  	"github.com/example/go-api-base/internal/config"
+  	apphttp "github.com/example/go-api-base/internal/http"
+  	"github.com/example/go-api-base/internal/http/response"
+  	"github.com/example/go-api-base/internal/logger"
+  	"github.com/example/go-api-base/internal/permission"
+  	"github.com/example/go-api-base/internal/service"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -42,8 +43,22 @@ type Server struct {
 	*apphttp.Server
 }
 
+// TestServerOption configures optional services on a test server before routes are registered.
+type TestServerOption func(*testServerConfig)
+
+type testServerConfig struct {
+	twoFactorSvc *service.TwoFactorService
+}
+
+// WithTwoFactorService sets the TwoFactorService on the test server before routes are registered.
+func WithTwoFactorService(svc *service.TwoFactorService) TestServerOption {
+	return func(cfg *testServerConfig) {
+		cfg.twoFactorSvc = svc
+	}
+}
+
 // NewTestServer creates a fully-wired HTTP test server mirroring runServer() dependency graph.
-func NewTestServer(t *testing.T, suite SuiteProvider) *Server {
+func NewTestServer(t *testing.T, suite SuiteProvider, opts ...TestServerOption) *Server {
 	cfg := DefaultTestConfig()
 
 	log, err := logger.NewLogger(logger.Config{
@@ -88,6 +103,67 @@ func NewTestServer(t *testing.T, suite SuiteProvider) *Server {
 	}
 
 	server.SetInvalidator(permission.NewInvalidator(suite.GetRedisClient()))
+
+	// Apply options before registering routes so conditional routes (e.g. 2FA) are included.
+	var cfgOpts testServerConfig
+	for _, opt := range opts {
+		opt(&cfgOpts)
+	}
+	if cfgOpts.twoFactorSvc != nil {
+		server.SetTwoFactorService(cfgOpts.twoFactorSvc)
+	}
+
+	server.RegisterRoutes()
+
+	return &Server{Server: server}
+}
+
+// NewTestServerWithConfig creates a fully-wired HTTP test server with custom config and logger.
+// Unlike NewTestServer which uses DefaultTestConfig, this allows callers to specify
+// their own config (e.g., swagger enabled/disabled) and logger.
+func NewTestServerWithConfig(t *testing.T, suite SuiteProvider, cfg *config.Config, log logger.Logger, opts ...TestServerOption) *Server {
+	cacheDriver, err := appcache.NewDriver(appcache.Config{
+		Driver:        "redis",
+		DefaultTTL:    300,
+		PermissionTTL: 300,
+		RateLimitTTL:  60,
+	}, suite.GetRedisClient())
+	if err != nil {
+		t.Logf("Warning: cache driver init failed: %v", err)
+		cacheDriver = nil
+	}
+
+	var enf *permission.Enforcer
+	enf, err = permission.NewEnforcer(suite.GetDB())
+	if err != nil {
+		t.Logf("Warning: enforcer init failed: %v", err)
+		enf = nil
+	} else if cacheDriver != nil {
+		permCache := permission.NewCache(cacheDriver, 300*time.Second)
+		enf.SetCache(permCache)
+	}
+
+	server := apphttp.NewServer(cfg, suite.GetDB(), suite.GetRedisClient(), cacheDriver, log)
+
+	if enf != nil {
+		server.SetEnforcer(enf)
+		if cacheDriver != nil {
+			permCache := permission.NewCache(cacheDriver, 300*time.Second)
+			server.SetPermissionCache(permCache)
+		}
+	}
+
+	server.SetInvalidator(permission.NewInvalidator(suite.GetRedisClient()))
+
+	// Apply options before registering routes so conditional routes are included.
+	var cfgOpts testServerConfig
+	for _, opt := range opts {
+		opt(&cfgOpts)
+	}
+	if cfgOpts.twoFactorSvc != nil {
+		server.SetTwoFactorService(cfgOpts.twoFactorSvc)
+	}
+
 	server.RegisterRoutes()
 
 	return &Server{Server: server}
@@ -131,6 +207,54 @@ func DefaultTestConfig() *config.Config {
 			Driver:    "local",
 			LocalPath: "./storage/uploads",
 			BaseURL:   "http://localhost:8080/storage",
+		},
+		Swagger: config.SwaggerConfig{
+			Enabled: true,
+			Path:    "/swagger",
+		},
+		Cache: config.CacheConfig{
+			Driver:        "redis",
+			DefaultTTL:    300,
+			PermissionTTL: 300,
+			RateLimitTTL:  60,
+		},
+		Image: config.ImageConfig{
+			CompressionEnabled: true,
+			ThumbnailQuality:   85,
+			ThumbnailWidth:     300,
+			ThumbnailHeight:    300,
+			PreviewQuality:      90,
+			PreviewWidth:        800,
+			PreviewHeight:       600,
+		},
+		Email: config.EmailConfig{
+			Provider:          "smtp",
+			SMTPHost:          "localhost",
+			SMTPPort:          587,
+			WorkerConcurrency: 10,
+			RetryMax:          5,
+			RateLimitPerHour:  100,
+		},
+		Webhook: config.WebhookConfig{
+			WorkerConcurrency:     5,
+			RetryMax:               3,
+			RateLimit:              100,
+			AllowHTTP:               false,
+			DeliveryTimeout:        10 * time.Second,
+			DeliveryRetentionDays:  90,
+			MaxPayloadSize:         1048576,
+		},
+		Job: config.JobConfig{
+			WorkerPoolSize:           5,
+			PollerCount:              5,
+			JobTimeoutSeconds:        30,
+			MaxRetries:                3,
+			ResultTTLSeconds:          604800,
+			StuckJobThresholdSeconds:  300,
+			ReaperIntervalSeconds:      60,
+			CallbackTimeoutSeconds:     5,
+			QueueKey:                   "jobs:queue",
+			JobDataKeyPrefix:           "jobs:data:",
 		},
 	}
 }

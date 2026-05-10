@@ -276,6 +276,10 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 	// Clean all tables (order matters due to foreign key constraints)
 	// Child tables first, then parent tables
 	tables := []string{
+		"saved_searches",
+		"user_settings",
+		"system_settings",
+		"two_factor_recovery_codes",
 		"notification_preferences",
 		"notifications",
 		"email_bounces",
@@ -358,8 +362,12 @@ func (s *TestSuite) runMigrations() error {
 
 	// Drop all tables first to ensure a clean schema.
 	if err := s.DB.Exec(`
-DROP TABLE IF EXISTS notification_preferences CASCADE;
-DROP TABLE IF EXISTS notifications CASCADE;
+	DROP TABLE IF EXISTS two_factor_recovery_codes CASCADE;
+	DROP TABLE IF EXISTS saved_searches CASCADE;
+	DROP TABLE IF EXISTS user_settings CASCADE;
+	DROP TABLE IF EXISTS system_settings CASCADE;
+	DROP TABLE IF EXISTS notification_preferences CASCADE;
+	DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS email_bounces CASCADE;
 DROP TABLE IF EXISTS email_queue CASCADE;
 DROP TABLE IF EXISTS email_templates CASCADE;
@@ -405,6 +413,9 @@ DROP TRIGGER IF EXISTS update_email_queue_updated_at ON email_queue CASCADE;
 DROP TRIGGER IF EXISTS update_api_keys_updated_at ON api_keys CASCADE;
 DROP TRIGGER IF EXISTS update_notifications_updated_at ON notifications CASCADE;
 DROP TRIGGER IF EXISTS update_notification_preferences_updated_at ON notification_preferences CASCADE;
+DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings CASCADE;
+DROP TRIGGER IF EXISTS update_system_settings_updated_at ON system_settings CASCADE;
+DROP TRIGGER IF EXISTS update_saved_searches_updated_at ON saved_searches CASCADE;
 
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
@@ -1000,7 +1011,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ DEFAULT NULL,
-    CONSTRAINT uq_webhooks_url_org UNIQUE (url, organization_id) WHERE deleted_at IS NULL,
     CONSTRAINT chk_webhooks_events_not_empty CHECK (jsonb_array_length(events) > 0)
 );
 
@@ -1042,6 +1052,121 @@ CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_stuck ON webhook_deliveries(pr
 
 	if err := s.DB.Exec(migration014).Error; err != nil {
 		errs = append(errs, fmt.Errorf("migration 000014 (webhooks): %w", err))
+	}
+
+	// Migration 000010: refresh_token family tracking
+	migration010 := `
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id UUID NOT NULL DEFAULT gen_random_uuid();
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family_id);
+`
+	if err := s.DB.Exec(migration010).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000010 (refresh_token family): %w", err))
+	}
+
+	// Migration 000011: session metadata on refresh_tokens
+	migration011 := `
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent VARCHAR(500);
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS device_name VARCHAR(255);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_active ON refresh_tokens(user_id, revoked_at) WHERE revoked_at IS NULL;
+`
+	if err := s.DB.Exec(migration011).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000011 (session metadata): %w", err))
+	}
+
+	// Migration 000013: settings tables
+	migration013 := `
+CREATE TABLE IF NOT EXISTS user_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    settings JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NULL,
+    CONSTRAINT uq_user_settings_org_user UNIQUE (organization_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    settings JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NULL,
+    CONSTRAINT uq_system_settings_org UNIQUE (organization_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_settings_org_id ON user_settings(organization_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_settings_org_user ON user_settings(organization_id, user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_system_settings_org_id ON system_settings(organization_id) WHERE deleted_at IS NULL;
+
+CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON user_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_system_settings_updated_at BEFORE UPDATE ON system_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+`
+	if err := s.DB.Exec(migration013).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000013 (settings): %w", err))
+	}
+
+	// Migration 000015: two_factor_auth
+	migration015 := `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_status VARCHAR(20) NOT NULL DEFAULT 'disabled' CHECK (two_factor_status IN ('disabled', 'pending', 'enabled'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_verified_at TIMESTAMPTZ;
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS is_2fa_pending BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS two_factor_recovery_codes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL UNIQUE,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_two_factor_recovery_codes_user_id ON two_factor_recovery_codes(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_two_factor_recovery_codes_used_at ON two_factor_recovery_codes(used_at) WHERE used_at IS NULL;
+`
+	if err := s.DB.Exec(migration015).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000015 (two_factor_auth): %w", err))
+	}
+
+	// Migration 000016: news search_vector
+	migration016 := `
+ALTER TABLE news ADD COLUMN IF NOT EXISTS search_vector TSVECTOR
+    GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(content, '')), 'B')
+    ) STORED;
+CREATE INDEX IF NOT EXISTS idx_news_search_vector ON news USING GIN (search_vector);
+CREATE INDEX IF NOT EXISTS idx_news_title_search ON news USING GIN (to_tsvector('english', coalesce(title, '')));
+`
+	if err := s.DB.Exec(migration016).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000016 (news search): %w", err))
+	}
+
+	// Migration 000017: saved_searches
+	migration017 := `
+CREATE TABLE IF NOT EXISTS saved_searches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    query_text TEXT NOT NULL,
+    filters JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_searches_user_id ON saved_searches(user_id);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_deleted_at ON saved_searches(deleted_at) WHERE deleted_at IS NOT NULL;
+
+CREATE TRIGGER update_saved_searches_updated_at BEFORE UPDATE ON saved_searches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+`
+	if err := s.DB.Exec(migration017).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000017 (saved_searches): %w", err))
 	}
 
 	if len(errs) > 0 {
