@@ -321,6 +321,7 @@ func TestVerifyAndEnable_ValidTOTP(t *testing.T) {
 	userRepo.On("FindByID", ctx, userID).Return(user, nil)
 	userRepo.On("Update", ctx, mock.AnythingOfType("*domain.User")).Return(nil)
 	recoveryCodeRepo.On("DeleteAllByUser", ctx, userID).Return(nil)
+	recoveryCodeRepo.On("Create", ctx, mock.AnythingOfType("*domain.TwoFactorRecoveryCode")).Return(nil)
 
 	svc := newTestTwoFactorService(userRepo, recoveryCodeRepo, refreshTokenRepo)
 
@@ -331,7 +332,9 @@ func TestVerifyAndEnable_ValidTOTP(t *testing.T) {
 
 	result, err := svc.VerifyAndEnable(ctx, userID, totpCode)
 	require.NoError(t, err, "VerifyAndEnable failed: %v", err)
-	assert.Nil(t, result, "VerifyAndEnable returns nil result on success")
+	require.NotNil(t, result, "VerifyAndEnable should return a result on success")
+	assert.Equal(t, string(domain.TwoFactorStatusEnabled), result.Status, "status should be enabled")
+	assert.Len(t, result.RecoveryCodes, 8, "should return 8 recovery codes")
 
 	userRepo.AssertExpectations(t)
 	recoveryCodeRepo.AssertExpectations(t)
