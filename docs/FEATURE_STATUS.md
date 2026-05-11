@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-11 — Added Data Import/Export System
+**Last Updated:** 2026-05-11 — Settings & Configuration feature complete
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -388,20 +388,61 @@ Import:
 
 ---
 
+### 3.5 Settings & Configuration System
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entities | `internal/domain/user_settings.go`, `internal/domain/system_settings.go` |
+| Repository | `internal/repository/user_settings.go`, `internal/repository/system_settings.go` |
+| Service | `internal/service/settings.go` (merge-before-upsert, audit logging, allowlist validation) |
+| Handler | `internal/http/handler/settings.go` (5 endpoints, RBAC enforcement) |
+| Request DTOs | `internal/http/request/settings.go` (key allowlist, type validation) |
+| Middleware | `internal/http/middleware/organization.go` (X-Organization-ID context) |
+| Migrations | `migrations/000013_user_settings.up.sql`, `migrations/000014_system_settings.up.sql` |
+| Unit tests | `tests/unit/settings_service_test.go` (23 test cases) |
+| Integration tests | `tests/integration/settings_test.go` (9 tests), `tests/integration/settings_handler_test.go` (7 tests) |
+
+**Endpoints:**
+- `GET /api/v1/settings/user` - Get user settings (requires `settings:view_user`)
+- `PUT /api/v1/settings/user` - Update user settings (requires `settings:manage_user`)
+- `GET /api/v1/settings/effective` - Get merged effective settings
+- `GET /api/v1/settings/system` - Get system settings (requires `settings:view_system`)
+- `PUT /api/v1/settings/system` - Update system settings (requires `settings:manage_system`)
+
+**Key Design Decisions:**
+- Shallow merge on update: existing keys preserved, new keys override (no data loss)
+- RBAC enforcement via Casbin `Enforce(userID, orgDomain, "settings", action)`
+- Handler-level permission checks (not service-level)
+- Audit logging: `LogAction` called after updates with before/after state
+- Allowlist validation: only known keys with type checking for system settings
+- `GetEffectiveSettings` requires authentication only (no Enforce call — users can view own merged settings)
+- `UpdateSystemSettings` filters updates to allowed fields only
+
+**Permissions:**
+| Permission | Resource | Action |
+|-----------|----------|--------|
+| `settings:view_user` | settings | view_user |
+| `settings:manage_user` | settings | manage_user |
+| `settings:view_system` | settings | view_system |
+| `settings:manage_system` | settings | manage_system |
+
+---
+
 ## Priority 3: Features
 
 These features from the recommendations were not checked in this analysis:
 
 - **3.1 Real-time Communication (WebSocket)** - Not checked
 - **3.3 Analytics Dashboard** - Not checked
-- **3.5 Settings & Configuration** - Not checked
 - **3.6 Feature Flags** - Not checked
 
 ---
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (10 features verified complete)
+### ✅ Implemented (11 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -415,6 +456,7 @@ These features from the recommendations were not checked in this analysis:
 | Background Job Queue | P2 | ✅ Complete |
 | File Versioning | P2 | ✅ Complete |
 | Data Import/Export System | P3 | ✅ Complete |
+| Settings & Configuration | P3 | ✅ Complete |
 
 ### ❌ Not Checked in This Analysis
 
@@ -427,7 +469,6 @@ These features from `FEATURE_RECOMMENDATIONS.md` were not evaluated (lower prior
 | Activity Feed / Timeline | P2 | ❌ Not checked |
 | Real-time (WebSocket) | P3 | ❌ Not checked |
 | Analytics Dashboard | P3 | ❌ Not checked |
-| Settings & Configuration | P3 | 🔨 ~80% done (no tests) |
 | Feature Flags | P3 | ❌ Not checked |
 
 ---
