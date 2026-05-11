@@ -17,6 +17,7 @@ import (
 type SettingsService struct {
 	userSettingsRepo   repository.UserSettingsRepository
 	systemSettingsRepo repository.SystemSettingsRepository
+	audit              *AuditService
 	log                *slog.Logger
 }
 
@@ -24,11 +25,13 @@ type SettingsService struct {
 func NewSettingsService(
 	userSettingsRepo repository.UserSettingsRepository,
 	systemSettingsRepo repository.SystemSettingsRepository,
+	audit *AuditService,
 	log *slog.Logger,
 ) *SettingsService {
 	return &SettingsService{
 		userSettingsRepo:   userSettingsRepo,
 		systemSettingsRepo: systemSettingsRepo,
+		audit:              audit,
 		log:                log,
 	}
 }
@@ -151,6 +154,7 @@ func (s *SettingsService) UpdateUserSettings(
 	ctx context.Context,
 	userID, orgID uuid.UUID,
 	updates map[string]interface{},
+	ipAddress, userAgent string,
 ) (*domain.UserSettingsResponse, error) {
 	// Validate timezone if present
 	if timezone, ok := updates["timezone"]; ok {
@@ -165,16 +169,45 @@ func (s *SettingsService) UpdateUserSettings(
 		}
 	}
 
-	// Convert updates to JSONB
-	settingsJSON, err := json.Marshal(updates)
+	existing, err := s.userSettingsRepo.FindByUserIDAndOrgID(ctx, userID, orgID)
+	if err != nil && !errors.IsNotFound(err) {
+		s.log.Error("failed to read existing user settings",
+			slog.String("error", err.Error()),
+			slog.String("user_id", userID.String()),
+			slog.String("org_id", orgID.String()),
+		)
+		return nil, err
+	}
+
+	// Capture before state for audit logging
+	var beforeJSON interface{}
+	if existing != nil && len(existing.Settings) > 0 {
+		beforeJSON = existing.Settings
+	}
+
+	merged := make(map[string]interface{})
+	if existing != nil && len(existing.Settings) > 0 {
+		if err := json.Unmarshal(existing.Settings, &merged); err != nil {
+			s.log.Error("failed to parse existing user settings",
+				slog.String("error", err.Error()),
+				slog.String("user_id", userID.String()),
+			)
+			return nil, errors.WrapInternal(err)
+		}
+	}
+
+	for k, v := range updates {
+		merged[k] = v
+	}
+
+	settingsJSON, err := json.Marshal(merged)
 	if err != nil {
-		s.log.Error("failed to marshal user settings",
+		s.log.Error("failed to marshal merged user settings",
 			slog.String("error", err.Error()),
 		)
 		return nil, errors.WrapInternal(err)
 	}
 
-	// Create or update user settings
 	userSettings := &domain.UserSettings{
 		OrganizationID: orgID,
 		UserID:         userID,
@@ -190,7 +223,8 @@ func (s *SettingsService) UpdateUserSettings(
 		return nil, err
 	}
 
-	// Fetch updated settings to return
+	s.audit.LogAction(ctx, userID, domain.AuditActionUpdate, "user_settings", userID.String(), beforeJSON, merged, ipAddress, userAgent)
+
 	updated, err := s.userSettingsRepo.FindByUserIDAndOrgID(ctx, userID, orgID)
 	if err != nil {
 		s.log.Error("failed to fetch updated user settings",
@@ -237,8 +271,9 @@ func (s *SettingsService) UpdateSystemSettings(
 	ctx context.Context,
 	orgID uuid.UUID,
 	updates map[string]interface{},
+	actorID uuid.UUID,
+	ipAddress, userAgent string,
 ) (*domain.SystemSettingsResponse, error) {
-	// Allowlist of configurable fields
 	allowedFields := map[string]bool{
 		"maintenance_mode":          true,
 		"rate_limits":               true,
@@ -249,7 +284,6 @@ func (s *SettingsService) UpdateSystemSettings(
 		"from_name":                 true,
 	}
 
-	// Filter updates to only allowed fields
 	filtered := make(map[string]interface{})
 	for key, val := range updates {
 		if allowedFields[key] {
@@ -261,16 +295,43 @@ func (s *SettingsService) UpdateSystemSettings(
 		return nil, errors.NewAppError("VALIDATION_ERROR", "no valid fields to update", 422)
 	}
 
-	// Convert updates to JSONB
-	settingsJSON, err := json.Marshal(filtered)
+	existing, err := s.systemSettingsRepo.FindByOrgID(ctx, orgID)
+	if err != nil && !errors.IsNotFound(err) {
+		s.log.Error("failed to read existing system settings",
+			slog.String("error", err.Error()),
+			slog.String("org_id", orgID.String()),
+		)
+		return nil, err
+	}
+
+	var beforeJSON interface{}
+	if existing != nil && len(existing.Settings) > 0 {
+		beforeJSON = existing.Settings
+	}
+
+	merged := make(map[string]interface{})
+	if existing != nil && len(existing.Settings) > 0 {
+		if err := json.Unmarshal(existing.Settings, &merged); err != nil {
+			s.log.Error("failed to parse existing system settings",
+				slog.String("error", err.Error()),
+				slog.String("org_id", orgID.String()),
+			)
+			return nil, errors.WrapInternal(err)
+		}
+	}
+
+	for k, v := range filtered {
+		merged[k] = v
+	}
+
+	settingsJSON, err := json.Marshal(merged)
 	if err != nil {
-		s.log.Error("failed to marshal system settings",
+		s.log.Error("failed to marshal merged system settings",
 			slog.String("error", err.Error()),
 		)
 		return nil, errors.WrapInternal(err)
 	}
 
-	// Create or update system settings
 	systemSettings := &domain.SystemSettings{
 		OrganizationID: orgID,
 		Settings:       datatypes.JSON(settingsJSON),
@@ -284,7 +345,8 @@ func (s *SettingsService) UpdateSystemSettings(
 		return nil, err
 	}
 
-	// Fetch updated settings to return
+	s.audit.LogAction(ctx, actorID, domain.AuditActionUpdate, "system_settings", orgID.String(), beforeJSON, merged, ipAddress, userAgent)
+
 	updated, err := s.systemSettingsRepo.FindByOrgID(ctx, orgID)
 	if err != nil {
 		s.log.Error("failed to fetch updated system settings",

@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Verified:** 2026-05-08 via parallel background agent verification
+**Last Updated:** 2026-05-11 — Added Data Import/Export System
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -310,14 +310,90 @@ These features from the recommendations were not checked in this analysis (lower
 
 ---
 
+### 3.4 Data Import/Export System
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entities | `internal/domain/data_portability.go`, `internal/domain/data_portability_events.go`, `internal/domain/export_job.go`, `internal/domain/import_job.go`, `internal/domain/import_id_map.go` |
+| Repository | `internal/repository/export_job.go`, `internal/repository/import_job.go`, `internal/repository/import_id_map.go` |
+| Export service | `internal/service/export_service.go` (526 lines) |
+| Import service | `internal/service/import_service.go` (715 lines) |
+| Export worker | `internal/service/export_worker.go` (271 lines) |
+| Import worker | `internal/service/import_worker.go` (237 lines) |
+| Format: CSV | `internal/service/format_csv.go` |
+| Format: JSON | `internal/service/format_json.go` |
+| Rate limiter | `internal/service/data_portability_rate_limiter.go`, `internal/service/data_portability_rate_limiter_iface.go` |
+| Validator | `internal/service/data_portability_validator.go` |
+| Signing | `internal/service/data_portability_sign.go` (HMAC-SHA256) |
+| Cleanup | `internal/service/export_cleanup.go` |
+| Handler | `internal/http/handler/data_portability.go` (362 lines, 11 endpoints) |
+| Middleware | `internal/http/middleware/data_portability.go` (rate limiting, file size limits) |
+| Config | `internal/config/data_portability.go` |
+| EventBus | `internal/domain/data_portability_events.go` (Go channels pub/sub) |
+| DI wiring | `internal/http/server.go:525-547, 659+`, `cmd/api/main.go:231-271` |
+| Permissions seed | `cmd/api/main.go:574-578` (5 permissions) |
+| Migration | `migrations/000020_create_data_portability.up.sql` |
+| Unit tests | 152 test functions across 10 test files |
+
+**Endpoints (11 fully wired):**
+
+Export:
+- `POST /api/v1/exports` - Create export job (with rate limiting)
+- `GET /api/v1/exports` - List export jobs
+- `GET /api/v1/exports/:id` - Get export job
+- `GET /api/v1/exports/:id/download` - Download export file
+- `DELETE /api/v1/exports/:id` - Cancel export job
+
+Import:
+- `POST /api/v1/imports/preview` - Preview import (with rate limiting + file size limit)
+- `POST /api/v1/imports` - Create import job (with rate limiting + file size limit)
+- `GET /api/v1/imports` - List import jobs
+- `GET /api/v1/imports/:id` - Get import job
+- `POST /api/v1/imports/:id/cancel` - Cancel import job
+
+**Architecture:**
+- Export pipeline: Create job → Worker picks up → Generates file (CSV/JSON) → Available for download
+- Import pipeline: Upload file → Preview (dry run) → Create job → Worker processes → ID mapping for cross-references
+- EventBus integration: Services emit events via `SetEventBus()` after successful operations
+- HMAC-SHA256 signed payloads for data integrity verification
+- Rate limiting (sliding window) for both export and import endpoints
+- Optimistic locking for job claim (`ClaimJob` with concurrent safety)
+- Stuck job recovery via reaper goroutines
+- Import ID mapping for cross-referencing between old and new entity IDs
+- Entity registry pattern for extensible export/import of different resource types
+
+**Permissions:**
+| Permission | Resource | Action |
+|-----------|----------|--------|
+| `data_portability:export_create` | data_portability | export:create |
+| `data_portability:export_download` | data_portability | export:download |
+| `data_portability:import_create` | data_portability | import:create |
+| `data_portability:import_view` | data_portability | import:view |
+| `data_portability:import_cancel` | data_portability | import:cancel |
+
+**Unit Tests (152 functions):**
+- `export_service_test.go` (30 tests)
+- `import_service_test.go` (30 tests)
+- `format_csv_test.go` (30 tests)
+- `format_json_test.go` (32 tests)
+- `data_portability_rate_limiter_test.go` (12 tests)
+- `data_portability_sign_test.go` (10 tests)
+- `data_portability_validator_test.go` (5 tests)
+- `data_portability_test.go` (11 tests)
+- `export_job_test.go` (4 tests)
+- `import_job_test.go` (8 tests)
+- `import_id_map_test.go` (2 tests)
+
+---
+
 ## Priority 3: Features
 
 These features from the recommendations were not checked in this analysis:
 
 - **3.1 Real-time Communication (WebSocket)** - Not checked
-
 - **3.3 Analytics Dashboard** - Not checked
-- **3.4 Import/Export System** - Not checked
 - **3.5 Settings & Configuration** - Not checked
 - **3.6 Feature Flags** - Not checked
 
@@ -325,7 +401,7 @@ These features from the recommendations were not checked in this analysis:
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (9 features verified complete)
+### ✅ Implemented (10 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -338,6 +414,7 @@ These features from the recommendations were not checked in this analysis:
 | Search & Filtering | P2 | ✅ Complete |
 | Background Job Queue | P2 | ✅ Complete |
 | File Versioning | P2 | ✅ Complete |
+| Data Import/Export System | P3 | ✅ Complete |
 
 ### ❌ Not Checked in This Analysis
 
@@ -350,8 +427,7 @@ These features from `FEATURE_RECOMMENDATIONS.md` were not evaluated (lower prior
 | Activity Feed / Timeline | P2 | ❌ Not checked |
 | Real-time (WebSocket) | P3 | ❌ Not checked |
 | Analytics Dashboard | P3 | ❌ Not checked |
-| Import/Export System | P3 | ❌ Not checked |
-| Settings & Configuration | P3 | ❌ Not checked |
+| Settings & Configuration | P3 | 🔨 ~80% done (no tests) |
 | Feature Flags | P3 | ❌ Not checked |
 
 ---

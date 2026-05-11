@@ -18,6 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newSettingsServiceWithAudit(t *testing.T, suite *IntegrationTestSuite) *service.SettingsService {
+	t.Helper()
+	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
+	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())
+	userSettingsRepo := repository.NewUserSettingsRepository(suite.DB)
+	systemSettingsRepo := repository.NewSystemSettingsRepository(suite.DB)
+	return service.NewSettingsService(userSettingsRepo, systemSettingsRepo, auditService, slog.Default())
+}
+
 // ==============================================================================
 // USER SETTINGS TESTS
 // ==============================================================================
@@ -31,8 +40,7 @@ func TestUserSettings_GetEmpty(t *testing.T) {
 	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	repo := repository.NewUserSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repo, repository.NewSystemSettingsRepository(suite.DB), slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	resp, err := svc.GetUserSettings(ctx, user.ID, orgID)
 	require.NoError(t, err, "Should retrieve empty settings without error")
@@ -50,8 +58,7 @@ func TestUserSettings_UpdateWithValidData(t *testing.T) {
 	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	repo := repository.NewUserSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repo, repository.NewSystemSettingsRepository(suite.DB), slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	updates := map[string]interface{}{
 		"theme":    "dark",
@@ -59,7 +66,7 @@ func TestUserSettings_UpdateWithValidData(t *testing.T) {
 		"timezone": "America/New_York",
 	}
 
-	resp, err := svc.UpdateUserSettings(ctx, user.ID, orgID, updates)
+	resp, err := svc.UpdateUserSettings(ctx, user.ID, orgID, updates, "127.0.0.1", "test-agent")
 	require.NoError(t, err, "Should update user settings successfully")
 	assert.NotNil(t, resp, "Response should not be nil")
 	assert.Equal(t, user.ID, resp.UserID, "UserID should match")
@@ -83,14 +90,13 @@ func TestUserSettings_UpdateWithInvalidTimezone(t *testing.T) {
 	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	repo := repository.NewUserSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repo, repository.NewSystemSettingsRepository(suite.DB), slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	updates := map[string]interface{}{
 		"timezone": "Invalid/Timezone",
 	}
 
-	_, err := svc.UpdateUserSettings(ctx, user.ID, orgID, updates)
+	_, err := svc.UpdateUserSettings(ctx, user.ID, orgID, updates, "127.0.0.1", "test-agent")
 	require.Error(t, err, "Should fail with invalid timezone")
 	assert.True(t, apperrors.IsAppError(err), "Error should be AppError")
 	appErr := apperrors.GetAppError(err)
@@ -107,10 +113,10 @@ func TestUserSettings_UpsertRecoveryFromSoftDelete(t *testing.T) {
 	orgID := uuid.New()
 
 	repo := repository.NewUserSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repo, repository.NewSystemSettingsRepository(suite.DB), slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	// Create initial settings
-	settings1, err := svc.UpdateUserSettings(ctx, user.ID, orgID, map[string]interface{}{"theme": "light"})
+	settings1, err := svc.UpdateUserSettings(ctx, user.ID, orgID, map[string]interface{}{"theme": "light"}, "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 	assert.NotNil(t, settings1)
 
@@ -126,7 +132,7 @@ func TestUserSettings_UpsertRecoveryFromSoftDelete(t *testing.T) {
 	assert.Nil(t, deletedSettings)
 
 	// Update should recover from soft delete
-	settings2, err := svc.UpdateUserSettings(ctx, user.ID, orgID, map[string]interface{}{"theme": "dark"})
+	settings2, err := svc.UpdateUserSettings(ctx, user.ID, orgID, map[string]interface{}{"theme": "dark"}, "127.0.0.1", "test-agent")
 	require.NoError(t, err, "Should recover from soft delete")
 	assert.NotNil(t, settings2)
 
@@ -149,8 +155,7 @@ func TestSystemSettings_GetDefaults(t *testing.T) {
 	ctx := context.Background()
 	orgID := uuid.New()
 
-	sysRepo := repository.NewSystemSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repository.NewUserSettingsRepository(suite.DB), sysRepo, slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	resp, err := svc.GetSystemSettings(ctx, orgID)
 	require.NoError(t, err, "Should retrieve system settings with defaults")
@@ -171,10 +176,10 @@ func TestSystemSettings_UpdateWithAllowlist(t *testing.T) {
 	defer suite.TeardownTest(t)
 
 	ctx := context.Background()
+	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	sysRepo := repository.NewSystemSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repository.NewUserSettingsRepository(suite.DB), sysRepo, slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	// Update with allowed field
 	updates := map[string]interface{}{
@@ -182,7 +187,7 @@ func TestSystemSettings_UpdateWithAllowlist(t *testing.T) {
 		"app_name":         "Custom App", // Not in allowlist
 	}
 
-	resp, err := svc.UpdateSystemSettings(ctx, orgID, updates)
+	resp, err := svc.UpdateSystemSettings(ctx, orgID, updates, user.ID, "127.0.0.1", "test-agent")
 	require.NoError(t, err, "Should update system settings")
 	assert.NotNil(t, resp)
 
@@ -200,17 +205,17 @@ func TestSystemSettings_UpdateWithEmptyUpdates(t *testing.T) {
 	defer suite.TeardownTest(t)
 
 	ctx := context.Background()
+	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	sysRepo := repository.NewSystemSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(repository.NewUserSettingsRepository(suite.DB), sysRepo, slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	// Update with no allowed fields
 	updates := map[string]interface{}{
 		"invalid_field": "value",
 	}
 
-	_, err := svc.UpdateSystemSettings(ctx, orgID, updates)
+	_, err := svc.UpdateSystemSettings(ctx, orgID, updates, user.ID, "127.0.0.1", "test-agent")
 	require.Error(t, err, "Should fail with no valid fields")
 	assert.True(t, apperrors.IsAppError(err), "Error should be AppError")
 	appErr := apperrors.GetAppError(err)
@@ -230,22 +235,20 @@ func TestEffectiveSettings_MergeSystemAndUser(t *testing.T) {
 	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	userRepo := repository.NewUserSettingsRepository(suite.DB)
-	sysRepo := repository.NewSystemSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(userRepo, sysRepo, slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	// Set system settings
 	sysUpdates := map[string]interface{}{
 		"maintenance_mode": false,
 	}
-	_, err := svc.UpdateSystemSettings(ctx, orgID, sysUpdates)
+	_, err := svc.UpdateSystemSettings(ctx, orgID, sysUpdates, user.ID, "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 
 	// Set user settings (override some system settings)
 	userUpdates := map[string]interface{}{
 		"theme": "dark",
 	}
-	_, err = svc.UpdateUserSettings(ctx, user.ID, orgID, userUpdates)
+	_, err = svc.UpdateUserSettings(ctx, user.ID, orgID, userUpdates, "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 
 	// Get effective settings
@@ -272,22 +275,20 @@ func TestEffectiveSettings_UserOverridesSystem(t *testing.T) {
 	user := createTestUserForOrg(t, suite.DB)
 	orgID := uuid.New()
 
-	userRepo := repository.NewUserSettingsRepository(suite.DB)
-	sysRepo := repository.NewSystemSettingsRepository(suite.DB)
-	svc := service.NewSettingsService(userRepo, sysRepo, slog.Default())
+	svc := newSettingsServiceWithAudit(t, suite)
 
 	// System has a default setting
 	sysUpdates := map[string]interface{}{
 		"notifications_per_hour": 100,
 	}
-	_, err := svc.UpdateSystemSettings(ctx, orgID, sysUpdates)
+	_, err := svc.UpdateSystemSettings(ctx, orgID, sysUpdates, user.ID, "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 
 	// User overrides with a different value
 	userUpdates := map[string]interface{}{
 		"notifications_per_hour": 50,
 	}
-	_, err = svc.UpdateUserSettings(ctx, user.ID, orgID, userUpdates)
+	_, err = svc.UpdateUserSettings(ctx, user.ID, orgID, userUpdates, "127.0.0.1", "test-agent")
 	require.NoError(t, err)
 
 	// Get effective settings

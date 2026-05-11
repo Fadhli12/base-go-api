@@ -466,7 +466,7 @@ func (s *Server) RegisterRoutes() {
 	// Initialize settings service
 	userSettingsRepo := repository.NewUserSettingsRepository(s.db)
 	systemSettingsRepo := repository.NewSystemSettingsRepository(s.db)
-	settingsService := service.NewSettingsService(userSettingsRepo, systemSettingsRepo, slog.Default())
+	settingsService := service.NewSettingsService(userSettingsRepo, systemSettingsRepo, s.auditSvc, slog.Default())
 
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
@@ -497,7 +497,7 @@ func (s *Server) RegisterRoutes() {
 	permissionHandler := handler.NewPermissionHandler(permissionService)
 	roleHandler := handler.NewRoleHandler(roleService)
 	orgHandler := handler.NewOrganizationHandler(orgService)
-	settingsHandler := handler.NewSettingsHandler(settingsService)
+	settingsHandler := handler.NewSettingsHandler(settingsService, s.enforcer)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)

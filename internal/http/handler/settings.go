@@ -7,21 +7,34 @@ import (
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
 	"github.com/example/go-api-base/internal/logger"
+	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
 // SettingsHandler handles settings endpoints
 type SettingsHandler struct {
 	settingsService *service.SettingsService
+	enforcer        *permission.Enforcer
 }
 
 // NewSettingsHandler creates a new SettingsHandler instance
-func NewSettingsHandler(settingsService *service.SettingsService) *SettingsHandler {
+func NewSettingsHandler(settingsService *service.SettingsService, enforcer *permission.Enforcer) *SettingsHandler {
 	return &SettingsHandler{
 		settingsService: settingsService,
+		enforcer:        enforcer,
 	}
+}
+
+// resolveSettingsOrgDomain converts the optional organization ID to a Casbin domain string.
+func resolveSettingsOrgDomain(hasOrgID bool, orgID uuid.UUID) string {
+	orgDomain := "default"
+	if hasOrgID && orgID != uuid.Nil {
+		orgDomain = orgID.String()
+	}
+	return orgDomain
 }
 
 // GetUserSettings retrieves user settings for the current user
@@ -46,6 +59,12 @@ func (h *SettingsHandler) GetUserSettings(c echo.Context) error {
 	orgID, ok := middleware.GetOrganizationID(c)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing organization context"))
+	}
+
+	orgDomain := resolveSettingsOrgDomain(ok, orgID)
+	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "settings", "view_user")
+	if err != nil || !allowed {
+		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
 	}
 
 	settings, err := h.settingsService.GetUserSettings(ctx, userID, orgID)
@@ -89,6 +108,12 @@ func (h *SettingsHandler) UpdateUserSettings(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing organization context"))
 	}
 
+	orgDomain := resolveSettingsOrgDomain(ok, orgID)
+	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "settings", "manage_user")
+	if err != nil || !allowed {
+		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
+	}
+
 	var req request.UpdateUserSettingsRequest
 	if err := c.Bind(&req); err != nil {
 		log.Error(ctx, "failed to bind request", logger.Err(err))
@@ -100,7 +125,7 @@ func (h *SettingsHandler) UpdateUserSettings(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	settings, err := h.settingsService.UpdateUserSettings(ctx, userID, orgID, req.Settings)
+	settings, err := h.settingsService.UpdateUserSettings(ctx, userID, orgID, req.Settings, c.RealIP(), c.Request().UserAgent())
 	if err != nil {
 		log.Error(ctx, "failed to update user settings", logger.Err(err))
 		if apperrors.IsAppError(err) {
@@ -169,6 +194,17 @@ func (h *SettingsHandler) GetSystemSettings(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing organization context"))
 	}
 
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing user context"))
+	}
+
+	orgDomain := resolveSettingsOrgDomain(ok, orgID)
+	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "settings", "view_system")
+	if err != nil || !allowed {
+		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
+	}
+
 	settings, err := h.settingsService.GetSystemSettings(ctx, orgID)
 	if err != nil {
 		log.Error(ctx, "failed to get system settings", logger.Err(err))
@@ -206,6 +242,17 @@ func (h *SettingsHandler) UpdateSystemSettings(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing organization context"))
 	}
 
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "Missing user context"))
+	}
+
+	orgDomain := resolveSettingsOrgDomain(ok, orgID)
+	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "settings", "manage_system")
+	if err != nil || !allowed {
+		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
+	}
+
 	var req request.UpdateSystemSettingsRequest
 	if err := c.Bind(&req); err != nil {
 		log.Error(ctx, "failed to bind request", logger.Err(err))
@@ -217,7 +264,7 @@ func (h *SettingsHandler) UpdateSystemSettings(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
-	settings, err := h.settingsService.UpdateSystemSettings(ctx, orgID, req.Settings)
+	settings, err := h.settingsService.UpdateSystemSettings(ctx, orgID, req.Settings, userID, c.RealIP(), c.Request().UserAgent())
 	if err != nil {
 		log.Error(ctx, "failed to update system settings", logger.Err(err))
 		if apperrors.IsAppError(err) {
