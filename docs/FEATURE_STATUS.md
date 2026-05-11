@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-11 — Settings & Configuration feature complete
+**Last Updated:** 2026-05-11 — Feature Flags system complete
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -428,6 +428,43 @@ Import:
 | `settings:view_system` | settings | view_system |
 | `settings:manage_system` | settings | manage_system |
 
+### 3.6 Feature Flags System
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entity | `internal/domain/feature_flag.go` |
+| Repository (interface + impl) | `internal/repository/feature_flag.go` |
+| Service | `internal/service/feature_flag.go` (635 lines, CRUD + evaluation + RBAC + audit) |
+| Handler | `internal/http/handler/feature_flag.go` (7 endpoints) |
+| Request DTOs | `internal/http/request/feature_flag.go` |
+| Response DTOs | `internal/http/response/feature_flag.go` |
+| Migration | `migrations/000021_create_feature_flags.up.sql`, `.down.sql` |
+| Tests | `tests/unit/feature_flag_service_test.go` (42 cases), `tests/integration/feature_flag_test.go` (6 cases) |
+
+**Key Features:**
+- FNV-1a hash evaluation for percentage-based rollout (`userID + key` modulo 100)
+- JSONB conditions (`user_ids`, `org_ids`, `envs`) as post-rollout filter
+- System flag protection (`is_system=true` flags cannot be deleted)
+- RBAC: `feature_flag:view` for read, `feature_flag:manage` for CRUD
+- Evaluate endpoints authenticated-only (no RBAC) — any logged-in user can check flags
+- Audit logging for Create, Update, Delete operations
+- Soft delete with partial unique index (`WHERE deleted_at IS NULL`)
+- Key format validation: `^[a-z][a-z0-9_]*$`
+- Rollout percentage: 0-100 with CHECK constraint
+
+**Endpoints:**
+- `POST /api/v1/feature-flags` - Create
+- `GET /api/v1/feature-flags` - List (paginated)
+- `GET /api/v1/feature-flags/:id` - GetByID
+- `PUT /api/v1/feature-flags/:id` - Update
+- `DELETE /api/v1/feature-flags/:id` - Delete (soft)
+- `GET /api/v1/feature-flags/:key/evaluate` - Evaluate single flag
+- `GET /api/v1/feature-flags/evaluate` - Evaluate all flags
+
+**Note:** Organization-scoped flags deferred to future iteration. Current implementation provides global flags only.
+
 ---
 
 ## Priority 3: Features
@@ -436,13 +473,12 @@ These features from the recommendations were not checked in this analysis:
 
 - **3.1 Real-time Communication (WebSocket)** - Not checked
 - **3.3 Analytics Dashboard** - Not checked
-- **3.6 Feature Flags** - Not checked
 
 ---
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (11 features verified complete)
+### ✅ Implemented (12 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -457,6 +493,7 @@ These features from the recommendations were not checked in this analysis:
 | File Versioning | P2 | ✅ Complete |
 | Data Import/Export System | P3 | ✅ Complete |
 | Settings & Configuration | P3 | ✅ Complete |
+| Feature Flags | P3 | ✅ Complete |
 
 ### ❌ Not Checked in This Analysis
 
