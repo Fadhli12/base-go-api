@@ -507,7 +507,7 @@ func (s *Server) RegisterRoutes() {
 	orgHandler := handler.NewOrganizationHandler(orgService)
 	settingsHandler := handler.NewSettingsHandler(settingsService, s.enforcer)
 	featureFlagHandler := handler.NewFeatureFlagHandler(featureFlagService, s.enforcer)
-	commentHandler := handler.NewCommentHandler(commentService, s.enforcer)
+	commentHandler := handler.NewCommentHandler(commentService)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)

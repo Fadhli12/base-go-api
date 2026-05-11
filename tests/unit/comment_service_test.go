@@ -100,6 +100,11 @@ func (m *MockCommentRepository) CountByCommentable(ctx context.Context, commenta
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockCommentRepository) CountReplies(ctx context.Context, parentID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, parentID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 // MockUserRepositoryForComments implements repository.UserRepository
 type MockUserRepositoryForComments struct {
 	mock.Mock
@@ -303,7 +308,7 @@ func TestCommentService_Create_Success(t *testing.T) {
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hello world",
@@ -338,7 +343,7 @@ func TestCommentService_Create_WithParentID(t *testing.T) {
 	repo.On("FindByID", mock.Anything, parentID).Return(parentComment, nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content:  "Reply comment",
@@ -369,7 +374,7 @@ func TestCommentService_Create_WithMentions(t *testing.T) {
 	userRepo.On("FindByEmail", mock.Anything, "john@example.com").Return(mentionedUser, nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hey @{john@example.com} check this out",
@@ -399,7 +404,7 @@ func TestCommentService_Create_SkipsUnknownMentions(t *testing.T) {
 	userRepo.On("FindByEmail", mock.Anything, "unknown@example.com").Return(nil, apperrors.ErrNotFound)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hey @{unknown@example.com} nobody knows you",
@@ -630,7 +635,7 @@ func TestCommentService_GetByID_Success(t *testing.T) {
 	grantCommentView(t, enforcer, userID, orgID)
 	repo.On("FindByID", mock.Anything, commentID).Return(comment, nil)
 	userRepo.On("FindByID", mock.Anything, authorID).Return(makeUser(authorID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	resp, err := svc.GetByID(context.Background(), userID, true, orgID, commentID)
 
@@ -705,7 +710,7 @@ func TestCommentService_ListByCommentable_Success(t *testing.T) {
 	grantCommentView(t, enforcer, userID, orgID)
 	repo.On("FindByCommentable", mock.Anything, "news", commentableID, 10, 0).Return(comments, int64(1), nil)
 	userRepo.On("FindByID", mock.Anything, authorID).Return(makeUser(authorID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, comment.ID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, comment.ID).Return(int64(0), nil)
 
 	resp, total, err := svc.ListByCommentable(context.Background(), userID, true, orgID, "news", commentableID, 10, 0)
 
@@ -782,7 +787,7 @@ func TestCommentService_ListReplies_Success(t *testing.T) {
 	grantCommentView(t, enforcer, userID, orgID)
 	repo.On("FindReplies", mock.Anything, parentID, 10, 0).Return(replies, int64(1), nil)
 	userRepo.On("FindByID", mock.Anything, replyAuthorID).Return(makeUser(replyAuthorID, "replier@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, reply.ID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, reply.ID).Return(int64(0), nil)
 
 	resp, total, err := svc.ListReplies(context.Background(), userID, true, orgID, parentID, 10, 0)
 
@@ -837,7 +842,7 @@ func TestCommentService_Update_Success(t *testing.T) {
 	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	req := request.UpdateCommentRequest{
 		Content: "Updated content",
@@ -1114,7 +1119,7 @@ func TestCommentService_Pin_Success(t *testing.T) {
 	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, authorID).Return(makeUser(authorID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	resp, err := svc.Pin(context.Background(), userID, true, orgID, commentID, "127.0.0.1", "test-agent")
 
@@ -1220,7 +1225,7 @@ func TestCommentService_Unpin_Success(t *testing.T) {
 	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, authorID).Return(makeUser(authorID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	resp, err := svc.Unpin(context.Background(), userID, true, orgID, commentID, "127.0.0.1", "test-agent")
 
@@ -1321,7 +1326,7 @@ func TestCommentService_Create_MultipleMentions(t *testing.T) {
 	userRepo.On("FindByEmail", mock.Anything, "bob@example.com").Return(user2, nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hey @{alice@example.com} and @{bob@example.com} check this",
@@ -1352,7 +1357,7 @@ func TestCommentService_Create_DuplicateMentionsDeduped(t *testing.T) {
 	userRepo.On("FindByEmail", mock.Anything, "alice@example.com").Return(mentionedUser, nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hey @{alice@example.com} and again @{alice@example.com}",
@@ -1390,7 +1395,7 @@ func TestCommentService_Create_ValidCommentableTypes(t *testing.T) {
 			auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 			repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 			userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-			repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+			repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 			req := request.CreateCommentRequest{
 				Content: "Comment on " + ct,
@@ -1500,7 +1505,7 @@ func TestCommentService_GetByID_AuthorResolutionFailure(t *testing.T) {
 	repo.On("FindByID", mock.Anything, commentID).Return(comment, nil)
 	// Author not found (e.g., soft-deleted) — should still succeed with empty author name
 	userRepo.On("FindByID", mock.Anything, authorID).Return(nil, apperrors.ErrNotFound)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	resp, err := svc.GetByID(context.Background(), userID, true, orgID, commentID)
 
@@ -1606,7 +1611,7 @@ func TestCommentService_Update_WithMentions(t *testing.T) {
 	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, commentID, 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, commentID).Return(int64(0), nil)
 
 	req := request.UpdateCommentRequest{
 		Content: "Updated with @{jane@example.com}",
@@ -1663,7 +1668,7 @@ func TestCommentService_Create_WithDefaultDomain(t *testing.T) {
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Hello default domain",
@@ -1733,7 +1738,7 @@ func TestCommentService_Create_FindsByCommentableType_Media(t *testing.T) {
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Media comment",
@@ -1760,7 +1765,7 @@ func TestCommentService_Create_FindsByCommentableType_Invoice(t *testing.T) {
 	auditRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.AuditLog")).Return(nil)
 	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Comment")).Return(nil)
 	userRepo.On("FindByID", mock.Anything, userID).Return(makeUser(userID, "author@test.com"), nil)
-	repo.On("FindReplies", mock.Anything, mock.AnythingOfType("uuid.UUID"), 0, 0).Return([]*domain.Comment{}, int64(0), nil)
+	repo.On("CountReplies", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(int64(0), nil)
 
 	req := request.CreateCommentRequest{
 		Content: "Invoice comment",

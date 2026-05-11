@@ -18,6 +18,7 @@ type CommentRepository interface {
 	Update(ctx context.Context, comment *domain.Comment) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	CountByCommentable(ctx context.Context, commentableType string, commentableID uuid.UUID) (int64, error)
+	CountReplies(ctx context.Context, parentID uuid.UUID) (int64, error)
 }
 
 type commentRepository struct {
@@ -120,6 +121,14 @@ func (r *commentRepository) CountByCommentable(ctx context.Context, commentableT
 	if err := r.db.WithContext(ctx).Model(&domain.Comment{}).
 		Where("commentable_type = ? AND commentable_id = ?", commentableType, commentableID).
 		Count(&count).Error; err != nil {
+		return 0, apperrors.WrapInternal(err)
+	}
+	return count, nil
+}
+
+func (r *commentRepository) CountReplies(ctx context.Context, parentID uuid.UUID) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&domain.Comment{}).Where("parent_id = ? AND deleted_at IS NULL", parentID).Count(&count).Error; err != nil {
 		return 0, apperrors.WrapInternal(err)
 	}
 	return count, nil

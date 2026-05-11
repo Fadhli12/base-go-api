@@ -42,7 +42,9 @@ const (
 	AuditActionLoginFailed    = "login_failed"
 	AuditActionPasswordReset  = "password_reset"
 	AuditActionPasswordChange = "password_change"
-	AuditActionTokenReuse     = "token_reuse" // MED-004: Token reuse attack detected
+	AuditActionTokenReuse     = "token_reuse"  // MED-004: Token reuse attack detected
+	AuditActionPin             = "pin"
+	AuditActionUnpin           = "unpin"
 )
 
 // AuditResource constants define standard resource types

@@ -9,7 +9,6 @@ import (
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/http/response"
 	"github.com/example/go-api-base/internal/logger"
-	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/service"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -17,22 +16,13 @@ import (
 )
 
 type CommentHandler struct {
-	service  *service.CommentService
-	enforcer *permission.Enforcer
+	service *service.CommentService
 }
 
-func NewCommentHandler(service *service.CommentService, enforcer *permission.Enforcer) *CommentHandler {
+func NewCommentHandler(service *service.CommentService) *CommentHandler {
 	return &CommentHandler{
-		service:  service,
-		enforcer: enforcer,
+		service: service,
 	}
-}
-
-func resolveCommentOrgDomain(hasOrgID bool, orgID uuid.UUID) string {
-	if hasOrgID && orgID != uuid.Nil {
-		return orgID.String()
-	}
-	return "default"
 }
 
 func (h *CommentHandler) Create(c echo.Context) error {
@@ -262,11 +252,6 @@ func (h *CommentHandler) Pin(c echo.Context) error {
 	}
 
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveCommentOrgDomain(hasOrgID, orgID)
-	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "comment", "manage")
-	if err != nil || !allowed {
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
 
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -296,11 +281,6 @@ func (h *CommentHandler) Unpin(c echo.Context) error {
 	}
 
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveCommentOrgDomain(hasOrgID, orgID)
-	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "comment", "manage")
-	if err != nil || !allowed {
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
 
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

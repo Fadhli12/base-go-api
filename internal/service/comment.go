@@ -103,7 +103,12 @@ func (s *CommentService) Create(
 		if parent.CommentableType != commentableType || parent.CommentableID != commentableID {
 			return nil, apperrors.NewAppError("VALIDATION_ERROR", "parent comment must belong to the same commentable entity", 422)
 		}
-		parentID = &parsedParentID
+		// Flatten: if replying to a reply, attach to the top-level parent instead
+		if parent.ParentID != nil {
+			parentID = parent.ParentID
+		} else {
+			parentID = &parsedParentID
+		}
 	}
 
 	// Parse @mentions from content
@@ -440,7 +445,7 @@ func (s *CommentService) Pin(
 
 	// Audit log
 	afterJSON, _ := json.Marshal(comment.ToResponse("", 0))
-	s.audit.LogAction(ctx, userID, domain.AuditActionUpdate, "comment", comment.ID.String(), beforeJSON, afterJSON, ipAddress, userAgent)
+	s.audit.LogAction(ctx, userID, domain.AuditActionPin, "comment", comment.ID.String(), beforeJSON, afterJSON, ipAddress, userAgent)
 
 	return s.buildCommentResponse(ctx, comment)
 }
@@ -491,7 +496,7 @@ func (s *CommentService) Unpin(
 
 	// Audit log
 	afterJSON, _ := json.Marshal(comment.ToResponse("", 0))
-	s.audit.LogAction(ctx, userID, domain.AuditActionUpdate, "comment", comment.ID.String(), beforeJSON, afterJSON, ipAddress, userAgent)
+	s.audit.LogAction(ctx, userID, domain.AuditActionUnpin, "comment", comment.ID.String(), beforeJSON, afterJSON, ipAddress, userAgent)
 
 	return s.buildCommentResponse(ctx, comment)
 }
@@ -556,15 +561,13 @@ func (s *CommentService) buildCommentResponse(ctx context.Context, comment *doma
 
 	// Count replies
 	var replyCount int64
-	_, count, err := s.repo.FindReplies(ctx, comment.ID, 0, 0)
+	replyCount, err = s.repo.CountReplies(ctx, comment.ID)
 	if err != nil {
 		s.log.Warn("failed to count replies",
 			slog.String("comment_id", comment.ID.String()),
 			slog.String("error", err.Error()),
 		)
 		replyCount = 0
-	} else {
-		replyCount = count
 	}
 
 	return &domain.CommentResponse{
