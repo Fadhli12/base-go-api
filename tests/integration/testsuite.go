@@ -292,6 +292,7 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 		"media",
 		"feature_flags",
 		"comments",
+		"comments",
 		"export_jobs",
 		"import_jobs",
 		"import_id_maps",
@@ -394,6 +395,7 @@ DROP TABLE IF EXISTS organizations CASCADE;
 DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS webhooks CASCADE;
 	DROP TABLE IF EXISTS feature_flags CASCADE;
+	DROP TABLE IF EXISTS comments CASCADE;
 	DROP TABLE IF EXISTS import_id_maps CASCADE;
 	DROP TABLE IF EXISTS import_jobs CASCADE;
 	DROP TABLE IF EXISTS export_jobs CASCADE;

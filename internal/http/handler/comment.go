@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/middleware"
@@ -29,7 +28,7 @@ func NewCommentHandler(service *service.CommentService, enforcer *permission.Enf
 	}
 }
 
-func resolveCommentHandlerOrgDomain(hasOrgID bool, orgID uuid.UUID) string {
+func resolveCommentOrgDomain(hasOrgID bool, orgID uuid.UUID) string {
 	if hasOrgID && orgID != uuid.Nil {
 		return orgID.String()
 	}
@@ -136,9 +135,9 @@ func (h *CommentHandler) ListByCommentable(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid commentable ID"))
 	}
 
-	limit, offset := parseCommentPagination(c)
+	pagination := ParsePagination(c)
 
-	comments, total, err := h.service.ListByCommentable(ctx, userID, hasOrgID, orgID, commentableType, commentableID, limit, offset)
+	comments, total, err := h.service.ListByCommentable(ctx, userID, hasOrgID, orgID, commentableType, commentableID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		log.Error(ctx, "failed to list comments", logger.Err(err))
 		if apperrors.IsAppError(err) {
@@ -169,9 +168,9 @@ func (h *CommentHandler) ListReplies(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid comment ID"))
 	}
 
-	limit, offset := parseCommentPagination(c)
+	pagination := ParsePagination(c)
 
-	replies, total, err := h.service.ListReplies(ctx, userID, hasOrgID, orgID, parentID, limit, offset)
+	replies, total, err := h.service.ListReplies(ctx, userID, hasOrgID, orgID, parentID, pagination.Limit, pagination.Offset)
 	if err != nil {
 		log.Error(ctx, "failed to list replies", logger.Err(err))
 		if apperrors.IsAppError(err) {
@@ -210,7 +209,7 @@ func (h *CommentHandler) Update(c echo.Context) error {
 
 	if err := req.Validate(); err != nil {
 		log.Warn(ctx, "validation failed", logger.Err(err))
-		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "VALIDATION_ERROR", err.Error()))
+		return c.JSON(http.StatusBadRequest, response.ErrorWithContextAndDetails(c, "VALIDATION_ERROR", "Validation failed", err.Error()))
 	}
 
 	commentResp, err := h.service.Update(ctx, userID, hasOrgID, orgID, id, req, c.RealIP(), c.Request().UserAgent())
@@ -250,7 +249,7 @@ func (h *CommentHandler) Delete(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to delete comment"))
 	}
 
-	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"message": "Comment deleted successfully"}))
+	return c.JSON(http.StatusOK, response.SuccessWithContext(c, map[string]string{"status": "deleted"}))
 }
 
 func (h *CommentHandler) Pin(c echo.Context) error {
@@ -263,7 +262,7 @@ func (h *CommentHandler) Pin(c echo.Context) error {
 	}
 
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveCommentHandlerOrgDomain(hasOrgID, orgID)
+	orgDomain := resolveCommentOrgDomain(hasOrgID, orgID)
 	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "comment", "manage")
 	if err != nil || !allowed {
 		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
@@ -297,7 +296,7 @@ func (h *CommentHandler) Unpin(c echo.Context) error {
 	}
 
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveCommentHandlerOrgDomain(hasOrgID, orgID)
+	orgDomain := resolveCommentOrgDomain(hasOrgID, orgID)
 	allowed, err := h.enforcer.Enforce(userID.String(), orgDomain, "comment", "manage")
 	if err != nil || !allowed {
 		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
@@ -319,18 +318,6 @@ func (h *CommentHandler) Unpin(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, response.SuccessWithContext(c, commentResp))
-}
-
-func parseCommentPagination(c echo.Context) (limit, offset int) {
-	limit = 20
-	offset = 0
-	if l, err := strconv.Atoi(c.QueryParam("limit")); err == nil && l > 0 {
-		limit = l
-	}
-	if o, err := strconv.Atoi(c.QueryParam("offset")); err == nil && o >= 0 {
-		offset = o
-	}
-	return
 }
 
 func marshalComments(comments []*domain.CommentResponse) []json.RawMessage {

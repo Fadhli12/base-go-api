@@ -1168,9 +1168,9 @@ func (s *Server) RegisterCommentRoutes(api *echo.Group, commentHandler *handler.
 		}))
 	}
 
-	comments.GET("/:id", commentHandler.GetByID)
 	comments.PUT("/:id", commentHandler.Update)
 	comments.DELETE("/:id", commentHandler.Delete)
+	comments.GET("/:id", commentHandler.GetByID)
 	comments.GET("/:id/replies", commentHandler.ListReplies)
 	comments.POST("/:id/pin", commentHandler.Pin)
 	comments.POST("/:id/unpin", commentHandler.Unpin)
