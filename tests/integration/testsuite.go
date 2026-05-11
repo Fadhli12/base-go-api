@@ -288,7 +288,12 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 		"password_reset_tokens",
 		"media_downloads",
 		"media_conversions",
+		"media_versions",
 		"media",
+		"feature_flags",
+		"export_jobs",
+		"import_jobs",
+		"import_id_maps",
 		"api_keys",
 		"audit_logs",
 		"user_permissions",
@@ -387,10 +392,15 @@ DROP TABLE IF EXISTS organization_members CASCADE;
 DROP TABLE IF EXISTS organizations CASCADE;
 DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS webhooks CASCADE;
-DROP TABLE IF EXISTS casbin_rule CASCADE;
-DROP TABLE IF EXISTS permissions CASCADE;
-DROP TABLE IF EXISTS roles CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+	DROP TABLE IF EXISTS feature_flags CASCADE;
+	DROP TABLE IF EXISTS import_id_maps CASCADE;
+	DROP TABLE IF EXISTS import_jobs CASCADE;
+	DROP TABLE IF EXISTS export_jobs CASCADE;
+	DROP TABLE IF EXISTS media_versions CASCADE;
+	DROP TABLE IF EXISTS casbin_rule CASCADE;
+	DROP TABLE IF EXISTS permissions CASCADE;
+	DROP TABLE IF EXISTS roles CASCADE;
+	DROP TABLE IF EXISTS users CASCADE;
 	`).Error; err != nil {
 		return fmt.Errorf("drop existing tables: %w", err)
 	}
@@ -1167,6 +1177,132 @@ CREATE TRIGGER update_saved_searches_updated_at BEFORE UPDATE ON saved_searches 
 `
 	if err := s.DB.Exec(migration017).Error; err != nil {
 		errs = append(errs, fmt.Errorf("migration 000017 (saved_searches): %w", err))
+	}
+
+	migration018 := `
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS is_2fa_pending BOOLEAN NOT NULL DEFAULT false;
+`
+	if err := s.DB.Exec(migration018).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000018 (refresh_token_is2fa_pending): %w", err))
+	}
+
+	migration019 := `
+CREATE TABLE IF NOT EXISTS media_versions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    media_id        UUID NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    version         INTEGER NOT NULL,
+    filename        VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(500) NOT NULL,
+    mime_type       VARCHAR(100) NOT NULL,
+    size            BIGINT NOT NULL,
+    file_path       VARCHAR(2000) NOT NULL,
+    checksum        CHAR(64) NOT NULL,
+    uploaded_by_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at      TIMESTAMPTZ DEFAULT NULL,
+    CONSTRAINT uq_media_versions_version UNIQUE (media_id, version),
+    CONSTRAINT chk_media_versions_size CHECK (size > 0),
+    CONSTRAINT chk_media_versions_version_positive CHECK (version > 0),
+    CONSTRAINT chk_media_versions_mime_type CHECK (mime_type ~ '^[a-z]+/[a-zA-Z0-9+\-\.]+$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_versions_media_id ON media_versions(media_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_uploaded_by ON media_versions(uploaded_by_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_checksum ON media_versions(media_id, checksum) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_created_at ON media_versions(created_at DESC) WHERE deleted_at IS NULL;
+
+CREATE TRIGGER update_media_versions_updated_at BEFORE UPDATE ON media_versions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE media ADD COLUMN IF NOT EXISTS current_version INTEGER NOT NULL DEFAULT 1;
+`
+	if err := s.DB.Exec(migration019).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000019 (media_versions): %w", err))
+	}
+
+	migration020 := `
+CREATE TABLE IF NOT EXISTS export_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status VARCHAR(20) NOT NULL DEFAULT 'queued',
+    entity_types TEXT[] NOT NULL,
+    format VARCHAR(10) NOT NULL DEFAULT 'json',
+    org_id UUID REFERENCES organizations(id),
+    created_by UUID NOT NULL,
+    file_path VARCHAR(500),
+    file_expires_at TIMESTAMP,
+    record_count INTEGER,
+    error_message TEXT,
+    hmac_signature VARCHAR(128),
+    sync BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_export_jobs_status ON export_jobs(status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_export_jobs_created_by ON export_jobs(created_by) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_export_jobs_org_id ON export_jobs(org_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS import_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status VARCHAR(20) NOT NULL DEFAULT 'queued',
+    entity_types TEXT[] NOT NULL,
+    format VARCHAR(10) NOT NULL DEFAULT 'json',
+    org_id UUID REFERENCES organizations(id),
+    created_by UUID NOT NULL,
+    conflict_strategy VARCHAR(10) NOT NULL DEFAULT 'skip',
+    dry_run BOOLEAN NOT NULL DEFAULT FALSE,
+    source_file_path VARCHAR(500),
+    idempotency_key VARCHAR(64) UNIQUE,
+    result JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_jobs_status ON import_jobs(status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_import_jobs_created_by ON import_jobs(created_by) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_import_jobs_idempotency ON import_jobs(idempotency_key);
+
+CREATE TABLE IF NOT EXISTS import_id_maps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID NOT NULL REFERENCES import_jobs(id),
+    entity_type VARCHAR(50) NOT NULL,
+    external_id UUID NOT NULL,
+    internal_id UUID NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(job_id, entity_type, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_id_maps_job ON import_id_maps(job_id);
+CREATE INDEX IF NOT EXISTS idx_import_id_maps_external ON import_id_maps(entity_type, external_id);
+`
+	if err := s.DB.Exec(migration020).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000020 (data_portability): %w", err))
+	}
+
+	migration021 := `
+CREATE TABLE IF NOT EXISTS feature_flags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key VARCHAR(100) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    rollout INTEGER NOT NULL DEFAULT 100 CHECK (rollout >= 0 AND rollout <= 100),
+    conditions JSONB,
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feature_flags_key ON feature_flags(key) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_feature_flags_deleted_at ON feature_flags(deleted_at);
+`
+	if err := s.DB.Exec(migration021).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000021 (feature_flags): %w", err))
 	}
 
 	if len(errs) > 0 {

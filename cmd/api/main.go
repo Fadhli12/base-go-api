@@ -576,12 +576,14 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "data_portability:import_create", Description: "Create data import jobs", Resource: "data_portability", Action: "import:create"},
 		{Name: "data_portability:import_view", Description: "View import job status and results", Resource: "data_portability", Action: "import:view"},
 		{Name: "data_portability:import_cancel", Description: "Cancel import and export jobs", Resource: "data_portability", Action: "import:cancel"},
+		{Name: "feature_flag:view", Description: "View feature flags", Resource: "feature_flag", Action: "view"},
+		{Name: "feature_flag:manage", Description: "Create, update, and delete feature flags", Resource: "feature_flag", Action: "manage"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage"},
 			},
 		},
 	}

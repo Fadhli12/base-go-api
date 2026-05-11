@@ -62,14 +62,19 @@ IsEnabled(key, userID):
   if flag == nil OR flag.enabled == false:
     return EvalResult(enabled=false, reason="disabled")
   if flag.rollout == 100:
-    return EvalResult(enabled=true, reason="global_enabled")
+    if conditions match: return EvalResult(enabled=true, reason="rollout_100")
+    else: return EvalResult(enabled=false, reason="condition_no_match")
   if flag.rollout == 0:
-    return EvalResult(enabled=false, reason="rollout_excluded")
-  hash = FNV1a(key + userID) % 100
+    return EvalResult(enabled=false, reason="rollout_0")
+  hash = FNV1a(userID + key) % 100
   if hash < flag.rollout:
-    return EvalResult(enabled=true, reason="rollout")
-  if conditions.user_ids contains userID:
-    return EvalResult(enabled=true, reason="condition_match")
-  // org_ids and envs checks would require org context (future)
-  return EvalResult(enabled=false, reason="no_match")
+    if conditions match: return EvalResult(enabled=true, reason="rollout_match")
+    else: return EvalResult(enabled=false, reason="condition_no_match")
+  return EvalResult(enabled=false, reason="rollout_no_match")
+
+Conditions evaluation:
+  - If conditions is empty/nil: match = true (no conditions to filter)
+  - If conditions.user_ids present AND userID in list: match = true
+  - If conditions.org_ids present AND orgID in list: match = true
+  - If conditions present but no match: match = false
 ```
