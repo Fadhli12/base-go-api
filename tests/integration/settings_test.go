@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newSettingsServiceWithAudit(t *testing.T, suite *IntegrationTestSuite) *service.SettingsService {
+func newSettingsServiceWithAudit(t *testing.T, suite *TestSuite) *service.SettingsService {
 	t.Helper()
 	auditLogRepo := repository.NewAuditLogRepository(suite.DB)
 	auditService := service.NewAuditService(auditLogRepo, service.DefaultAuditServiceConfig())

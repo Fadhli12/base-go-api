@@ -17,11 +17,12 @@ Runtime feature toggles for gradual rollout, A/B testing, and environment-based 
 
 - CRUD management of feature flags via API
 - Runtime evaluation: `IsEnabled(ctx, key, userID)` checks flag state, rollout percentage, and conditions
-- Organization-scoped flags (override global defaults per org)
 - Audit logging for all flag changes
 - RBAC enforcement: `feature_flag:manage` for CRUD, `feature_flag:view` for read
 - Soft delete for compliance (Constitution Principle III)
 - SQL migrations only — no AutoMigrate (Constitution Principle V)
+
+**Deferred to future iteration**: Organization-scoped flags (per-org overrides of global defaults). Current implementation provides global flags only. When org-scoping is needed, add `organization_id` column with null=global, and update evaluation logic to merge global + org-specific flags.
 
 ## 3. Entities
 

@@ -51,16 +51,22 @@ Permissions are seeded in `cmd/api/main.go` via `DefaultPermissions()`:
 ### R1: Rollout Hashing Algorithm
 **Decision**: Use FNV-1a hash combining `userID + key`, then modulo 100.
 **Rationale**: Deterministic (same user always gets same result), no state needed, O(1).
+**Note**: The concatenation order is `userID + key` (not `key + userID`) — this is the canonical order used in the implementation.
 **Implementation**:
 ```go
-import "hash/fnv"
-
-func rolloutHash(key string, userID uuid.UUID) int {
-    h := fnv.New32a()
-    h.Write([]byte(key))
-    h.Write([]byte(userID.String()))
-    return int(h.Sum32() % 100)
+func fnvHash(s string) uint32 {
+    const (
+        offset32 = 2166136261
+        prime32  = 16777619
+    )
+    h := uint32(offset32)
+    for _, c := range s {
+        h ^= uint32(c)
+        h *= prime32
+    }
+    return h
 }
+// Usage: fnvHash(userID.String() + key) % 100
 ```
 
 ### R2: Conditions JSONB Schema

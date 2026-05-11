@@ -468,6 +468,10 @@ func (s *Server) RegisterRoutes() {
 	systemSettingsRepo := repository.NewSystemSettingsRepository(s.db)
 	settingsService := service.NewSettingsService(userSettingsRepo, systemSettingsRepo, s.auditSvc, slog.Default())
 
+	// Initialize feature flag service
+	featureFlagRepo := repository.NewFeatureFlagRepository(s.db)
+	featureFlagService := service.NewFeatureFlagService(featureFlagRepo, s.enforcer, s.auditSvc, slog.Default())
+
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
@@ -498,6 +502,7 @@ func (s *Server) RegisterRoutes() {
 	roleHandler := handler.NewRoleHandler(roleService)
 	orgHandler := handler.NewOrganizationHandler(orgService)
 	settingsHandler := handler.NewSettingsHandler(settingsService, s.enforcer)
+	featureFlagHandler := handler.NewFeatureFlagHandler(featureFlagService, s.enforcer)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)
@@ -663,6 +668,9 @@ func (s *Server) RegisterRoutes() {
 
 	// Settings routes
 	s.RegisterSettingsRoutes(v1, settingsHandler)
+
+	// Feature flag routes
+	s.RegisterFeatureFlagRoutes(v1, featureFlagHandler)
 
 	// Email routes
 	s.RegisterEmailRoutes(v1)
@@ -1107,6 +1115,32 @@ func (s *Server) RegisterJobRoutes(api *echo.Group) {
 	jobs.GET("/:id", jobHandler.GetByID)
 	jobs.DELETE("/:id", jobHandler.Cancel)
 	jobs.POST("/:id/resubmit", jobHandler.ResubmitJob)
+}
+
+func (s *Server) RegisterFeatureFlagRoutes(api *echo.Group, featureFlagHandler *handler.FeatureFlagHandler) {
+	featureFlags := api.Group("/feature-flags")
+
+	featureFlags.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	featureFlags.Use(middleware.ExtractOrganizationID())
+
+	if s.auditSvc != nil {
+		featureFlags.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	featureFlags.POST("", featureFlagHandler.Create)
+	featureFlags.GET("", featureFlagHandler.List)
+	featureFlags.GET("/evaluate", featureFlagHandler.EvaluateAll)
+	featureFlags.GET("/:id", featureFlagHandler.GetByID)
+	featureFlags.PUT("/:id", featureFlagHandler.Update)
+	featureFlags.DELETE("/:id", featureFlagHandler.Delete)
+	featureFlags.GET("/:key/evaluate", featureFlagHandler.Evaluate)
 }
 
 // HealthCheck performs health checks on dependencies
