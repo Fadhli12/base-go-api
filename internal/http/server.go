@@ -472,6 +472,10 @@ func (s *Server) RegisterRoutes() {
 	featureFlagRepo := repository.NewFeatureFlagRepository(s.db)
 	featureFlagService := service.NewFeatureFlagService(featureFlagRepo, s.enforcer, s.auditSvc, slog.Default())
 
+	// Initialize comment service
+	commentRepo := repository.NewCommentRepository(s.db)
+	commentService := service.NewCommentService(commentRepo, userRepo, s.enforcer, s.auditSvc, slog.Default())
+
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
@@ -503,6 +507,7 @@ func (s *Server) RegisterRoutes() {
 	orgHandler := handler.NewOrganizationHandler(orgService)
 	settingsHandler := handler.NewSettingsHandler(settingsService, s.enforcer)
 	featureFlagHandler := handler.NewFeatureFlagHandler(featureFlagService, s.enforcer)
+	commentHandler := handler.NewCommentHandler(commentService, s.enforcer)
 
 	// Initialize invoice module
 	invoiceRepo := invoice.NewRepository(s.db)
@@ -671,6 +676,9 @@ func (s *Server) RegisterRoutes() {
 
 	// Feature flag routes
 	s.RegisterFeatureFlagRoutes(v1, featureFlagHandler)
+
+	// Comment routes
+	s.RegisterCommentRoutes(v1, commentHandler)
 
 	// Email routes
 	s.RegisterEmailRoutes(v1)
@@ -1141,6 +1149,46 @@ func (s *Server) RegisterFeatureFlagRoutes(api *echo.Group, featureFlagHandler *
 	featureFlags.PUT("/:id", featureFlagHandler.Update)
 	featureFlags.DELETE("/:id", featureFlagHandler.Delete)
 	featureFlags.GET("/:key/evaluate", featureFlagHandler.Evaluate)
+}
+
+func (s *Server) RegisterCommentRoutes(api *echo.Group, commentHandler *handler.CommentHandler) {
+	comments := api.Group("/comments")
+
+	comments.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+
+	comments.Use(middleware.ExtractOrganizationID())
+
+	if s.auditSvc != nil {
+		comments.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	comments.GET("/:id", commentHandler.GetByID)
+	comments.PUT("/:id", commentHandler.Update)
+	comments.DELETE("/:id", commentHandler.Delete)
+	comments.GET("/:id/replies", commentHandler.ListReplies)
+	comments.POST("/:id/pin", commentHandler.Pin)
+	comments.POST("/:id/unpin", commentHandler.Unpin)
+
+	commentable := api.Group("")
+	commentable.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+	commentable.Use(middleware.ExtractOrganizationID())
+	if s.auditSvc != nil {
+		commentable.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+	commentable.POST("/:type/:id/comments", commentHandler.Create)
+	commentable.GET("/:type/:id/comments", commentHandler.ListByCommentable)
 }
 
 // HealthCheck performs health checks on dependencies

@@ -291,6 +291,7 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 		"media_versions",
 		"media",
 		"feature_flags",
+		"comments",
 		"export_jobs",
 		"import_jobs",
 		"import_id_maps",
@@ -1303,6 +1304,33 @@ CREATE INDEX IF NOT EXISTS idx_feature_flags_deleted_at ON feature_flags(deleted
 `
 	if err := s.DB.Exec(migration021).Error; err != nil {
 		errs = append(errs, fmt.Errorf("migration 000021 (feature_flags): %w", err))
+	}
+
+	migration022 := `
+CREATE TABLE IF NOT EXISTS comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    parent_id UUID,
+    author_id UUID NOT NULL,
+    organization_id UUID NOT NULL,
+    commentable_type VARCHAR(50) NOT NULL,
+    commentable_id UUID NOT NULL,
+    content TEXT NOT NULL,
+    mentioned_user_ids JSONB,
+    edited_at TIMESTAMPTZ,
+    is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_comments_author_id ON comments(author_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_comments_organization_id ON comments(organization_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_comments_commentable ON comments(commentable_type, commentable_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_comments_deleted_at ON comments(deleted_at);
+`
+	if err := s.DB.Exec(migration022).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000022 (comments): %w", err))
 	}
 
 	if len(errs) > 0 {
