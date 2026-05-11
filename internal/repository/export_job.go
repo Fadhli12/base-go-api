@@ -17,6 +17,11 @@ type ExportJobRepository interface {
 	FindByOrgID(ctx context.Context, orgID uuid.UUID, page, pageSize int) ([]*domain.ExportJob, int64, error)
 	FindByCreatedBy(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*domain.ExportJob, int64, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error
+	// ClaimJob atomically transitions a job from fromStatus to toStatus using
+	// optimistic locking to prevent duplicate processing by concurrent workers.
+	// Returns true if the claim succeeded (RowsAffected == 1), false if the job
+	// was already claimed by another worker.
+	ClaimJob(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error)
 	UpdateFilePath(ctx context.Context, id uuid.UUID, filePath string, recordCount int, hmacSignature string) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, orgID *uuid.UUID, page, pageSize int) ([]*domain.ExportJob, int64, error)
@@ -111,6 +116,17 @@ func (r *exportJobRepository) FindByCreatedBy(ctx context.Context, userID uuid.U
 	}
 
 	return jobs, total, nil
+}
+
+func (r *exportJobRepository) ClaimJob(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error) {
+	result := r.db.WithContext(ctx).
+		Model(&domain.ExportJob{}).
+		Where("id = ? AND status = ?", id, fromStatus).
+		Update("status", toStatus)
+	if result.Error != nil {
+		return false, errors.WrapInternal(result.Error)
+	}
+	return result.RowsAffected == 1, nil
 }
 
 func (r *exportJobRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error {

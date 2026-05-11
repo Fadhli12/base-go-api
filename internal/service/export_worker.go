@@ -124,6 +124,7 @@ func (w *ExportWorker) processLoop() {
 			return
 		case <-ticker.C:
 			if w.queue == nil {
+				slog.Warn("Export worker queue not configured, skipping poll")
 				continue
 			}
 			jobID, err := w.dequeueJob()
@@ -170,13 +171,20 @@ func (w *ExportWorker) dequeueJob() (string, error) {
 }
 
 func (w *ExportWorker) processExport(ctx context.Context, jobID uuid.UUID) error {
+	claimed, err := w.exportJobRepo.ClaimJob(ctx, jobID, domain.ExportQueued, domain.ExportProcessing)
+	if err != nil {
+		return fmt.Errorf("failed to claim export job: %w", err)
+	}
+	if !claimed {
+		w.logger.Info(ctx, "export job already claimed by another worker",
+			logger.String("job_id", jobID.String()),
+		)
+		return nil
+	}
+
 	job, err := w.exportJobRepo.FindByID(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("failed to find export job: %w", err)
-	}
-
-	if err := w.exportJobRepo.UpdateStatus(ctx, jobID, domain.ExportProcessing, nil); err != nil {
-		return fmt.Errorf("failed to mark job as processing: %w", err)
 	}
 
 	w.logger.Info(ctx, "processing export job",

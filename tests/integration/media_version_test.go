@@ -201,7 +201,7 @@ func setupMediaVersionHandler(t *testing.T, suite *TestSuite, enforcer *permissi
 	auditService := service.NewAuditService(auditLogRepo, service.AuditServiceConfig{BufferSize: 10})
 	versionService := service.NewVersionService(mediaRepo, versionRepo, storageDriver, "test-signing-secret", auditService, enforcer)
 
-	versionHandler := handler.NewMediaVersionHandler(versionService, mediaService, auditService, enforcer)
+	versionHandler := handler.NewMediaVersionHandler(versionService, mediaService, enforcer)
 	mediaHandler := handler.NewMediaHandler(mediaService, auditService, enforcer, "test-signing-secret")
 
 	v1 := e.Group("/api/v1")

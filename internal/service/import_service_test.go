@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/logger"
@@ -17,12 +18,16 @@ import (
 )
 
 type mockImportJobRepository struct {
-	createFn               func(ctx context.Context, job *domain.ImportJob) error
-	findByIDFn             func(ctx context.Context, id uuid.UUID) (*domain.ImportJob, error)
-	findByIdempotencyKeyFn func(ctx context.Context, key string) (*domain.ImportJob, error)
-	updateStatusFn         func(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error
-	updateResultFn         func(ctx context.Context, id uuid.UUID, result domain.ImportResult) error
-	listFn                 func(ctx context.Context, orgID *uuid.UUID, page, pageSize int) ([]*domain.ImportJob, int64, error)
+	createFn                  func(ctx context.Context, job *domain.ImportJob) error
+	findByIDFn                func(ctx context.Context, id uuid.UUID) (*domain.ImportJob, error)
+	findByIdempotencyKeyFn    func(ctx context.Context, key string) (*domain.ImportJob, error)
+	updateStatusFn            func(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error
+	claimJobFn                func(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error)
+	updateResultFn            func(ctx context.Context, id uuid.UUID, result domain.ImportResult) error
+	listFn                    func(ctx context.Context, orgID *uuid.UUID, page, pageSize int) ([]*domain.ImportJob, int64, error)
+	findQueuedFn              func(ctx context.Context, limit int) ([]*domain.ImportJob, error)
+	findStuckProcessingFn     func(ctx context.Context, timeout interface{}) ([]*domain.ImportJob, error)
+	updateProcessingStartedAtFn func(ctx context.Context, id uuid.UUID, startedAt interface{}) error
 }
 
 func (m *mockImportJobRepository) Create(ctx context.Context, job *domain.ImportJob) error {
@@ -53,6 +58,13 @@ func (m *mockImportJobRepository) UpdateStatus(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+func (m *mockImportJobRepository) ClaimJob(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error) {
+	if m.claimJobFn != nil {
+		return m.claimJobFn(ctx, id, fromStatus, toStatus)
+	}
+	return true, nil
+}
+
 func (m *mockImportJobRepository) UpdateResult(ctx context.Context, id uuid.UUID, result domain.ImportResult) error {
 	if m.updateResultFn != nil {
 		return m.updateResultFn(ctx, id, result)
@@ -73,6 +85,27 @@ func (m *mockImportJobRepository) List(ctx context.Context, orgID *uuid.UUID, pa
 		return m.listFn(ctx, orgID, page, pageSize)
 	}
 	return nil, 0, nil
+}
+
+func (m *mockImportJobRepository) FindQueued(ctx context.Context, limit int) ([]*domain.ImportJob, error) {
+	if m.findQueuedFn != nil {
+		return m.findQueuedFn(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockImportJobRepository) FindStuckProcessing(ctx context.Context, timeout time.Duration) ([]*domain.ImportJob, error) {
+	if m.findStuckProcessingFn != nil {
+		return m.findStuckProcessingFn(ctx, timeout)
+	}
+	return nil, nil
+}
+
+func (m *mockImportJobRepository) UpdateProcessingStartedAt(ctx context.Context, id uuid.UUID, startedAt time.Time) error {
+	if m.updateProcessingStartedAtFn != nil {
+		return m.updateProcessingStartedAtFn(ctx, id, startedAt)
+	}
+	return nil
 }
 
 type mockImportIDMapRepository struct {
@@ -584,7 +617,7 @@ func TestHMACVerificationFailure(t *testing.T) {
 func TestImportConfig_Defaults(t *testing.T) {
 	config := DefaultImportConfig()
 	assert.Equal(t, ImportBatchSize, config.BatchSize)
-	assert.Equal(t, ImportMaxFileSize, int64(ImportMaxFileSize), config.MaxFileSize)
+	assert.Equal(t, int64(ImportMaxFileSize), config.MaxFileSize)
 	assert.Equal(t, ImportMaxEntities, config.MaxEntities)
 }
 

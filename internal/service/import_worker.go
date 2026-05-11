@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -136,6 +137,21 @@ func (w *ImportWorker) processLoop(workerID int) {
 
 func (w *ImportWorker) processJob(jobID uuid.UUID) error {
 	ctx := w.ctx
+
+	claimed, err := w.jobRepo.ClaimJob(ctx, jobID, domain.ImportQueued, domain.ImportProcessing)
+	if err != nil {
+		slog.Error("Failed to claim import job",
+			"job_id", jobID,
+			"error", err,
+		)
+		return fmt.Errorf("claim import job: %w", err)
+	}
+	if !claimed {
+		slog.Info("Import job already claimed by another worker",
+			"job_id", jobID,
+		)
+		return nil
+	}
 
 	now := time.Now()
 	if err := w.jobRepo.UpdateProcessingStartedAt(ctx, jobID, now); err != nil {

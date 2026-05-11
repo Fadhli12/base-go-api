@@ -16,6 +16,7 @@ type ImportJobRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*domain.ImportJob, error)
 	FindByIdempotencyKey(ctx context.Context, key string) (*domain.ImportJob, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error
+	ClaimJob(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error)
 	UpdateResult(ctx context.Context, id uuid.UUID, result domain.ImportResult) error
 	UpdateSourceFilePath(ctx context.Context, id uuid.UUID, path string) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
@@ -66,6 +67,17 @@ func (r *importJobRepository) FindByIdempotencyKey(ctx context.Context, key stri
 		return nil, errors.WrapInternal(err)
 	}
 	return &job, nil
+}
+
+func (r *importJobRepository) ClaimJob(ctx context.Context, id uuid.UUID, fromStatus, toStatus string) (bool, error) {
+	result := r.db.WithContext(ctx).
+		Model(&domain.ImportJob{}).
+		Where("id = ? AND status = ?", id, fromStatus).
+		Update("status", toStatus)
+	if result.Error != nil {
+		return false, errors.WrapInternal(result.Error)
+	}
+	return result.RowsAffected == 1, nil
 }
 
 func (r *importJobRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status string, errorMessage *string) error {
