@@ -3,6 +3,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -325,7 +326,7 @@ func TestHub_JoinRoom_ValidRoomName(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	validRooms := []string{
-		"org:" + uuid.New().String(),
+		"org:" + orgID.String(),
 		"org:" + orgID.String() + ":invoice:" + uuid.New().String(),
 		"org:" + orgID.String() + ":news:" + uuid.New().String(),
 	}
@@ -518,17 +519,16 @@ func TestHub_JoinRoom_ExceedsMaxRooms(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 
 	// Join 50 rooms (MaxRoomsPerClient = 50)
+	validTypes := []string{"invoice", "news", "media", "comment"}
 	for i := 0; i < 50; i++ {
-		org := uuid.New()
-		room := "org:" + org.String()
+		room := fmt.Sprintf("org:%s:%s:%s", orgID.String(), validTypes[i%len(validTypes)], uuid.New().String())
 		err := hub.JoinRoom(client, room)
 		require.NoError(t, err, "joining room %d should succeed", i)
 	}
 
 	// The 51st room should fail
-	org := uuid.New()
-	room := "org:" + org.String()
-	err := hub.JoinRoom(client, room)
+	room51 := fmt.Sprintf("org:%s:invoice:%s", orgID.String(), uuid.New().String())
+	err := hub.JoinRoom(client, room51)
 	assert.Error(t, err, "joining 51st room should fail with room limit error")
 	assert.Contains(t, err.Error(), "maximum rooms per client")
 }

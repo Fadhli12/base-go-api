@@ -17,9 +17,9 @@ import (
 
 const (
 	wsRedisChannelPrefix = "ws:msg:"
-	wsReconnectBaseDelay = 1 * time.Second
-	wsReconnectMaxDelay  = 30 * time.Second
-	wsReconnectJitter    = 500 * time.Millisecond
+	wsReconnectBaseDelay  = 1 * time.Second
+	wsReconnectMaxDelay   = 30 * time.Second
+	wsReconnectJitter     = 500 * time.Millisecond
 )
 
 // RedisSubscriber defines the interface for WebSocket cross-instance pub/sub via Redis.
@@ -46,6 +46,7 @@ type RedisPubSub struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
+	stopOnce      sync.Once
 }
 
 // NewRedisPubSub creates a new RedisPubSub instance for WebSocket pub/sub.
@@ -74,13 +75,14 @@ func (s *RedisPubSub) Subscribe(ctx context.Context, room string) error {
 	s.mu.Lock()
 	s.subscriptions[room]++
 	count := s.subscriptions[room]
+	sub := s.sub
 	s.mu.Unlock()
 
-	if count > 1 || s.sub == nil {
+	if count > 1 || sub == nil {
 		return nil
 	}
 
-	if err := s.sub.Subscribe(ctx, channel); err != nil {
+	if err := sub.Subscribe(ctx, channel); err != nil {
 		s.logger.Error(ctx, "failed to subscribe to redis channel",
 			logger.String("channel", channel),
 			logger.Err(err),
@@ -108,13 +110,14 @@ func (s *RedisPubSub) Unsubscribe(ctx context.Context, room string) error {
 	} else {
 		s.subscriptions[room] = count
 	}
+	sub := s.sub
 	s.mu.Unlock()
 
-	if count > 0 || s.sub == nil {
+	if count > 0 || sub == nil {
 		return nil
 	}
 
-	if err := s.sub.Unsubscribe(ctx, channel); err != nil {
+	if err := sub.Unsubscribe(ctx, channel); err != nil {
 		s.logger.Error(ctx, "failed to unsubscribe from redis channel",
 			logger.String("channel", channel),
 			logger.Err(err),
@@ -134,8 +137,11 @@ func (s *RedisPubSub) Publish(ctx context.Context, channel string, data []byte) 
 // backoff on Redis failures.
 func (s *RedisPubSub) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+
+	s.mu.Lock()
 	s.ctx = ctx
 	s.cancel = cancel
+	s.mu.Unlock()
 
 	s.wg.Add(1)
 	go s.receiveLoop(ctx)
@@ -146,9 +152,14 @@ func (s *RedisPubSub) Start(ctx context.Context) error {
 // Stop gracefully shuts down the subscriber, cancels the context, and waits
 // for the receive goroutine to finish.
 func (s *RedisPubSub) Stop() error {
-	if s.cancel != nil {
-		s.cancel()
-	}
+	s.stopOnce.Do(func() {
+		s.mu.Lock()
+		cancel := s.cancel
+		s.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	})
 	s.wg.Wait()
 	return nil
 }
@@ -161,13 +172,14 @@ func (s *RedisPubSub) syncSubscriptions(ctx context.Context) {
 	for room := range s.subscriptions {
 		channels = append(channels, wsRedisChannelPrefix+room)
 	}
+	sub := s.sub
 	s.mu.Unlock()
 
-	if len(channels) == 0 {
+	if len(channels) == 0 || sub == nil {
 		return
 	}
 
-	if err := s.sub.Subscribe(ctx, channels...); err != nil {
+	if err := sub.Subscribe(ctx, channels...); err != nil {
 		s.logger.Error(ctx, "failed to sync redis subscriptions",
 			logger.Err(err),
 		)
@@ -175,6 +187,9 @@ func (s *RedisPubSub) syncSubscriptions(ctx context.Context) {
 }
 
 // receiveLoop manages the Redis subscription lifecycle with reconnection.
+// It reads from the PubSub channel and forwards incoming messages to the Hub.
+// All access to s.sub is protected by s.mu to prevent data races between
+// this goroutine and concurrent Subscribe/Unsubscribe calls from HTTP handlers.
 func (s *RedisPubSub) receiveLoop(ctx context.Context) {
 	defer s.wg.Done()
 
@@ -187,26 +202,26 @@ func (s *RedisPubSub) receiveLoop(ctx context.Context) {
 		default:
 		}
 
-		// Close previous subscription before creating a new one to prevent connection leaks
-		if s.sub != nil {
-			s.sub.Close()
-		}
+		newSub := s.redis.Subscribe(ctx)
 
-		s.sub = s.redis.Subscribe(ctx)
+		s.mu.Lock()
+		s.sub = newSub
+		s.mu.Unlock()
+
 		s.syncSubscriptions(ctx)
 
-		msgCh := s.sub.Channel()
+		msgCh := newSub.Channel()
 		delay = wsReconnectBaseDelay
 
 		for {
 			select {
 			case <-ctx.Done():
-				s.sub.Close()
+				newSub.Close()
 				return
 			case msg, ok := <-msgCh:
 				if !ok {
 					s.logger.Warn(ctx, "redis subscription channel closed, reconnecting")
-					s.sub.Close()
+					newSub.Close()
 					delay = nextBackoff(delay)
 					s.backoffSleep(ctx, delay)
 					goto reconnect
@@ -219,8 +234,16 @@ func (s *RedisPubSub) receiveLoop(ctx context.Context) {
 					)
 					continue
 				}
+
 				room := strings.TrimPrefix(msg.Channel, wsRedisChannelPrefix)
-				s.hub.PublishToRoom(room, wsMsg)
+
+				s.mu.Lock()
+				hub := s.hub
+				s.mu.Unlock()
+
+				if hub != nil {
+					hub.PublishToRoom(room, wsMsg)
+				}
 			}
 		}
 

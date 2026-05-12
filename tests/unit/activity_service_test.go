@@ -835,9 +835,12 @@ func TestActivityService_HandleEvent_MetadataConstruction(t *testing.T) {
 	orgID := uuid.New()
 	invoiceID := uuid.New()
 
+	var mu sync.Mutex
 	var capturedActivity *domain.Activity
 	activityRepo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Activity")).Run(func(args mock.Arguments) {
+		mu.Lock()
 		capturedActivity = args.Get(1).(*domain.Activity)
+		mu.Unlock()
 	}).Return(nil)
 
 	svc.SubscribeToEventBus(eventBus)
@@ -856,9 +859,14 @@ func TestActivityService_HandleEvent_MetadataConstruction(t *testing.T) {
 	})
 
 	// Wait for async processing
-	time.Sleep(300 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return capturedActivity != nil
+	}, 2*time.Second, 50*time.Millisecond)
 
-	require.NotNil(t, capturedActivity)
+	mu.Lock()
+	defer mu.Unlock()
 	assert.Equal(t, domain.ActivityActionCreated, capturedActivity.ActionType)
 	assert.Equal(t, domain.ActivityResourceInvoice, capturedActivity.ResourceType)
 	assert.Equal(t, invoiceID.String(), capturedActivity.ResourceID)
