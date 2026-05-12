@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-12 — Comment system documented, remaining features verified
+**Last Updated:** 2026-05-12 — Activity Feed feature implemented and documented
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -555,17 +555,37 @@ Import:
 
 ### 2.6 Activity Feed / Timeline
 
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED
 
-**Description:** Chronological activity stream for users showing actions across the system. Depends on the Notification system (✅ implemented).
+| Component | Location |
+|-----------|----------|
+| Domain entities | `internal/domain/activity.go`, `internal/domain/activity_events.go` |
+| Repository | `internal/repository/activity.go` (3 interfaces + GORM impl) |
+| Service | `internal/service/activity.go`, `internal/service/activity_follow.go`, `internal/service/activity_reaper.go` |
+| Handler | `internal/http/handler/activity.go` (8 endpoints) |
+| Request DTOs | `internal/http/request/activity.go` |
+| Response DTOs | `internal/http/response/activity.go` |
+| Config | `internal/config/activity.go` |
+| Migrations | `migrations/000023_create_activities.up.sql`, `migrations/000023_create_activities.down.sql` |
 
-**Recommended Implementation:**
-- `Activity` entity with actor, action_type, resource_type, metadata (JSONB)
-- Predefined activity constants (`invoice.created`, `news.published`, etc.)
-- EventBus integration for automatic activity generation
-- Paginated feed endpoint with filtering
+**Endpoints:**
+- `GET /api/v1/activities` — List activities (paginated, filtered, org-scoped)
+- `GET /api/v1/activities/count-unread` — Count unread activities
+- `PUT /api/v1/activities/read-all` — Mark all as read
+- `PUT /api/v1/activities/:id/read` — Mark single activity as read
+- `POST /api/v1/activities/follow` — Follow a resource
+- `DELETE /api/v1/activities/follow/:id` — Unfollow a resource
+- `GET /api/v1/activities/follows` — List followed resources
+- `DELETE /api/v1/activities/:id` — Soft-delete activity (admin, activity:manage)
 
-**Est. Effort:** 2 days | **Complexity:** Medium | **Dependencies:** Notification system ✅
+**Key Features:**
+- Per-user read tracking via `activity_reads` table
+- Per-user resource following via `activity_follows` table
+- Batch `is_read`/`is_following` computation (no LEFT JOIN)
+- 90-day auto-archival via ActivityReaper background goroutine
+- EventBus integration for automatic activity creation from domain events
+- `archived_at` for archival (separate from `deleted_at` for admin DELETE)
+- Organization-scoped multi-tenant feed
 
 ---
 
@@ -574,15 +594,14 @@ Import:
 Based on the analysis, the following should be prioritized:
 
 1. **Tagging System** (1 day, P2, no deps) — simplest remaining feature, enhances search/filter
-2. **Activity Feed / Timeline** (2 days, P2, notification dep met) — high user value, builds on EventBus
-3. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
+2. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
 4. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
 
 ---
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (13 features verified complete)
+### ✅ Implemented (14 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -599,15 +618,15 @@ Based on the analysis, the following should be prioritized:
 | Data Import/Export System | P3 | ✅ Complete |
 | Settings & Configuration | P3 | ✅ Complete |
 | Feature Flags | P3 | ✅ Complete |
+| Activity Feed / Timeline | P2 | ✅ Complete |
 
-### ❌ Not Implemented (4 features remaining)
+### ❌ Not Implemented (3 features remaining)
 
 These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT present in the codebase:
 
 | Feature | Priority | Complexity | Est. Effort | Dependencies |
 |---------|----------|------------|-------------|--------------|
 | Tagging System | P2 | Low | 1 day | None |
-| Activity Feed / Timeline | P2 | Medium | 2 days | Notification system ✅ |
 | Real-time Communication (WebSocket) | P3 | High | 3-4 days | Redis pub/sub ✅ |
 | Analytics Dashboard | P3 | High | 4-5 days | None |
 

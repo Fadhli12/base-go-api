@@ -36,6 +36,10 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | **Webhook migrations** | **`migrations/000010_webhooks*.sql`** | **Webhooks and webhook_deliveries tables** |
 | **SendGrid provider** | **`internal/service/email_sendgrid_provider.go`** | **SendGrid email integration** |
 | **SES provider** | **`internal/service/email_ses_provider.go`** | **AWS SES email integration** |
+| **Activity feed system** | **`internal/service/activity*.go`** | **CRUD, read tracking, follow, reaper, event dispatch** |
+| **Activity handler** | **`internal/http/handler/activity.go`** | **8 endpoints: list, count-unread, mark-all-read, mark-read, follow, unfollow, list-follows, delete** |
+| **Activity domain** | **`internal/domain/activity.go`, `activity_events.go`** | **Entities, DTOs, ActionType mapping from EventBus events** |
+| **Activity migrations** | **`migrations/000023_create_activities*.sql`** | **Activities, activity_reads, activity_follows tables** |
 
 ## CODE MAP
 
@@ -49,6 +53,10 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | `WebhookService` | struct | `internal/service/webhook.go` | Webhook CRUD + dispatch + delivery |
 | `WebhookWorker` | struct | `internal/service/webhook_worker.go` | Background delivery processor |
 | `EventBus` | struct | `internal/domain/webhook_events.go` | In-process event publisher/subscriber |
+| `ActivityService` | struct | `internal/service/activity.go:19` | Activity feed CRUD + event dispatch + read tracking |
+| `ActivityFollowService` | struct | `internal/service/activity_follow.go:16` | Follow/unfollow resources |
+| `ActivityReaper` | struct | `internal/service/activity_reaper.go:14` | Background archival goroutine |
+| `ActivityHandler` | struct | `internal/http/handler/activity.go:24` | 8 HTTP endpoints |
 
 ## COMMANDS
 
@@ -645,3 +653,89 @@ if existingVersion != nil {
     return nil, errors.NewAppError("CONFLICT", "Version with identical content already exists", 409)
 }
 ```
+
+---
+
+## ACTIVITY FEED FEATURE
+
+### 023-activity-feed: Activity Feed System
+
+The activity feed system tracks user actions across the platform, providing a chronological timeline of events with per-user read tracking, resource following, and automatic archival via a background reaper.
+
+**Architecture:**
+```
+Domain Services → EventBus.Publish(event) → ActivityService.SubscribeToEventBus()
+                                                  → handleEvent()
+                                                      → Map event to ActionType
+                                                      → Extract actorID, resourceID, orgID
+                                                      → Build metadata
+                                                      → activityRepo.Create()
+ActivityReaper.Start() → ticker → repo.ArchiveOlderThan(retentionDays)
+```
+
+**Key Components:**
+- **Domain**: `internal/domain/activity.go` - Activity, ActivityRead, ActivityFollow entities + DTOs
+- **Event Mapping**: `internal/domain/activity_events.go` - ActivityMapping registry mapping EventBus types to ActionType/ResourceType
+- **Repository**: `internal/repository/activity.go` - 3 interfaces (ActivityRepository, ActivityReadRepository, ActivityFollowRepository) + GORM implementations
+- **Service**: `internal/service/activity.go` - ActivityService: ListByOrganization, FindByID, CountUnread, MarkAllRead, MarkAsRead, SoftDelete, SubscribeToEventBus
+- **Follow Service**: `internal/service/activity_follow.go` - Follow, Unfollow, ListFollows, IsFollowing
+- **Reaper**: `internal/service/activity_reaper.go` - Background goroutine with configurable interval (default 60s), archives activities older than RetentionDays
+- **Handler**: `internal/http/handler/activity.go` - 8 HTTP endpoints
+- **Migration**: `migrations/000023_create_activities.up.sql` + `.down.sql`
+
+**Event Mapping (EventBus → Activity):**
+- `user.created` → ActionType: `created`, ResourceType: `user`
+- `user.deleted` → ActionType: `deleted`, ResourceType: `user`
+- `invoice.created` → ActionType: `created`, ResourceType: `invoice`
+- `invoice.paid` → ActionType: `paid`, ResourceType: `invoice`
+- `news.published` → ActionType: `published`, ResourceType: `news`
+- `news.deleted` → ActionType: `deleted`, ResourceType: `news`
+
+**Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/activities` | List activities (paginated, filtered) |
+| GET | `/api/v1/activities/count-unread` | Count unread activities |
+| PUT | `/api/v1/activities/read-all` | Mark all activities as read |
+| PUT | `/api/v1/activities/:id/read` | Mark single activity as read |
+| POST | `/api/v1/activities/follow` | Follow a resource |
+| DELETE | `/api/v1/activities/follow/:id` | Unfollow a resource |
+| GET | `/api/v1/activities/follows` | List followed resources |
+| DELETE | `/api/v1/activities/:id` | Soft-delete activity (admin) |
+
+**Configuration (Environment Variables):**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ACTIVITY_RETENTION_DAYS` | 90 | Days to retain activities before archival |
+| `ACTIVITY_DEFAULT_PAGE_SIZE` | 20 | Default pagination page size |
+| `ACTIVITY_MAX_PAGE_SIZE` | 100 | Maximum pagination page size |
+| `ACTIVITY_REAPER_INTERVAL` | 60s | Interval for archival reaper goroutine |
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `activity:view` | activity | view | View activity feed and history |
+| `activity:manage` | activity | manage | Delete activities (admin) |
+
+**Startup Wiring:**
+```go
+// EventBus subscription (cmd/api/main.go)
+activityService.SubscribeToEventBus(eventBus)
+
+// Activity reaper (cmd/api/main.go)
+activityReaper := service.NewActivityReaper(activityRepo, cfg.Activity, slog.Default())
+activityReaper.Start(ctx)
+
+// Graceful shutdown order:
+// server → eventBus → activityReaper → workers → enforcer → db → redis
+```
+
+**Design Decisions:**
+- `archived_at` for 90-day reaper archival (NOT GORM soft-delete); `deleted_at` reserved for admin DELETE
+- Per-user read tracking via `activity_reads` table (NOT `read_at` on Activity)
+- Per-user resource following via `activity_follows` (composite unique on user_id + resource_type + resource_id)
+- Batch `is_read`/`is_following` computation — separate queries, merged in Go, no LEFT JOIN on main query
+- Buffered channel (256) for EventBus subscription, matching WebhookService pattern
+- `SetEventBus()` setter for post-construction injection
+- Handler-level permission checks (soft delete requires `activity:manage`, all others `activity:view`)
+- `resolveActivityOrgDomain(hasOrgID, orgID)` returns orgID.String() or "default"
