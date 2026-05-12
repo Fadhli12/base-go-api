@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-12 — 15/17 features complete, tagging migration renumbered to 000024, 2 remaining
+**Last Updated:** 2026-05-12 — 16/17 features complete, Analytics Dashboard implemented, 1 remaining
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -523,15 +523,49 @@ Import:
 
 ### 3.3 Analytics Dashboard
 
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED
 
-**Description:** Usage analytics, metrics, and dashboard data aggregation. Uses built-in PostgreSQL for storage.
+| Component | Location |
+|-----------|----------|
+| Domain entities | `internal/domain/metric_event.go`, `internal/domain/dashboard_metric.go`, `internal/domain/dashboard_preference.go`, `internal/domain/analytics_events.go` |
+| Repository | `internal/repository/metric_event.go`, `internal/repository/dashboard_metric.go`, `internal/repository/dashboard_preference.go` |
+| Service | `internal/service/analytics.go`, `internal/service/aggregation_worker.go`, `internal/service/analytics_reaper.go` |
+| Handler | `internal/http/handler/analytics.go` (5 endpoints) |
+| Request DTOs | `internal/http/request/analytics.go` |
+| Config | `internal/config/analytics.go` (AnalyticsConfig with defaults) |
+| Migrations | `migrations/000025_create_analytics.up.sql`, `.down.sql` |
+| Unit tests | `tests/unit/analytics_domain_test.go`, `tests/unit/analytics_service_test.go`, `tests/unit/analytics_reaper_worker_test.go` |
 
-**Recommended Implementation:**
-- `MetricEvent` entity for raw event capture with JSONB metadata
-- `DashboardMetric` for pre-aggregated data (daily/weekly/monthly)
-- REST endpoints for metric ingestion and dashboard queries
-- Background aggregation worker
+**Endpoints:**
+- `GET /api/v1/analytics/dashboard` — Dashboard data (4 metric categories)
+- `GET /api/v1/analytics/metrics` — Time-series metrics with zero-fill
+- `GET /api/v1/analytics/dashboard/preferences` — Dashboard preferences
+- `PUT /api/v1/analytics/dashboard/preferences` — Update preferences (analytics:manage)
+- `POST /api/v1/analytics/aggregate` — Trigger aggregation (202 Accepted, analytics:manage)
+
+**Key Features:**
+- Event-driven ingestion: 11 EventBus events → MetricEvent via AnalyticsMapping registry
+- Idempotent ingestion: UNIQUE constraint `(event_type, resource_id, date, hour)` with ON CONFLICT DO NOTHING
+- Pre-computed dashboard metrics via AggregationWorker (configurable interval, watermark resume)
+- Time-series metrics with zero-filled intervals (hourly/daily/weekly/monthly)
+- Organization-scoped dashboard preferences (default: all 4 categories visible)
+- 90-day archival via AnalyticsReaper background goroutine
+- Organization-scoped multi-tenant data isolation
+- Buffered channel (256) EventBus subscription pattern (matches ActivityService)
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `analytics:view` | analytics | view | View dashboard, metrics, preferences |
+| `analytics:manage` | analytics | manage | Update preferences, trigger aggregation |
+
+**Architecture:**
+```
+Domain Services → EventBus.Publish(event) → AnalyticsService.SubscribeToEventBus()
+                                                    → handleEvent() → GetAnalyticsMapping → Create MetricEvent
+AggregationWorker.Start() → ticker → aggregatePeriod() → per-org metrics → Upsert DashboardMetric
+AnalyticsReaper.Start() → ticker → ArchiveOlderThan(retentionDays)
+```
 
 ---
 
@@ -639,7 +673,7 @@ Based on the analysis, the following should be prioritized:
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (15 features verified complete)
+### ✅ Implemented (16 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -658,15 +692,15 @@ Based on the analysis, the following should be prioritized:
 | Settings & Configuration | P3 | ✅ Complete |
 | Feature Flags | P3 | ✅ Complete |
 | Activity Feed / Timeline | P2 | ✅ Complete |
+| Analytics Dashboard | P3 | ✅ Complete |
 
-### ❌ Not Implemented (2 features remaining)
+### ❌ Not Implemented (1 feature remaining)
 
 These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT present in the codebase:
 
 | Feature | Priority | Complexity | Est. Effort | Dependencies |
 |---------|----------|------------|-------------|--------------|
 | Real-time Communication (WebSocket) | P3 | High | 3-4 days | Redis pub/sub ✅ |
-| Analytics Dashboard | P3 | High | 4-5 days | None |
 
 ---
 

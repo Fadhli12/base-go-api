@@ -43,8 +43,11 @@ type Server struct {
 	emailWorker    *service.EmailWorker
 	webhookWorker  *service.WebhookWorker
 	webhookService  *service.WebhookService
-	activityService *service.ActivityService
-	activityReaper  *service.ActivityReaper
+	activityService  *service.ActivityService
+	activityReaper   *service.ActivityReaper
+	analyticsService *service.AnalyticsService
+	analyticsReaper   *service.AnalyticsReaper
+	aggregationWorker *service.AggregationWorker
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -312,6 +315,36 @@ func (s *Server) SetActivityReaper(reaper *service.ActivityReaper) {
 // ActivityReaper returns the activity reaper
 func (s *Server) ActivityReaper() *service.ActivityReaper {
 	return s.activityReaper
+}
+
+// SetAnalyticsService sets the analytics service
+func (s *Server) SetAnalyticsService(analyticsService *service.AnalyticsService) {
+	s.analyticsService = analyticsService
+}
+
+// AnalyticsService returns the analytics service
+func (s *Server) AnalyticsService() *service.AnalyticsService {
+	return s.analyticsService
+}
+
+// SetAnalyticsReaper sets the analytics reaper
+func (s *Server) SetAnalyticsReaper(reaper *service.AnalyticsReaper) {
+	s.analyticsReaper = reaper
+}
+
+// AnalyticsReaper returns the analytics reaper
+func (s *Server) AnalyticsReaper() *service.AnalyticsReaper {
+	return s.analyticsReaper
+}
+
+// SetAggregationWorker sets the aggregation worker
+func (s *Server) SetAggregationWorker(worker *service.AggregationWorker) {
+	s.aggregationWorker = worker
+}
+
+// AggregationWorker returns the aggregation worker
+func (s *Server) AggregationWorker() *service.AggregationWorker {
+	return s.aggregationWorker
 }
 
 // EventBus returns the event bus
@@ -730,6 +763,12 @@ func (s *Server) RegisterRoutes() {
 	s.SetActivityService(activityService)
 	activityHandler := handler.NewActivityHandler(activityService, activityFollowService, s.enforcer)
 	activityHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+
+	// Analytics dashboard routes
+	if s.analyticsService != nil {
+		analyticsHandler := handler.NewAnalyticsHandler(s.analyticsService, s.enforcer, s.aggregationWorker)
+		analyticsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
 
 	// Search routes
 	savedSearchRepo := repository.NewSavedSearchRepository(s.db)

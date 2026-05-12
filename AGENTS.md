@@ -1,12 +1,12 @@
 # Go API Base - Agent Instructions
 
-**Generated:** 2026-05-03 | **Commit:** HEAD | **Branch:** 006-webhook-system
+**Generated:** 2026-05-12 | **Commit:** HEAD | **Branch:** 018-analytics-dashboard
 
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/010-file-versioning/plan.md](specs/010-file-versioning/plan.md) - File Versioning
-**Latest Feature**: [specs/009-background-job-queue/plan.md](specs/009-background-job-queue/plan.md) - Background Job Queue ✅
+**Current Feature**: [specs/018-analytics-dashboard/plan.md](specs/018-analytics-dashboard/plan.md) - Analytics Dashboard
+**Latest Feature**: [specs/018-analytics-dashboard/plan.md](specs/018-analytics-dashboard/plan.md) - Analytics Dashboard ✅
 <!-- SPECKIT END -->
 
 ---
@@ -40,6 +40,11 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | **Activity handler** | **`internal/http/handler/activity.go`** | **8 endpoints: list, count-unread, mark-all-read, mark-read, follow, unfollow, list-follows, delete** |
 | **Activity domain** | **`internal/domain/activity.go`, `activity_events.go`** | **Entities, DTOs, ActionType mapping from EventBus events** |
 | **Activity migrations** | **`migrations/000023_create_activities*.sql`** | **Activities, activity_reads, activity_follows tables** |
+| **Analytics dashboard** | **`internal/service/analytics.go`, `aggregation_worker.go`, `analytics_reaper.go`** | **Dashboard, metrics, preferences, event ingestion, aggregation** |
+| **Analytics handler** | **`internal/http/handler/analytics.go`** | **5 endpoints: dashboard, metrics, get-prefs, update-prefs, trigger-aggregate** |
+| **Analytics domain** | **`internal/domain/metric_event.go`, `dashboard_metric.go`, `dashboard_preference.go`, `analytics_events.go`** | **Entities, DTOs, AnalyticsMapping registry** |
+| **Analytics config** | **`internal/config/analytics.go`** | **AnalyticsConfig: retention, aggregation interval, reaper interval** |
+| **Analytics migrations** | **`migrations/000025_create_analytics*.sql`** | **metric_events, dashboard_metrics, dashboard_preferences tables** |
 
 ## CODE MAP
 
@@ -57,6 +62,10 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | `ActivityFollowService` | struct | `internal/service/activity_follow.go:16` | Follow/unfollow resources |
 | `ActivityReaper` | struct | `internal/service/activity_reaper.go:14` | Background archival goroutine |
 | `ActivityHandler` | struct | `internal/http/handler/activity.go:24` | 8 HTTP endpoints |
+| `AnalyticsService` | struct | `internal/service/analytics.go:75` | Dashboard + metrics + preferences + event ingestion |
+| `AggregationWorker` | struct | `internal/service/aggregation_worker.go:17` | Pre-computes dashboard metrics on interval |
+| `AnalyticsReaper` | struct | `internal/service/analytics_reaper.go:15` | Background archival goroutine for metric events |
+| `AnalyticsHandler` | struct | `internal/http/handler/analytics.go:19` | 5 HTTP endpoints |
 
 ## COMMANDS
 
@@ -739,3 +748,123 @@ activityReaper.Start(ctx)
 - `SetEventBus()` setter for post-construction injection
 - Handler-level permission checks (soft delete requires `activity:manage`, all others `activity:view`)
 - `resolveActivityOrgDomain(hasOrgID, orgID)` returns orgID.String() or "default"
+
+---
+
+## ANALYTICS DASHBOARD FEATURE
+
+### 018-analytics-dashboard: Analytics Dashboard System
+
+The analytics dashboard provides event ingestion, pre-computed metrics, time-series data, organization-scoped preferences, and 90-day retention archival.
+
+**Architecture:**
+```
+Domain Services → EventBus.Publish(event) → AnalyticsService.SubscribeToEventBus()
+                                                    → handleEvent()
+                                                        → GetAnalyticsMapping(event.Type)
+                                                        → Extract resourceID, actorID from payload
+                                                        → metricEventRepo.Create() (ON CONFLICT DO NOTHING)
+AggregationWorker.Start() → ticker → aggregatePeriod() → for each org (including NULL/global)
+                                                        → FindMaxCalculatedAt (watermark resume)
+                                                        → CountByTypeAndPeriod (raw events)
+                                                        → dashboardRepo.Upsert (pre-computed metric)
+AnalyticsReaper.Start() → ticker → repo.ArchiveOlderThan(retentionDays)
+```
+
+**Key Components:**
+- **Domain**: `internal/domain/metric_event.go` - MetricEvent entity (immutable, no UpdatedAt), MetricTimeSeriesPoint, response types
+- **Domain**: `internal/domain/dashboard_metric.go` - DashboardMetric entity with ToResponse()
+- **Domain**: `internal/domain/dashboard_preference.go` - DashboardPreference entity, DefaultMetricCategories()
+- **Domain**: `internal/domain/analytics_events.go` - AnalyticsMapping registry (11 event types → 4 metric categories), extraction functions
+- **Config**: `internal/config/analytics.go` - AnalyticsConfig struct with defaults
+- **Repository**: `internal/repository/metric_event.go` - Create (idempotent), CountByTypeAndPeriod, CountDistinctActorsByPeriod, FindTimeSeries, ArchiveOlderThan
+- **Repository**: `internal/repository/dashboard_metric.go` - Upsert, FindMaxCalculatedAt (watermark)
+- **Repository**: `internal/repository/dashboard_preference.go` - FindByOrganization (nil,nil when not found), Upsert
+- **Service**: `internal/service/analytics.go` - AnalyticsService: GetDashboard, GetMetrics (zero-fill), GetPreferences, UpdatePreferences, EventBus subscription
+- **Worker**: `internal/service/aggregation_worker.go` - Pre-computes dashboard metrics on interval, watermark resume, iterates per-org
+- **Reaper**: `internal/service/analytics_reaper.go` - Background archival goroutine (90-day retention)
+- **Handler**: `internal/http/handler/analytics.go` - 5 HTTP endpoints
+- **Migration**: `migrations/000025_create_analytics.up.sql` + `.down.sql`
+
+**Event Mapping (EventBus → MetricEvent):**
+| EventBus Event | Category | Resource Type |
+|----------------|----------|---------------|
+| `user.created` | user_activity | user |
+| `user.deleted` | user_activity | user |
+| `invoice.created` | content_metrics | invoice |
+| `invoice.paid` | content_metrics | invoice |
+| `news.published` | content_metrics | news |
+| `news.deleted` | content_metrics | news |
+| `comment.created` | engagement_metrics | comment |
+| `media.uploaded` | content_metrics | media |
+| `media.versioned` | content_metrics | media |
+| `auth.login.success` | system_metrics | auth |
+| `auth.login.failed` | system_metrics | auth |
+
+**Endpoints:**
+| Method | Path | Permission | Description |
+|--------|------|------------|-------------|
+| GET | `/api/v1/analytics/dashboard` | analytics:view | Dashboard data (4 metric categories) |
+| GET | `/api/v1/analytics/metrics` | analytics:view | Time-series metrics with zero-fill |
+| GET | `/api/v1/analytics/dashboard/preferences` | analytics:view | Dashboard category preferences |
+| PUT | `/api/v1/analytics/dashboard/preferences` | analytics:manage | Update category visibility |
+| POST | `/api/v1/analytics/aggregate` | analytics:manage | Trigger aggregation (accepted async) |
+
+**Configuration (Environment Variables):**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANALYTICS_RETENTION_DAYS` | 90 | Days to retain metric events |
+| `ANALYTICS_AGGREGATION_INTERVAL` | 60s | Interval for aggregation worker |
+| `ANALYTICS_REAPER_INTERVAL` | 60s | Interval for archival reaper |
+| `ANALYTICS_DEFAULT_PAGE_SIZE` | 20 | Default pagination size |
+| `ANALYTICS_MAX_PAGE_SIZE` | 100 | Maximum pagination size |
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `analytics:view` | analytics | view | View dashboard, metrics, preferences |
+| `analytics:manage` | analytics | manage | Update preferences, trigger aggregation |
+
+**Startup Wiring:**
+```go
+// Analytics service creation + EventBus subscription (cmd/api/main.go)
+metricEventRepo := repository.NewMetricEventRepository(db)
+dashboardMetricRepo := repository.NewDashboardMetricRepository(db)
+dashboardPrefRepo := repository.NewDashboardPreferenceRepository(db)
+analyticsService := service.NewAnalyticsService(
+    metricEventRepo, dashboardMetricRepo, dashboardPrefRepo,
+    enforcer, auditService, slog.Default(), cfg.Analytics,
+)
+server.SetAnalyticsService(analyticsService)
+analyticsService.SubscribeToEventBus(eventBus)
+
+// Analytics reaper (cmd/api/main.go)
+analyticsReaper := service.NewAnalyticsReaper(metricEventRepo, cfg.Analytics, slog.Default())
+server.SetAnalyticsReaper(analyticsReaper)
+analyticsReaper.Start(ctx)
+
+// Aggregation worker (cmd/api/main.go)
+aggregationWorker := service.NewAggregationWorker(
+    metricEventRepo, dashboardMetricRepo, cfg.Analytics, slog.Default(),
+)
+server.SetAggregationWorker(aggregationWorker)
+aggregationWorker.Start(ctx)
+
+// Graceful shutdown order:
+// server → eventBus → activityReaper → analyticsReaper → workers (including aggregationWorker) → enforcer → db → redis
+```
+
+**Design Decisions:**
+- Idempotent ingestion via UNIQUE constraint `(event_type, resource_id, date, hour)` with `ON CONFLICT DO NOTHING`
+- Transaction-per-period aggregation — each period committed individually, worker resumes from `calculated_at` watermark
+- Manual trigger (POST /aggregate) returns 202 Accepted — actual aggregation by background worker
+- Explicit AnalyticsMapping registry — maps specific EventBus events to metric categories; unmapped events silently ignored
+- `archived_at` for 90-day retention reaper; `gorm.DeletedAt` for admin soft-delete (automatic GORM scope)
+- MetricEvent intentionally omits `UpdatedAt` — events are never updated after creation
+- Handler-level permission enforcement only — AnalyticsService does NOT call enforcer.Enforce()
+- AggregationWorker iterates per-organization (including NULL/uuid.Nil for global metrics)
+- EventBus uses `Subscribe(handler EventHandler)` pattern; service creates own buffered channel (256) + goroutine bridge (matches ActivityService pattern)
+- `Payload` type is `any` (not `map[string]interface{}`) — needs type assertion in handleEvent
+- GetDashboard returns zero-value fallback structs (not nil) when category computation fails — graceful degradation
+- GetMetrics generates zero-filled intervals for requested date range — no gaps in time series
+- DashboardPreference FindByOrganization returns `(nil, nil)` when no row exists — distinguishes "not found" from "error"

@@ -107,6 +107,7 @@ type Config struct {
 	Job              JobConfig              `mapstructure:"job"`
 	DataPortability  DataPortabilityConfig  `mapstructure:"data_portability"`
 	Activity         ActivityConfig         `mapstructure:"activity"`
+	Analytics        AnalyticsConfig        `mapstructure:"analytics"`
 }
 
 var (
@@ -197,6 +198,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseDataPortabilityConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse data portability config: %w", err)
+	}
+
+	if err := parseAnalyticsConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse analytics config: %w", err)
 	}
 
 	// Validate required fields
@@ -318,6 +323,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("activity.default_page_size", 20)
 	v.SetDefault("activity.max_page_size", 100)
 	v.SetDefault("activity.reaper_interval", "60s")
+
+	// Analytics dashboard defaults
+	v.SetDefault("analytics.retention_days", 90)
+	v.SetDefault("analytics.aggregation_interval", "5m")
+	v.SetDefault("analytics.reaper_interval", "60s")
+	v.SetDefault("analytics.default_page_size", 20)
+	v.SetDefault("analytics.max_page_size", 100)
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)
@@ -760,6 +772,29 @@ func parseDataPortabilityConfig(v *viper.Viper, cfg *Config) error {
 	cfg.DataPortability.ImportWorkerConcurrency = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_WORKER_CONCURRENCY", v.GetInt("data_portability.import_worker_concurrency"))
 	cfg.DataPortability.ImportRateLimit = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT", v.GetInt("data_portability.import_rate_limit"))
 	cfg.DataPortability.ImportRateLimitRecords = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT_RECORDS", v.GetInt("data_portability.import_rate_limit_records"))
+	return nil
+}
+
+// parseAnalyticsConfig parses analytics dashboard configuration from environment.
+func parseAnalyticsConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Analytics.RetentionDays = getEnvIntOrDefault("ANALYTICS_RETENTION_DAYS", v.GetInt("analytics.retention_days"))
+	cfg.Analytics.DefaultPageSize = getEnvIntOrDefault("ANALYTICS_DEFAULT_PAGE_SIZE", v.GetInt("analytics.default_page_size"))
+	cfg.Analytics.MaxPageSize = getEnvIntOrDefault("ANALYTICS_MAX_PAGE_SIZE", v.GetInt("analytics.max_page_size"))
+
+	aggregationInterval := getEnvOrDefault("ANALYTICS_AGGREGATION_INTERVAL", v.GetString("analytics.aggregation_interval"))
+	aggDuration, err := time.ParseDuration(aggregationInterval)
+	if err != nil {
+		return fmt.Errorf("invalid ANALYTICS_AGGREGATION_INTERVAL: %w", err)
+	}
+	cfg.Analytics.AggregationInterval = aggDuration
+
+	reaperInterval := getEnvOrDefault("ANALYTICS_REAPER_INTERVAL", v.GetString("analytics.reaper_interval"))
+	reaperDuration, err := time.ParseDuration(reaperInterval)
+	if err != nil {
+		return fmt.Errorf("invalid ANALYTICS_REAPER_INTERVAL: %w", err)
+	}
+	cfg.Analytics.ReaperInterval = reaperDuration
+
 	return nil
 }
 

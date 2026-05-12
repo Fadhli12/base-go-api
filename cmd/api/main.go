@@ -260,6 +260,45 @@ func runServer() error {
 		slog.Info("Activity service subscribed to event bus")
 	}
 
+	// Initialize analytics service
+	metricEventRepo := repository.NewMetricEventRepository(db)
+	dashboardMetricRepo := repository.NewDashboardMetricRepository(db)
+	dashboardPrefRepo := repository.NewDashboardPreferenceRepository(db)
+	analyticsService := service.NewAnalyticsService(
+		metricEventRepo,
+		dashboardMetricRepo,
+		dashboardPrefRepo,
+		enforcer,
+		server.AuditService(),
+		slog.Default(),
+		cfg.Analytics,
+	)
+	server.SetAnalyticsService(analyticsService)
+
+	// Subscribe analytics service to events for automatic metric event creation
+	analyticsService.SubscribeToEventBus(eventBus)
+	slog.Info("Analytics service subscribed to event bus")
+
+	// Initialize analytics reaper for 90-day archival
+	analyticsReaper := service.NewAnalyticsReaper(metricEventRepo, cfg.Analytics, slog.Default())
+	server.SetAnalyticsReaper(analyticsReaper)
+	slog.Info("Analytics reaper initialized",
+		slog.Int("retention_days", cfg.Analytics.RetentionDays),
+		slog.Duration("reaper_interval", cfg.Analytics.ReaperInterval),
+	)
+
+	// Initialize aggregation worker for pre-computing dashboard metrics
+	aggregationWorker := service.NewAggregationWorker(
+		metricEventRepo,
+		dashboardMetricRepo,
+		cfg.Analytics,
+		slog.Default(),
+	)
+	server.SetAggregationWorker(aggregationWorker)
+	slog.Info("Aggregation worker initialized",
+		slog.Duration("aggregation_interval", cfg.Analytics.AggregationInterval),
+	)
+
 	// Initialize activity reaper for 90-day archival
 	activityRepo := repository.NewActivityRepository(db)
 	activityReaper := service.NewActivityReaper(activityRepo, cfg.Activity, slog.Default())
@@ -374,6 +413,18 @@ func runServer() error {
 		activityReaper.Start(ctx)
 	}
 
+	// Start analytics reaper in background
+	if analyticsReaper := server.AnalyticsReaper(); analyticsReaper != nil {
+		slog.Info("Starting analytics reaper...")
+		analyticsReaper.Start(ctx)
+	}
+
+	// Start aggregation worker in background
+	if aggregationWorker := server.AggregationWorker(); aggregationWorker != nil {
+		slog.Info("Starting aggregation worker...")
+		aggregationWorker.Start(ctx)
+	}
+
 	// Start server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
@@ -419,6 +470,12 @@ func runServer() error {
 		activityReaper.Stop()
 	}
 
+	// 2c. Stop analytics reaper
+	if analyticsReaper := server.AnalyticsReaper(); analyticsReaper != nil {
+		slog.Info("Stopping analytics reaper...")
+		analyticsReaper.Stop()
+	}
+
 	// 3. Stop workers to finish in-flight processing
 	if emailWorker := server.EmailWorker(); emailWorker != nil {
 		slog.Info("Stopping email worker...")
@@ -440,6 +497,11 @@ func runServer() error {
 	if importWorker := server.ImportWorker(); importWorker != nil {
 		slog.Info("Stopping import worker...")
 		importWorker.Stop()
+	}
+
+	if aggregationWorker := server.AggregationWorker(); aggregationWorker != nil {
+		slog.Info("Stopping aggregation worker...")
+		aggregationWorker.Stop()
 	}
 
 	// Close permission enforcer
@@ -617,12 +679,14 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "tag:update", Description: "Update tags", Resource: "tag", Action: "update"},
 		{Name: "tag:delete", Description: "Delete tags", Resource: "tag", Action: "delete"},
 		{Name: "tag:manage", Description: "Attach and detach tags to entities", Resource: "tag", Action: "manage"},
+		{Name: "analytics:view", Description: "View analytics dashboard and metrics", Resource: "analytics", Action: "view"},
+		{Name: "analytics:manage", Description: "Manage analytics preferences and trigger aggregation", Resource: "analytics", Action: "manage"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage", "analytics:view", "analytics:manage"},
 			},
 		},
 	}
