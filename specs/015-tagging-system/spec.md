@@ -190,6 +190,24 @@ type EntityTagsResponse struct {
 type AutocompleteResponse struct {
     Tags []TagResponse `json:"tags"`
 }
+
+// Bulk operation result DTOs
+type BulkAttachResult struct {
+    Attached []uuid.UUID `json:"attached"` // Successfully attached tag IDs
+    Skipped  []uuid.UUID `json:"skipped"`  // Already attached tag IDs (idempotent)
+    Errors    []BulkError `json:"errors,omitempty"` // Failed tag IDs with reasons
+}
+
+type BulkDetachResult struct {
+    Detached []uuid.UUID `json:"detached"` // Successfully detached tag IDs
+    Skipped  []uuid.UUID `json:"skipped"`  // Already detached tag IDs (idempotent)
+    Errors    []BulkError `json:"errors,omitempty"` // Failed tag IDs with reasons
+}
+
+type BulkError struct {
+    TagID   uuid.UUID `json:"tag_id"`
+    Message string    `json:"message"` // e.g., "tag not found", "tag is soft-deleted"
+}
 ```
 
 ## 4. API Endpoints
@@ -255,7 +273,10 @@ type AutocompleteResponse struct {
 - Soft-deleted tags are excluded from normal queries via GORM scope
 - Name/slug can be reused by a new tag in the same org (partial unique index allows this)
 - Usage count is NOT reset on soft delete
-- EntityTag rows persist for audit trail; soft-deleted tags are filtered from association queries
+- **EntityTag rows persist** but are excluded from `ListEntityTags` results (see §5.9)
+- **Soft-deleted tags are NOT restorable** — if a new tag reuses the same name/slug, restoring the old tag would violate the partial unique index. This is intentional: soft-delete is terminal for that name/slug combination.
+- **Attaching a soft-deleted tag returns 404** — attempting to attach a tag that has been soft-deleted is rejected with `NOT_FOUND`
+- **Detaching from a soft-deleted tag is allowed** — EntityTag rows referencing soft-deleted tags can still be removed (usage count decremented with `MAX(count-1, 0)` guard)
 - Audit log: `tag.deleted`
 
 ### 5.4 Entity-Tag Bulk Attach
@@ -263,20 +284,23 @@ type AutocompleteResponse struct {
 - Validate `entity_type` against `taggableTypes` map (news, invoice, media)
 - All tag IDs must belong to the same organization
 - Validate `entity_id` format (UUID)
+- **Reject any tag IDs that are soft-deleted** — return 404 for soft-deleted tags in the error response
 - Prevent duplicate: composite unique constraint `(organization_id, entity_type, entity_id, tag_id)`
-- For each tag in the request:
-  - Skip already-attached tags (idempotent — no error, no usage count change)
-  - For newly attached tags: create EntityTag row, increment `tag.usage_count`
-- Audit log: `tag.attached` (with entity_type, entity_id, tag_ids)
+- **Partial success semantics**: Process all valid tag IDs; skip already-attached (idempotent). Return structured response with `attached` (successful), `skipped` (already attached), and `errors` (not found / soft-deleted) arrays.
+- For each valid, newly attached tag: create EntityTag row, increment `tag.usage_count`
+- Audit log: `tag.attached` (with entity_type, entity_id, attached tag IDs)
+- **Edge case**: If a slug generation produces an empty string (e.g., all-special-characters name like "!!!"), fallback to `tag-{first-8-chars-of-uuid}`
 
 ### 5.5 Entity-Tag Bulk Detach
 
 - Validate `entity_type` against `taggableTypes` map
+- **Partial success semantics**: Process all valid tag IDs; skip already-detached (idempotent). Return structured response with `detached` (successful), `skipped` (already detached), and `errors` (not found) arrays.
 - For each tag in the request:
   - Delete the EntityTag row if it exists
   - Decrement `tag.usage_count` (with `MAX(usage_count - 1, 0)` guard)
   - Skip already-detached associations (idempotent — no error)
-- Audit log: `tag.detached` (with entity_type, entity_id, tag_ids)
+  - **Detaching from a soft-deleted tag is allowed** — EntityTag rows referencing soft-deleted tags can still be removed
+- Audit log: `tag.detached` (with entity_type, entity_id, detached tag IDs)
 
 ### 5.6 Autocomplete
 
@@ -300,6 +324,22 @@ type AutocompleteResponse struct {
 - Lookup by slug within organization context
 - Exclude soft-deleted tags
 - Returns 404 if not found or tag is soft-deleted
+
+### 5.9 Listing Tags for an Entity (Soft-Delete Behavior)
+
+- When listing tags for an entity (`GET /:type/:id/tags`), **exclude EntityTag rows whose referenced tag is soft-deleted**
+- This is achieved by JOINing on `tags` with a `WHERE tags.deleted_at IS NULL` condition
+- The result: only active (non-deleted) tags appear in entity tag listings
+- If a tag is soft-deleted and later its name is reused by a new tag, only the new (active) tag appears in listings
+
+### 5.10 Slug Generation Edge Case
+
+- If slug normalization produces an empty string (e.g., name is all special characters like "!!!"), fallback to `tag-{first-8-chars-of-uuid}`
+- Slug generation algorithm:
+  1. Lowercase, trim whitespace
+  2. Replace `[^a-z0-9]+` with `-`
+  3. Trim leading/trailing hyphens
+  4. If result is empty, use `tag-{uuid_prefix}`
 
 ## 6. Permissions
 
@@ -469,15 +509,20 @@ func (s *Server) RegisterTagRoutes(api *echo.Group, tagHandler *handler.TagHandl
 
 - **Duplicate slug on soft-deleted tag**: Partial unique index `WHERE deleted_at IS NULL` allows reusing slugs/names of soft-deleted tags in the same org.
 - **Slug conflict within org**: Append numeric suffix (e.g., `my-tag-2`, `my-tag-3`) until unique within the org.
-- **Attach already-attached tag**: Idempotent — silently skip, don't increment usage count.
-- **Detach already-detached tag**: Idempotent — silently skip, don't decrement usage count.
+- **Slug generation produces empty string**: Fallback to `tag-{first-8-chars-of-uuid}` (e.g., name "!!!" → slug `tag-a1b2c3d4`).
+- **Attach already-attached tag**: Idempotent — silently skip, don't increment usage count. Response includes in `skipped` array.
+- **Detach already-detached tag**: Idempotent — silently skip, don't decrement usage count. Response includes in `skipped` array.
+- **Attach soft-deleted tag**: Return error in `errors` array with message "tag is soft-deleted" and the tag ID. Do NOT create EntityTag row.
+- **Detach from soft-deleted tag**: Allowed — EntityTag row is deleted, usage count decremented with `MAX(count-1, 0)` guard.
 - **Attach tag to invalid entity type**: Return 422 with `VALIDATION_ERROR` and list of valid types (news, invoice, media).
 - **Usage count goes negative**: Guard with `MAX(usage_count - 1, 0)` in decrement query.
 - **Autocomplete with empty query**: Return most popular tags within org (sorted by `usage_count DESC`).
-- **Tag deletion with existing associations**: Soft delete the tag; EntityTag rows persist but tag is filtered from queries by GORM soft-delete scope. Hard delete cascades EntityTags.
+- **Tag deletion with existing associations**: Soft delete the tag; EntityTag rows persist but excluded from `ListEntityTags` via JOIN with `WHERE tags.deleted_at IS NULL`. Hard delete cascades EntityTags.
+- **Soft-deleted tag name reuse makes original tag un-restorable**: Once a new tag reuses the name/slug, the original soft-deleted tag cannot be restored (would violate partial unique index). This is intentional.
 - **Color validation**: Must match `^#[0-9A-Fa-f]{6}$` or be empty/null.
 - **Organization context required**: All tag operations require X-Organization-ID header. Return 400 if missing.
 - **Cross-org tag access**: Tags from one org are not visible to another org's queries.
+- **Bulk operation partial success**: Attach/detach endpoints return structured results with `attached`/`detached`, `skipped`, and `errors` arrays. A single invalid tag ID in a bulk request does not fail the entire operation.
 
 ## 13. Conformance Checklist (Constitution)
 
