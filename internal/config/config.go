@@ -107,6 +107,8 @@ type Config struct {
 	Job              JobConfig              `mapstructure:"job"`
 	DataPortability  DataPortabilityConfig  `mapstructure:"data_portability"`
 	Activity         ActivityConfig         `mapstructure:"activity"`
+	WebSocket        WsConfig               `mapstructure:"websocket"`
+	Analytics        AnalyticsConfig        `mapstructure:"analytics"`
 }
 
 var (
@@ -197,6 +199,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseDataPortabilityConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse data portability config: %w", err)
+	}
+
+	if err := parseWebsocketConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse websocket config: %w", err)
 	}
 
 	// Validate required fields
@@ -318,6 +324,18 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("activity.default_page_size", 20)
 	v.SetDefault("activity.max_page_size", 100)
 	v.SetDefault("activity.reaper_interval", "60s")
+
+	// WebSocket defaults
+	v.SetDefault("websocket.enabled", true)
+	v.SetDefault("websocket.heartbeat_interval", "30s")
+	v.SetDefault("websocket.heartbeat_timeout", "60s")
+	v.SetDefault("websocket.max_message_size", 65536)
+	v.SetDefault("websocket.max_rooms_per_client", 50)
+	v.SetDefault("websocket.write_timeout", "10s")
+	v.SetDefault("websocket.read_timeout", "60s")
+	v.SetDefault("websocket.typing_ttl", "5s")
+	v.SetDefault("websocket.presence_ttl", "70s")
+	v.SetDefault("websocket.send_channel_buffer", 256)
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)
@@ -761,6 +779,36 @@ func parseDataPortabilityConfig(v *viper.Viper, cfg *Config) error {
 	cfg.DataPortability.ImportRateLimit = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT", v.GetInt("data_portability.import_rate_limit"))
 	cfg.DataPortability.ImportRateLimitRecords = getEnvIntOrDefault("DATA_PORTABILITY_IMPORT_RATE_LIMIT_RECORDS", v.GetInt("data_portability.import_rate_limit_records"))
 	return nil
+}
+
+func parseWebsocketConfig(v *viper.Viper, cfg *Config) error {
+	cfg.WebSocket.Enabled = getEnvBoolOrDefault("WS_ENABLED", v.GetBool("websocket.enabled"))
+	cfg.WebSocket.HeartbeatInterval = getEnvDurationOrDefault("WS_HEARTBEAT_INTERVAL", v.GetString("websocket.heartbeat_interval"))
+	cfg.WebSocket.HeartbeatTimeout = getEnvDurationOrDefault("WS_HEARTBEAT_TIMEOUT", v.GetString("websocket.heartbeat_timeout"))
+	cfg.WebSocket.MaxMessageSize = int64(getEnvIntOrDefault("WS_MAX_MESSAGE_SIZE", v.GetInt("websocket.max_message_size")))
+	cfg.WebSocket.MaxRoomsPerClient = getEnvIntOrDefault("WS_MAX_ROOMS_PER_CLIENT", v.GetInt("websocket.max_rooms_per_client"))
+	cfg.WebSocket.WriteTimeout = getEnvDurationOrDefault("WS_WRITE_TIMEOUT", v.GetString("websocket.write_timeout"))
+	cfg.WebSocket.ReadTimeout = getEnvDurationOrDefault("WS_READ_TIMEOUT", v.GetString("websocket.read_timeout"))
+	cfg.WebSocket.TypingTTL = getEnvDurationOrDefault("WS_TYPING_TTL", v.GetString("websocket.typing_ttl"))
+	cfg.WebSocket.PresenceTTL = getEnvDurationOrDefault("WS_PRESENCE_TTL", v.GetString("websocket.presence_ttl"))
+	cfg.WebSocket.SendChannelBuffer = getEnvIntOrDefault("WS_SEND_CHANNEL_BUFFER", v.GetInt("websocket.send_channel_buffer"))
+
+	allowedOrigins := getEnvOrDefault("WS_ALLOWED_ORIGINS", v.GetString("websocket.allowed_origins"))
+	if allowedOrigins != "" {
+		cfg.WebSocket.AllowedOrigins = strings.Split(allowedOrigins, ",")
+	} else {
+		cfg.WebSocket.AllowedOrigins = []string{"*"}
+	}
+
+	return nil
+}
+
+func getEnvDurationOrDefault(envKey, value string) time.Duration {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 // GetProjectRoot returns the project root directory.

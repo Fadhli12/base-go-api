@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-12 — 15/17 features complete, tagging migration renumbered to 000024, 2 remaining
+**Last Updated:** 2026-05-13 — 16/17 features complete, real-time communication implemented
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -509,15 +509,38 @@ Import:
 
 ### 3.1 Real-time Communication (WebSocket)
 
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED
 
-**Description:** Room-based WebSocket hub for live collaboration, notifications, and presence indicators. Requires Redis pub/sub for multi-instance scaling.
+**Key Components:**
+- `internal/domain/websocket.go` — WsMessage, constants, room validation
+- `internal/domain/websocket_events.go` — EventBus ↔ WebSocket bridge types
+- `internal/service/websocket_hub.go` — Hub: rooms, clients, broadcast, Start/Stop
+- `internal/service/websocket_client.go` — Client: read/write pumps, message handling
+- `internal/service/websocket_presence.go` — PresenceService: Redis SET + TTL, reference counting
+- `internal/service/websocket_redis.go` — RedisSubscriber: pub/sub bridge
+- `internal/http/handler/websocket.go` — Upgrade handler + REST endpoints
+- `internal/http/middleware/websocket_auth.go` — JWT extraction for WS handshake
+- `internal/config/websocket.go` — WsConfig with env vars
+- `migrations/000024_websocket.up.sql` — Reserved (all state in Redis)
 
-**Recommended Implementation:**
-- `WebSocketHub` with room-based broadcasting
-- `Client` with presence/typing indicators
-- Redis pub/sub for cross-instance messaging
-- `internal/domain/websocket.go`, `internal/service/websocket_hub.go`, `internal/http/handler/websocket.go`
+**Room Format**: `org:{orgID}` (org-wide) or `org:{orgID}:{entityType}:{entityID}` (entity-specific)
+**Auth**: JWT token in query param `/ws?token=<jwt>`
+**Scaling**: Redis pub/sub channels `ws:msg:{roomID}` + `ws:presence:{orgID}`
+**Close Codes**: 4001 (auth expired), 4002 (server shutdown), 4003 (policy violation), 4004 (room limit)
+**Library**: `github.com/coder/websocket`
+
+**Endpoints:**
+- `GET /ws` — WebSocket upgrade (JWT auth, org-scoped rooms)
+- `GET /api/v1/ws/rooms` — List available rooms
+- `GET /api/v1/ws/presence/:orgID` — Get online users for org
+- `GET /api/v1/ws/rooms/:roomID/users` — Get users in room
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `websocket:connect` | websocket | connect | Connect to WebSocket endpoints |
+| `websocket:view_presence` | websocket | view_presence | View online presence for organizations |
+| `websocket:view_rooms` | websocket | view_rooms | View available WebSocket rooms |
 
 ---
 
@@ -632,14 +655,13 @@ Import:
 
 Based on the analysis, the following should be prioritized:
 
-1. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
-2. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
+1. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
 
 ---
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (15 features verified complete)
+### ✅ Implemented (16 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -659,13 +681,12 @@ Based on the analysis, the following should be prioritized:
 | Feature Flags | P3 | ✅ Complete |
 | Activity Feed / Timeline | P2 | ✅ Complete |
 
-### ❌ Not Implemented (2 features remaining)
+### ❌ Not Implemented (1 feature remaining)
 
 These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT present in the codebase:
 
 | Feature | Priority | Complexity | Est. Effort | Dependencies |
 |---------|----------|------------|-------------|--------------|
-| Real-time Communication (WebSocket) | P3 | High | 3-4 days | Redis pub/sub ✅ |
 | Analytics Dashboard | P3 | High | 4-5 days | None |
 
 ---
