@@ -205,6 +205,11 @@ func loadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to parse websocket config: %w", err)
 	}
 
+	if err := parseAnalyticsConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse analytics config: %w", err)
+	}
+	}
+
 	// Validate required fields
 	if err := validate(cfg); err != nil {
 		return nil, err
@@ -336,6 +341,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("websocket.typing_ttl", "5s")
 	v.SetDefault("websocket.presence_ttl", "70s")
 	v.SetDefault("websocket.send_channel_buffer", 256)
+
+	// Analytics dashboard defaults
+	v.SetDefault("analytics.retention_days", 90)
+	v.SetDefault("analytics.aggregation_interval", "5m")
+	v.SetDefault("analytics.reaper_interval", "60s")
+	v.SetDefault("analytics.default_page_size", 20)
+	v.SetDefault("analytics.max_page_size", 100)
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)
@@ -803,6 +815,29 @@ func parseWebsocketConfig(v *viper.Viper, cfg *Config) error {
 	return nil
 }
 
+// parseAnalyticsConfig parses analytics dashboard configuration from environment.
+func parseAnalyticsConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Analytics.RetentionDays = getEnvIntOrDefault("ANALYTICS_RETENTION_DAYS", v.GetInt("analytics.retention_days"))
+	cfg.Analytics.DefaultPageSize = getEnvIntOrDefault("ANALYTICS_DEFAULT_PAGE_SIZE", v.GetInt("analytics.default_page_size"))
+	cfg.Analytics.MaxPageSize = getEnvIntOrDefault("ANALYTICS_MAX_PAGE_SIZE", v.GetInt("analytics.max_page_size"))
+
+	aggregationInterval := getEnvOrDefault("ANALYTICS_AGGREGATION_INTERVAL", v.GetString("analytics.aggregation_interval"))
+	aggDuration, err := time.ParseDuration(aggregationInterval)
+	if err != nil {
+		return fmt.Errorf("invalid ANALYTICS_AGGREGATION_INTERVAL: %w", err)
+	}
+	cfg.Analytics.AggregationInterval = aggDuration
+
+	reaperInterval := getEnvOrDefault("ANALYTICS_REAPER_INTERVAL", v.GetString("analytics.reaper_interval"))
+	reaperDuration, err := time.ParseDuration(reaperInterval)
+	if err != nil {
+		return fmt.Errorf("invalid ANALYTICS_REAPER_INTERVAL: %w", err)
+	}
+	cfg.Analytics.ReaperInterval = reaperDuration
+
+	return nil
+}
+
 func getEnvDurationOrDefault(envKey, value string) time.Duration {
 	d, err := time.ParseDuration(value)
 	if err != nil {
@@ -810,7 +845,6 @@ func getEnvDurationOrDefault(envKey, value string) time.Duration {
 	}
 	return d
 }
-
 // GetProjectRoot returns the project root directory.
 func GetProjectRoot() string {
 	// Try to find project root by looking for go.mod

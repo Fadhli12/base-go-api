@@ -47,6 +47,9 @@ type Server struct {
 	activityReaper  *service.ActivityReaper
 	wsHub          *service.Hub
 	wsHandler      *handler.WebSocketHandler
+	analyticsService *service.AnalyticsService
+	analyticsReaper   *service.AnalyticsReaper
+	aggregationWorker *service.AggregationWorker
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -334,6 +337,37 @@ func (s *Server) WsHandler() *handler.WebSocketHandler {
 // SetWsHandler sets the WebSocket handler.
 func (s *Server) SetWsHandler(h *handler.WebSocketHandler) {
 	s.wsHandler = h
+}
+
+// SetAnalyticsService sets the analytics service
+func (s *Server) SetAnalyticsService(analyticsService *service.AnalyticsService) {
+	s.analyticsService = analyticsService
+}
+
+// AnalyticsService returns the analytics service
+func (s *Server) AnalyticsService() *service.AnalyticsService {
+	return s.analyticsService
+}
+
+// SetAnalyticsReaper sets the analytics reaper
+func (s *Server) SetAnalyticsReaper(reaper *service.AnalyticsReaper) {
+	s.analyticsReaper = reaper
+}
+
+// AnalyticsReaper returns the analytics reaper
+func (s *Server) AnalyticsReaper() *service.AnalyticsReaper {
+	return s.analyticsReaper
+}
+
+// SetAggregationWorker sets the aggregation worker
+func (s *Server) SetAggregationWorker(worker *service.AggregationWorker) {
+	s.aggregationWorker = worker
+}
+
+// AggregationWorker returns the aggregation worker
+func (s *Server) AggregationWorker() *service.AggregationWorker {
+	return s.aggregationWorker
+}
 }
 
 // EventBus returns the event bus
@@ -765,6 +799,12 @@ func (s *Server) RegisterRoutes() {
 	s.SetActivityService(activityService)
 	activityHandler := handler.NewActivityHandler(activityService, activityFollowService, s.enforcer)
 	activityHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+
+	// Analytics dashboard routes
+	if s.analyticsService != nil {
+		analyticsHandler := handler.NewAnalyticsHandler(s.analyticsService, s.enforcer, s.aggregationWorker)
+		analyticsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
 
 	// Search routes
 	savedSearchRepo := repository.NewSavedSearchRepository(s.db)
