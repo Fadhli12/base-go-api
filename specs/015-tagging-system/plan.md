@@ -126,6 +126,10 @@ tests/
 | Autocomplete performance on large tag sets | Low | Low | ILIKE with prefix index; org-scoped queries limit result set |
 | Route conflict: `/tags/autocomplete` vs `/tags/:id` | Low | High | Register autocomplete route BEFORE `/:id` route |
 | Taggable type extensibility | Low | Low | Hardcoded map matches comment system; future: DB-driven registry |
+| Soft-deleted tag un-restorable after name reuse | Low | Medium | Document as intentional: soft-delete is terminal when name is reused. No restore endpoint. |
+| Bulk attach partial failure | Medium | Low | Structured response with `attached`/`skipped`/`errors` arrays. Single invalid ID doesn't fail entire request. |
+| Slug generation empty string | Low | Medium | Fallback to `tag-{uuid_prefix}` when normalization yields empty string |
+| EntityTags referencing soft-deleted tags | Medium | Medium | JOIN with `WHERE tags.deleted_at IS NULL` in ListEntityTags; exclude soft-deleted tags from entity listings |
 
 ## Performance Considerations
 
