@@ -83,6 +83,7 @@ func (r *mediaVersionRepository) FindByMediaID(ctx context.Context, mediaID uuid
 	var total int64
 
 	query := r.db.WithContext(ctx).
+		Model(&domain.MediaVersion{}).
 		Where("media_id = ? AND deleted_at IS NULL", mediaID)
 
 	if err := query.Count(&total).Error; err != nil {
