@@ -286,6 +286,13 @@ func runServer() error {
 		slog.Info("Import worker wired to event bus")
 	}
 
+	// Wire WebSocket event bridge to event bus
+	if wsHub := server.WsHub(); wsHub != nil {
+		wsEventBridge := domain.NewWsEventBridge(wsHub)
+		wsEventBridge.SubscribeToEventBus(eventBus)
+		slog.Info("WebSocket event bridge subscribed to event bus")
+	}
+
 	// Add health check routes (using the server's Echo instance)
 	e := server.Echo()
 	e.GET("/healthz", func(c echo.Context) error {
@@ -353,6 +360,14 @@ func runServer() error {
 		}
 	}
 
+	// Start WebSocket hub in background
+	if wsHub := server.WsHub(); wsHub != nil {
+		slog.Info("Starting WebSocket hub...")
+		if err := wsHub.Start(ctx); err != nil {
+			slog.Error("Failed to start WebSocket hub", "error", err)
+		}
+	}
+
 	// Start server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
@@ -384,7 +399,14 @@ func runServer() error {
 	}
 	slog.Info("HTTP server stopped")
 
-	// 2. Stop event bus to prevent new event dispatches
+	// 2. Stop WebSocket hub to close all client connections
+	if wsHub := server.WsHub(); wsHub != nil {
+		slog.Info("Stopping WebSocket hub...")
+		wsHub.Stop()
+		slog.Info("WebSocket hub stopped")
+	}
+
+	// 3. Stop event bus to prevent new event dispatches
 	if eventBus := server.EventBus(); eventBus != nil {
 		slog.Info("Stopping event bus...")
 		if err := eventBus.Stop(); err != nil {
@@ -588,12 +610,15 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "tag:update", Description: "Update tags", Resource: "tag", Action: "update"},
 		{Name: "tag:delete", Description: "Delete tags", Resource: "tag", Action: "delete"},
 		{Name: "tag:manage", Description: "Attach and detach tags to entities", Resource: "tag", Action: "manage"},
+		{Name: "websocket:connect", Description: "Connect to WebSocket endpoints", Resource: "websocket", Action: "connect"},
+		{Name: "websocket:view_presence", Description: "View online presence for organizations", Resource: "websocket", Action: "view_presence"},
+		{Name: "websocket:view_rooms", Description: "View available WebSocket rooms", Resource: "websocket", Action: "view_rooms"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage", "websocket:connect", "websocket:view_presence", "websocket:view_rooms"},
 			},
 		},
 	}

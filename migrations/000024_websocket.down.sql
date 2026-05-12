@@ -1,0 +1,1 @@
+-- No tables to drop for v1 WebSocket implementation.

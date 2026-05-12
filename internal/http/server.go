@@ -43,6 +43,8 @@ type Server struct {
 	emailWorker    *service.EmailWorker
 	webhookWorker  *service.WebhookWorker
 	webhookService *service.WebhookService
+	wsHub          *service.Hub
+	wsHandler      *handler.WebSocketHandler
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -292,6 +294,26 @@ func (s *Server) WebhookService() *service.WebhookService {
 	return s.webhookService
 }
 
+// WsHub returns the WebSocket hub.
+func (s *Server) WsHub() *service.Hub {
+	return s.wsHub
+}
+
+// SetWsHub sets the WebSocket hub.
+func (s *Server) SetWsHub(hub *service.Hub) {
+	s.wsHub = hub
+}
+
+// WsHandler returns the WebSocket handler.
+func (s *Server) WsHandler() *handler.WebSocketHandler {
+	return s.wsHandler
+}
+
+// SetWsHandler sets the WebSocket handler.
+func (s *Server) SetWsHandler(h *handler.WebSocketHandler) {
+	s.wsHandler = h
+}
+
 // EventBus returns the event bus
 func (s *Server) EventBus() *domain.EventBus {
 	return s.eventBus
@@ -462,6 +484,16 @@ func (s *Server) RegisterRoutes() {
 	webhookService := service.NewWebhookService(webhookRepo, webhookDeliveryRepo, &s.config.Webhook, s.logger)
 	s.SetWebhookService(webhookService)
 	webhookHandler := handler.NewWebhookHandler(webhookService, s.enforcer, s.logger)
+
+	// Initialize WebSocket hub and handler
+	wsPresence := service.NewRedisPresence(s.redis, s.logger, s.config.WebSocket)
+	wsRedisPubSub := service.NewRedisPubSub(s.redis, s.logger, s.config.WebSocket)
+	wsHub := service.NewHub(wsPresence, wsRedisPubSub, s.logger, s.config.WebSocket)
+	wsRedisPubSub.SetHub(wsHub) // break circular dependency: Hub ↔ RedisPubSub
+	s.SetWsHub(wsHub)
+
+	wsHandler := handler.NewWebSocketHandler(wsHub, wsPresence, s.enforcer, auditService, s.logger, s.config.WebSocket)
+	s.SetWsHandler(wsHandler)
 
 	// Initialize settings service
 	userSettingsRepo := repository.NewUserSettingsRepository(s.db)
@@ -671,6 +703,9 @@ func (s *Server) RegisterRoutes() {
 
 	// Webhook routes
 	s.RegisterWebhookRoutes(v1, webhookHandler)
+
+	// WebSocket routes
+	wsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 
 	// Data portability routes (export + import)
 	if exportSvc != nil || importSvc != nil {

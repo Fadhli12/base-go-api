@@ -1,0 +1,2 @@
+-- No tables needed for v1 WebSocket implementation.
+-- All state is held in Go memory (Hub) and Redis (presence, pub/sub).
