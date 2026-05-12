@@ -30,7 +30,7 @@ func createDataPortabilityTables(t *testing.T, db *gorm.DB) {
 		status VARCHAR(20) NOT NULL DEFAULT 'queued',
 		entity_types TEXT[] NOT NULL,
 		format VARCHAR(10) NOT NULL DEFAULT 'json',
-		org_id UUID,
+		org_id UUID REFERENCES organizations(id),
 		created_by UUID NOT NULL,
 		file_path VARCHAR(500),
 		file_expires_at TIMESTAMP,
@@ -43,12 +43,16 @@ func createDataPortabilityTables(t *testing.T, db *gorm.DB) {
 		deleted_at TIMESTAMP
 	);
 
+	CREATE INDEX IF NOT EXISTS idx_export_jobs_status ON export_jobs(status) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_export_jobs_created_by ON export_jobs(created_by) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_export_jobs_org_id ON export_jobs(org_id) WHERE deleted_at IS NULL;
+
 	CREATE TABLE IF NOT EXISTS import_jobs (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		status VARCHAR(20) NOT NULL DEFAULT 'queued',
 		entity_types TEXT[] NOT NULL,
 		format VARCHAR(10) NOT NULL DEFAULT 'json',
-		org_id UUID,
+		org_id UUID REFERENCES organizations(id),
 		created_by UUID NOT NULL,
 		conflict_strategy VARCHAR(10) NOT NULL DEFAULT 'skip',
 		dry_run BOOLEAN NOT NULL DEFAULT FALSE,
@@ -61,6 +65,11 @@ func createDataPortabilityTables(t *testing.T, db *gorm.DB) {
 		updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 		deleted_at TIMESTAMP
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_import_jobs_status ON import_jobs(status) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_import_jobs_created_by ON import_jobs(created_by) WHERE deleted_at IS NULL;
+	CREATE INDEX IF NOT EXISTS idx_import_jobs_idempotency ON import_jobs(idempotency_key);
+	CREATE INDEX IF NOT EXISTS idx_import_jobs_processing_started_at ON import_jobs(processing_started_at) WHERE processing_started_at IS NOT NULL;
 
 	CREATE TABLE IF NOT EXISTS import_id_maps (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -144,14 +153,13 @@ func TestExportJob_CreateAndGet(t *testing.T) {
 	exportRepo := repository.NewExportJobRepository(suite.DB)
 
 	userID := uuid.New()
-	orgID := uuid.New()
 
 	t.Run("create and retrieve export job", func(t *testing.T) {
 		job := &domain.ExportJob{
 			Status:      domain.ExportQueued,
 			EntityTypes: []string{"users"},
 			Format:      "json",
-			OrgID:       &orgID,
+			OrgID:       nil, // No org scoping
 			CreatedBy:   userID,
 			Sync:        false,
 		}
@@ -178,8 +186,13 @@ func TestExportJob_ListByOrg(t *testing.T) {
 	ctx := context.Background()
 	exportRepo := repository.NewExportJobRepository(suite.DB)
 
-	orgID := uuid.New()
 	userID := uuid.New()
+
+	// Create an organization row so org_id FK is satisfied
+	orgID := uuid.New()
+	err := suite.DB.Exec(`INSERT INTO organizations (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())`,
+		orgID, "Test Org for Export", "test-org-export-"+orgID.String()[:8]).Error
+	require.NoError(t, err, "failed to create organization for FK")
 
 	for i := 0; i < 3; i++ {
 		err := exportRepo.Create(ctx, &domain.ExportJob{
@@ -331,7 +344,6 @@ func TestImportJob_CreateAndGet(t *testing.T) {
 	importRepo := repository.NewImportJobRepository(suite.DB)
 
 	userID := uuid.New()
-	orgID := uuid.New()
 
 	t.Run("create and retrieve import job", func(t *testing.T) {
 		key := fmt.Sprintf("idem-key-%s", uuid.New().String()[:8])
@@ -339,7 +351,7 @@ func TestImportJob_CreateAndGet(t *testing.T) {
 			Status:           domain.ImportQueued,
 			EntityTypes:      []string{"users", "roles"},
 			Format:           "json",
-			OrgID:            &orgID,
+			OrgID:            nil, // No org scoping
 			CreatedBy:        userID,
 			ConflictStrategy: string(domain.ConflictSkip),
 			IdempotencyKey:   &key,
@@ -527,12 +539,11 @@ func TestExportService_CreateExport_Async(t *testing.T) {
 
 	ctx := context.Background()
 	userID := uuid.New()
-	orgID := uuid.New()
 
 	job, err := exportSvc.CreateExport(ctx, &service.ExportRequest{
 		EntityTypes: []string{"users"},
 		Format:      "json",
-		OrgID:       &orgID,
+		OrgID:       nil, // No org scoping
 		UserID:      userID,
 	})
 

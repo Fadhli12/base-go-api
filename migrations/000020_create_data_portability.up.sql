@@ -35,6 +35,7 @@ CREATE TABLE import_jobs (
     idempotency_key VARCHAR(64) UNIQUE,
     result JSONB,
     error_message TEXT,
+    processing_started_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMP
@@ -43,6 +44,7 @@ CREATE TABLE import_jobs (
 CREATE INDEX idx_import_jobs_status ON import_jobs(status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_import_jobs_created_by ON import_jobs(created_by) WHERE deleted_at IS NULL;
 CREATE INDEX idx_import_jobs_idempotency ON import_jobs(idempotency_key);
+CREATE INDEX idx_import_jobs_processing_started_at ON import_jobs(processing_started_at) WHERE processing_started_at IS NOT NULL;
 
 CREATE TABLE import_id_maps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
