@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-12 — Activity Feed feature implemented and documented
+**Last Updated:** 2026-05-12 — Tagging system and Activity Feed implemented and documented
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -539,17 +539,56 @@ Import:
 
 ### 2.5 Tagging System
 
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED
 
-**Description:** Flexible polymorphic tagging system with tag autocomplete.
+| Component | Location |
+|-----------|----------|
+| Domain entity | `internal/domain/tag.go` (Tag, EntityTag structs, GenerateSlug, IsValidTaggableType) |
+| Repository (interface + impl) | `internal/repository/tag.go` (TagRepository + EntityTagRepository: 9+ methods) |
+| Service | `internal/service/tag.go` (TagService: CRUD, bulk attach/detach, autocomplete, RBAC, audit) |
+| Handler | `internal/http/handler/tag.go` (11 endpoints) |
+| Request DTOs | `internal/http/request/tag.go` (hex color regex validation `^#[0-9A-Fa-f]{6}$`) |
+| Response DTOs | `internal/http/response/tag.go` |
+| DI wiring | `internal/http/server.go` (RegisterTagRoutes: autocomplete/slug before /:id) |
+| Permissions seed | `cmd/api/main.go` (5 permissions: view, create, update, delete, manage) |
+| Migration | `migrations/000023_create_tags.up.sql`, `.down.sql` |
+| Unit tests | `tests/unit/tag_service_test.go` (27 test cases including cross-org security) |
+| Spec | `specs/015-tagging-system/spec.md`, `plan.md`, `tasks.md` |
 
-**Recommended Implementation:**
-- `Tag` entity (name, slug, color, usage_count)
-- `EntityTag` polymorphic join table (entity_type, entity_id, tag_id)
-- CRUD endpoints + autocomplete endpoint
-- Soft delete with usage count tracking
+**Key Features:**
+- Polymorphic entity tagging: `news`, `invoice`, `media` (validated via `IsValidTaggableType`)
+- Bulk attach/detach with partial success semantics (attached/skipped/errors per tag)
+- Autocomplete with ILIKE search and popularity fallback
+- Organization-scoped: all CRUD and attach/detach verify tag belongs to requester's org
+- Cross-org security: service verifies `tag.OrganizationID == orgID` after FindByID
+- Slug auto-generation with conflict resolution and empty-string fallback to UUID
+- Hex color validation: `^#[0-9A-Fa-f]{6}$` regex in request DTOs
+- Max limit enforcement (100) for autocomplete and list endpoints
+- RBAC enforcement: 5 permission levels (view, create, update, delete, manage)
+- Audit logging on all mutations
+- Soft delete with partial unique indexes (`WHERE deleted_at IS NULL`)
 
-**Est. Effort:** 1 day | **Complexity:** Low | **Dependencies:** None
+**Endpoints (11 fully wired):**
+- `POST /api/v1/tags` - Create tag
+- `GET /api/v1/tags` - List tags (paginated, max limit 100)
+- `GET /api/v1/tags/autocomplete` - Autocomplete search (must register before `/:id`)
+- `GET /api/v1/tags/slug/:slug` - Get tag by slug (must register before `/:id`)
+- `GET /api/v1/tags/:id` - Get tag by ID
+- `PUT /api/v1/tags/:id` - Update tag
+- `DELETE /api/v1/tags/:id` - Soft-delete tag
+- `POST /api/v1/tags/:id/attach` - Bulk attach tags to entity
+- `POST /api/v1/tags/:id/detach` - Bulk detach tags from entity
+- `GET /api/v1/:type/:id/tags` - List tags for entity
+- `GET /api/v1/tags/:id/entities` - List entities tagged with tag
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `tag:view` | tag | view | View tags and tag listings |
+| `tag:create` | tag | create | Create new tags |
+| `tag:update` | tag | update | Update tag properties |
+| `tag:delete` | tag | delete | Soft-delete tags |
+| `tag:manage` | tag | manage | Attach/detach tags to entities |
 
 ---
 
@@ -593,9 +632,8 @@ Import:
 
 Based on the analysis, the following should be prioritized:
 
-1. **Tagging System** (1 day, P2, no deps) — simplest remaining feature, enhances search/filter
-2. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
-4. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
+1. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
+2. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
 
 ---
 
@@ -614,6 +652,7 @@ Based on the analysis, the following should be prioritized:
 | Search & Filtering | P2 | ✅ Complete |
 | File Versioning | P2 | ✅ Complete |
 | Comment System | P2 | ✅ Complete |
+| Tagging System | P2 | ✅ Complete |
 | Background Job Queue | P3 | ✅ Complete |
 | Data Import/Export System | P3 | ✅ Complete |
 | Settings & Configuration | P3 | ✅ Complete |
@@ -626,7 +665,6 @@ These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT prese
 
 | Feature | Priority | Complexity | Est. Effort | Dependencies |
 |---------|----------|------------|-------------|--------------|
-| Tagging System | P2 | Low | 1 day | None |
 | Real-time Communication (WebSocket) | P3 | High | 3-4 days | Redis pub/sub ✅ |
 | Analytics Dashboard | P3 | High | 4-5 days | None |
 
