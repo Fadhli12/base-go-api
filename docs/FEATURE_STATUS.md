@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-12 — Tagging system and Activity Feed implemented and documented
+**Last Updated:** 2026-05-12 — 15/17 features complete, tagging migration renumbered to 000024, 2 remaining
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -535,7 +535,7 @@ Import:
 
 ---
 
-## Priority 2: Enhanced Features (Not Implemented)
+## Priority 2: Enhanced Features (Implemented)
 
 ### 2.5 Tagging System
 
@@ -551,7 +551,7 @@ Import:
 | Response DTOs | `internal/http/response/tag.go` |
 | DI wiring | `internal/http/server.go` (RegisterTagRoutes: autocomplete/slug before /:id) |
 | Permissions seed | `cmd/api/main.go` (5 permissions: view, create, update, delete, manage) |
-| Migration | `migrations/000023_create_tags.up.sql`, `.down.sql` |
+| Migration | `migrations/000024_create_tags.up.sql`, `.down.sql` |
 | Unit tests | `tests/unit/tag_service_test.go` (27 test cases including cross-org security) |
 | Spec | `specs/015-tagging-system/spec.md`, `plan.md`, `tasks.md` |
 
@@ -639,7 +639,7 @@ Based on the analysis, the following should be prioritized:
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (14 features verified complete)
+### ✅ Implemented (15 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -659,7 +659,7 @@ Based on the analysis, the following should be prioritized:
 | Feature Flags | P3 | ✅ Complete |
 | Activity Feed / Timeline | P2 | ✅ Complete |
 
-### ❌ Not Implemented (3 features remaining)
+### ❌ Not Implemented (2 features remaining)
 
 These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT present in the codebase:
 
