@@ -187,6 +187,11 @@ func (s *RedisPubSub) receiveLoop(ctx context.Context) {
 		default:
 		}
 
+		// Close previous subscription before creating a new one to prevent connection leaks
+		if s.sub != nil {
+			s.sub.Close()
+		}
+
 		s.sub = s.redis.Subscribe(ctx)
 		s.syncSubscriptions(ctx)
 

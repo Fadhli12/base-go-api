@@ -201,6 +201,12 @@ func (h *Hub) JoinRoom(client *Client, room string) error {
 		return appErrors.NewAppError("BAD_REQUEST", fmt.Sprintf("invalid room name: %s", room), 400)
 	}
 
+	// Authorization: verify the client belongs to the room's organization
+	roomOrgID := domain.ExtractOrgID(room)
+	if roomOrgID != uuid.Nil && roomOrgID != client.OrgID {
+		return appErrors.NewAppError("FORBIDDEN", "cannot join room of another organization", 403)
+	}
+
 	h.mu.Lock()
 	if client.RoomCount() >= h.config.MaxRoomsPerClient {
 		h.mu.Unlock()

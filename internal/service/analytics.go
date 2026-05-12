@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -516,9 +517,11 @@ func (s *AnalyticsService) GenerateTimeSeriesDataPoints(
 	// Build a lookup map from existing points
 	pointMap := make(map[string]float64)
 	for _, p := range points {
-		key := p.Date // date string like "2006-01-02" or "2006-01-02T15:04"
+		var key string
 		if p.Hour != nil {
-			key = p.Date // hour is embedded in the point
+			key = fmt.Sprintf("%sT%02d:00", p.Date, *p.Hour)
+		} else {
+			key = p.Date
 		}
 		pointMap[key] = float64(p.Count)
 	}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/example/go-api-base/internal/config"
@@ -18,6 +19,7 @@ type AnalyticsReaper struct {
 	log    *slog.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewAnalyticsReaper creates a new AnalyticsReaper instance.
@@ -42,7 +44,9 @@ func (r *AnalyticsReaper) Start(ctx context.Context) {
 		interval = 60 * time.Second
 	}
 
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -63,12 +67,13 @@ func (r *AnalyticsReaper) Start(ctx context.Context) {
 	}()
 }
 
-// Stop cancels the reaper context, shutting down the goroutine.
+// Stop cancels the reaper context and waits for the goroutine to finish.
 func (r *AnalyticsReaper) Stop() {
 	if r.cancel != nil {
 		r.cancel()
 	}
-	r.log.Info("analytics reaper shutdown initiated")
+	r.wg.Wait()
+	r.log.Info("analytics reaper shutdown complete")
 }
 
 // run executes a single archive pass.

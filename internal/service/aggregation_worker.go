@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/example/go-api-base/internal/config"
@@ -21,6 +22,7 @@ type AggregationWorker struct {
 	log            *slog.Logger
 	ctx            context.Context
 	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 }
 
 // NewAggregationWorker creates a new AggregationWorker instance.
@@ -47,7 +49,9 @@ func (w *AggregationWorker) Start(ctx context.Context) {
 		interval = 60 * time.Second
 	}
 
+	w.wg.Add(1)
 	go func() {
+		defer w.wg.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -67,12 +71,13 @@ func (w *AggregationWorker) Start(ctx context.Context) {
 	}()
 }
 
-// Stop cancels the aggregation worker context, shutting down the goroutine.
+// Stop cancels the aggregation worker context and waits for the goroutine to finish.
 func (w *AggregationWorker) Stop() {
 	if w.cancel != nil {
 		w.cancel()
 	}
-	w.log.Info("aggregation worker shutdown initiated")
+	w.wg.Wait()
+	w.log.Info("aggregation worker shutdown complete")
 }
 
 // Trigger executes a single aggregation cycle immediately.
