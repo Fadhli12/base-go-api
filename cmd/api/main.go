@@ -439,7 +439,6 @@ func runServer() error {
 		slog.Info("Starting aggregation worker...")
 		aggregationWorker.Start(ctx)
 	}
-	}
 
 	// Start server in a goroutine
 	go func() {

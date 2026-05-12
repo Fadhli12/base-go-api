@@ -368,7 +368,6 @@ func (s *Server) SetAggregationWorker(worker *service.AggregationWorker) {
 func (s *Server) AggregationWorker() *service.AggregationWorker {
 	return s.aggregationWorker
 }
-}
 
 // EventBus returns the event bus
 func (s *Server) EventBus() *domain.EventBus {

@@ -208,7 +208,6 @@ func loadConfig() (*Config, error) {
 	if err := parseAnalyticsConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse analytics config: %w", err)
 	}
-	}
 
 	// Validate required fields
 	if err := validate(cfg); err != nil {
