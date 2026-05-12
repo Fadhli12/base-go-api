@@ -476,6 +476,12 @@ func (s *Server) RegisterRoutes() {
 	commentRepo := repository.NewCommentRepository(s.db)
 	commentService := service.NewCommentService(commentRepo, userRepo, s.enforcer, s.auditSvc, slog.Default())
 
+	// Initialize tag service
+	tagRepo := repository.NewTagRepository(s.db)
+	entityTagRepo := repository.NewEntityTagRepository(s.db)
+	tagService := service.NewTagService(tagRepo, entityTagRepo, s.enforcer, s.auditSvc, slog.Default())
+	tagHandler := handler.NewTagHandler(tagService)
+
 	// Initialize API key service
 	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo, auditService)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
@@ -679,6 +685,9 @@ func (s *Server) RegisterRoutes() {
 
 	// Comment routes
 	s.RegisterCommentRoutes(v1, commentHandler)
+
+	// Tag routes
+	s.RegisterTagRoutes(v1, tagHandler)
 
 	// Email routes
 	s.RegisterEmailRoutes(v1)
@@ -1189,6 +1198,46 @@ func (s *Server) RegisterCommentRoutes(api *echo.Group, commentHandler *handler.
 	}
 	commentable.POST("/:type/:id/comments", commentHandler.Create)
 	commentable.GET("/:type/:id/comments", commentHandler.ListByCommentable)
+}
+
+func (s *Server) RegisterTagRoutes(api *echo.Group, tagHandler *handler.TagHandler) {
+	tags := api.Group("/tags")
+	tags.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+	tags.Use(middleware.ExtractOrganizationID())
+
+	if s.auditSvc != nil {
+		tags.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+
+	tags.GET("/autocomplete", tagHandler.Autocomplete)
+	tags.GET("/slug/:slug", tagHandler.GetBySlug)
+	tags.GET("/:id", tagHandler.GetByID)
+	tags.GET("", tagHandler.List)
+	tags.POST("", tagHandler.Create)
+	tags.PUT("/:id", tagHandler.Update)
+	tags.DELETE("/:id", tagHandler.Delete)
+
+	tagRoutes := api.Group("")
+	tagRoutes.Use(middleware.JWT(middleware.JWTConfig{
+		Secret:     s.config.JWT.Secret,
+		ContextKey: "user",
+	}))
+	tagRoutes.Use(middleware.ExtractOrganizationID())
+	if s.auditSvc != nil {
+		tagRoutes.Use(middleware.Audit(middleware.AuditMiddlewareConfig{
+			Skipper:      middleware.DefaultAuditSkipper(),
+			AuditService: s.auditSvc,
+		}))
+	}
+	tagRoutes.POST("/:type/:id/tags", tagHandler.AttachTags)
+	tagRoutes.DELETE("/:type/:id/tags", tagHandler.DetachTags)
+	tagRoutes.GET("/:type/:id/tags", tagHandler.ListEntityTags)
 }
 
 // HealthCheck performs health checks on dependencies
