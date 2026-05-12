@@ -48,7 +48,7 @@ type Webhook struct {
 	URL            string         `gorm:"size:500;not null" json:"url"`
 	Secret         string         `gorm:"size:255;not null" json:"-"`
 	Events         datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"events"`
-	Active         bool           `gorm:"default:true" json:"active"`
+	Active         *bool          `gorm:"default:true;not null" json:"active"`
 	RateLimit      int            `gorm:"default:100" json:"rate_limit"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
@@ -106,7 +106,7 @@ func (w *Webhook) ToResponse() WebhookResponse {
 		Name:           w.Name,
 		URL:            w.URL,
 		Events:         events,
-		Active:         w.Active,
+		Active:         w.GetActive(),
 		RateLimit:      w.RateLimit,
 		CreatedAt:      w.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      w.UpdatedAt.Format(time.RFC3339),
@@ -133,7 +133,7 @@ func (w *Webhook) ToCreateResponse() WebhookCreateResponse {
 		URL:            w.URL,
 		Secret:         w.Secret,
 		Events:         events,
-		Active:         w.Active,
+		Active:         w.GetActive(),
 		RateLimit:      w.RateLimit,
 		CreatedAt:      w.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      w.UpdatedAt.Format(time.RFC3339),
@@ -158,7 +158,18 @@ func (w *Webhook) IsSubscribedTo(event string) bool {
 
 // IsActive returns true if the webhook is active and not soft-deleted.
 func (w *Webhook) IsActive() bool {
-	return w.Active && !w.DeletedAt.Valid
+	if w.Active == nil {
+		return false
+	}
+	return *w.Active && !w.DeletedAt.Valid
+}
+
+// GetActive returns the Active field as bool, defaulting to false if nil.
+func (w *Webhook) GetActive() bool {
+	if w.Active == nil {
+		return false
+	}
+	return *w.Active
 }
 
 // IsGlobal returns true if the webhook is not scoped to an organization.
@@ -280,4 +291,10 @@ func (d *WebhookDelivery) Replay() {
 	d.NextRetryAt = nil
 	d.ProcessingStartedAt = nil
 	d.DeliveredAt = nil
+}
+
+// BoolPtr returns a pointer to the given bool value.
+// Used for setting *bool fields in Webhook structs.
+func BoolPtr(b bool) *bool {
+	return &b
 }

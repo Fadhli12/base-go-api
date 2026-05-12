@@ -102,9 +102,12 @@ func (s *WebhookService) Create(
 	}
 
 	// Build entity
-	active := true
+	var activePtr *bool
 	if req.Active != nil {
-		active = *req.Active
+		activePtr = req.Active
+	} else {
+		defaultActive := true
+		activePtr = &defaultActive
 	}
 
 	webhook := &domain.Webhook{
@@ -113,7 +116,7 @@ func (s *WebhookService) Create(
 		URL:            req.URL,
 		Secret:         secret,
 		Events:         eventsJSON,
-		Active:         active,
+		Active:         activePtr,
 		RateLimit:      rateLimit,
 	}
 
@@ -213,7 +216,7 @@ func (s *WebhookService) Update(
 
 	// Active
 	if req.Active != nil {
-		webhook.Active = *req.Active
+		webhook.Active = req.Active
 	}
 
 	// RateLimit
