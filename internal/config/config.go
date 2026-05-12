@@ -103,9 +103,10 @@ type Config struct {
 	Swagger       SwaggerConfig      `mapstructure:"swagger"`
 	Cache         CacheConfig         `mapstructure:"cache"`
 	Email         EmailConfig         `mapstructure:"email"`
-	Webhook       WebhookConfig       `mapstructure:"webhook"`
+	Webhook          WebhookConfig          `mapstructure:"webhook"`
 	Job              JobConfig              `mapstructure:"job"`
 	DataPortability  DataPortabilityConfig  `mapstructure:"data_portability"`
+	Activity         ActivityConfig         `mapstructure:"activity"`
 }
 
 var (
@@ -186,6 +187,9 @@ func loadConfig() (*Config, error) {
 	}
 	if err := parseWebhookConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse webhook config: %w", err)
+	}
+	if err := parseActivityConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse activity config: %w", err)
 	}
 	if err := parsePasswordResetConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse password reset config: %w", err)
@@ -308,6 +312,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("webhook.delivery_timeout", "10s")
 	v.SetDefault("webhook.delivery_retention_days", 90)
 	v.SetDefault("webhook.max_payload_size", 1048576)
+
+	// Activity feed defaults
+	v.SetDefault("activity.retention_days", 90)
+	v.SetDefault("activity.default_page_size", 20)
+	v.SetDefault("activity.max_page_size", 100)
+	v.SetDefault("activity.reaper_interval", "60s")
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)
@@ -725,6 +735,21 @@ func parseWebhookConfig(v *viper.Viper, cfg *Config) error {
 		return fmt.Errorf("invalid WEBHOOK_DELIVERY_TIMEOUT: %w", err)
 	}
 	cfg.Webhook.DeliveryTimeout = duration
+
+	return nil
+}
+
+func parseActivityConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Activity.RetentionDays = getEnvIntOrDefault("ACTIVITY_RETENTION_DAYS", v.GetInt("activity.retention_days"))
+	cfg.Activity.DefaultPageSize = getEnvIntOrDefault("ACTIVITY_DEFAULT_PAGE_SIZE", v.GetInt("activity.default_page_size"))
+	cfg.Activity.MaxPageSize = getEnvIntOrDefault("ACTIVITY_MAX_PAGE_SIZE", v.GetInt("activity.max_page_size"))
+
+	reaperInterval := getEnvOrDefault("ACTIVITY_REAPER_INTERVAL", v.GetString("activity.reaper_interval"))
+	duration, err := time.ParseDuration(reaperInterval)
+	if err != nil {
+		return fmt.Errorf("invalid ACTIVITY_REAPER_INTERVAL: %w", err)
+	}
+	cfg.Activity.ReaperInterval = duration
 
 	return nil
 }

@@ -254,6 +254,21 @@ func runServer() error {
 		slog.Info("Webhook service subscribed to event bus")
 	}
 
+	// Subscribe activity service to events for automatic activity creation
+	if activityService := server.ActivityService(); activityService != nil {
+		activityService.SubscribeToEventBus(eventBus)
+		slog.Info("Activity service subscribed to event bus")
+	}
+
+	// Initialize activity reaper for 90-day archival
+	activityRepo := repository.NewActivityRepository(db)
+	activityReaper := service.NewActivityReaper(activityRepo, cfg.Activity, slog.Default())
+	server.SetActivityReaper(activityReaper)
+	slog.Info("Activity reaper initialized",
+		slog.Int("retention_days", cfg.Activity.RetentionDays),
+		slog.Duration("reaper_interval", cfg.Activity.ReaperInterval),
+	)
+
 	// Wire EventBus into domain services for event emission
 	if userService := server.UserService(); userService != nil {
 		userService.SetEventBus(eventBus)
@@ -353,6 +368,12 @@ func runServer() error {
 		}
 	}
 
+	// Start activity reaper in background
+	if activityReaper := server.ActivityReaper(); activityReaper != nil {
+		slog.Info("Starting activity reaper...")
+		activityReaper.Start(ctx)
+	}
+
 	// Start server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil && err != http.ErrServerClosed {
@@ -390,6 +411,12 @@ func runServer() error {
 		if err := eventBus.Stop(); err != nil {
 			slog.Error("Failed to stop event bus", "error", err)
 		}
+	}
+
+	// 2b. Stop activity reaper
+	if activityReaper := server.ActivityReaper(); activityReaper != nil {
+		slog.Info("Stopping activity reaper...")
+		activityReaper.Stop()
 	}
 
 	// 3. Stop workers to finish in-flight processing
@@ -583,12 +610,14 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "comment:delete", Description: "Delete own comments", Resource: "comment", Action: "delete"},
 		{Name: "comment:delete_any", Description: "Delete any comment (admin)", Resource: "comment", Action: "delete_any"},
 		{Name: "comment:manage", Description: "Pin, unpin, and manage comments", Resource: "comment", Action: "manage"},
+		{Name: "activity:view", Description: "View activity feed and history", Resource: "activity", Action: "view"},
+		{Name: "activity:manage", Description: "Manage activities (delete, admin)", Resource: "activity", Action: "manage"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage"},
 			},
 		},
 	}
