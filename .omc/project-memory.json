@@ -2,55 +2,10 @@
   "version": "1.0.0",
   "lastScanned": 1777696629400,
   "projectRoot": "C:\\Development\\base\\go-api",
-  "techStack": {
-    "languages": [
-      {
-        "name": "Go",
-        "version": null,
-        "confidence": "high",
-        "markers": [
-          "go.mod"
-        ]
-      },
-      {
-        "name": "C/C++",
-        "version": null,
-        "confidence": "high",
-        "markers": [
-          "Makefile"
-        ]
-      }
-    ],
-    "frameworks": [],
-    "packageManager": "go",
-    "runtime": null
-  },
-  "build": {
-    "buildCommand": "make build",
-    "testCommand": "make test",
-    "lintCommand": null,
-    "devCommand": null,
-    "scripts": {}
-  },
-  "conventions": {
-    "namingStyle": null,
-    "importStyle": null,
-    "testPattern": null,
-    "fileOrganization": null
-  },
-  "structure": {
-    "isMonorepo": false,
-    "workspaces": [],
-    "mainDirectories": [
-      "bin",
-      "docs",
-      "tests"
-    ],
-    "gitBranches": {
-      "defaultBranch": "master",
-      "branchingStrategy": null
-    }
-  },
+  "techStack": "Go, Echo v4, GORM, PostgreSQL, Redis, Casbin RBAC, testcontainers-go",
+  "build": "go test -tags=integration -run 'TestInvoice|TestListVersions|TestGetVersion|TestUploadVersionIntegration' ./tests/integration/... -timeout 300s",
+  "conventions": "GORM queries with Count/Find must include Model() or Table(). Test seed data must reference existing FK targets. SET search_path TO public must use sql.DB not GORM pool.",
+  "structure": "repository/media_version.go: FindByMediaID fix at line 85-87. tests/integration/testsuite.go: orphaned type cleanup + search_path in SetupTest. tests/integration/media_test.go: execStmts helper + database/sql import. tests/integration/media_version_test.go: sqlDB-based version table creation, real user IDs for FK constraints.",
   "directoryMap": {
     "bin": {
       "path": "bin",
@@ -349,5 +304,5 @@
     "Use in production workflows: context load → implement → file decision",
     "Monitor knowledge graph updates"
   ],
-  "notes": "MemPalace commands use positional arguments: `mempalace search \"query\"` NOT `mempalace search query`. Unicode encoding issue on Windows - set PYTHONIOENCODING=utf-8. Test script at .sisyphus/hooks/mempalace-test.ps1 works correctly."
+  "notes": "Key bug fix: media_version repository FindByMediaID was missing Model(&domain.MediaVersion{}) call, causing 'Table not set' GORM error. Test infra fixes: search_path must be set via sql.DB (not GORM) after TRUNCATE CASCADE; foreign key constraints require real user IDs in test seed data; createMediaTables/createMediaVersionTables now use sql.DB for reliable multi-statement execution."
 }
