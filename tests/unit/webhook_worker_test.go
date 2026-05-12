@@ -563,12 +563,12 @@ func TestWebhookDelivery_HelperMethods(t *testing.T) {
 
 func TestWebhook_HelperMethods(t *testing.T) {
 	t.Run("IsActive with Active=true and not deleted", func(t *testing.T) {
-		w := &domain.Webhook{Active: true}
+		w := &domain.Webhook{Active: domain.BoolPtr(true)}
 		assert.True(t, w.IsActive())
 	})
 
 	t.Run("IsActive with Active=false", func(t *testing.T) {
-		w := &domain.Webhook{Active: false}
+		w := &domain.Webhook{Active: domain.BoolPtr(false)}
 		assert.False(t, w.IsActive())
 	})
 
@@ -624,7 +624,7 @@ func TestWebhook_ToResponse(t *testing.T) {
 		ID:     id,
 		Name:   "response-test",
 		URL:    "https://example.com/hook",
-		Active: true,
+		Active: domain.BoolPtr(true),
 		Events: []byte(`["user.created","invoice.paid"]`),
 	}
 
@@ -643,7 +643,7 @@ func TestWebhook_ToCreateResponse(t *testing.T) {
 		Name:   "create-test",
 		URL:    "https://example.com/hook",
 		Secret: "whsec_abc123",
-		Active: true,
+		Active: domain.BoolPtr(true),
 		Events: []byte(`["user.created"]`),
 	}
 

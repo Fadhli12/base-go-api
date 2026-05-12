@@ -304,15 +304,18 @@ func AuthenticateUser(t *testing.T, server *Server, email, password string) stri
 	loginRec := MakeRequest(t, server, http.MethodPost, "/api/v1/auth/login", loginBody, "")
 	require.Equal(t, http.StatusOK, loginRec.Code, "login should return 200")
 
-	env := ParseEnvelope(t, loginRec)
-	require.NotNil(t, env.Data, "login response should have data")
+	return GetAccessTokenFromResponse(t, loginRec)
+}
 
+// GetAccessTokenFromResponse extracts the access_token from a login/register response.
+func GetAccessTokenFromResponse(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	env := ParseEnvelope(t, rec)
+	require.NotNil(t, env.Data, "response should have data")
 	dataMap, ok := env.Data.(map[string]interface{})
 	require.True(t, ok, "data should be a map")
-
 	token, ok := dataMap["access_token"].(string)
 	require.True(t, ok, "access_token should be a string")
-
 	return token
 }
 
@@ -344,20 +347,44 @@ func CreateUserWithPermissions(t *testing.T, suite SuiteProvider, enforcer *perm
 	err = suite.GetDB().Exec(`
 		INSERT INTO users (id, email, password_hash, created_at, updated_at)
 		VALUES (?, ?, ?, NOW(), NOW())
+		ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()
 	`, userID, email, string(hash)).Error
 	require.NoError(t, err)
+
+	// If user already existed, fetch the actual ID (scan into string first, then parse)
+	var existingUserIDStr string
+	err = suite.GetDB().Raw("SELECT id FROM users WHERE email = ?", email).Scan(&existingUserIDStr).Error
+	require.NoError(t, err)
+	if existingUserIDStr != "" {
+		existingUserID, parseErr := uuid.Parse(existingUserIDStr)
+		require.NoError(t, parseErr, "failed to parse user ID")
+		userID = existingUserID
+	}
 
 	roleID := uuid.New()
 	roleName := "test-role-" + roleID.String()
 	err = suite.GetDB().Exec(`
 		INSERT INTO roles (id, name, description, created_at, updated_at)
 		VALUES (?, ?, 'Test role', NOW(), NOW())
+		ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = NOW()
+		RETURNING id
 	`, roleID, roleName).Error
 	require.NoError(t, err)
 
-		err = suite.GetDB().Exec(`
+	// If role already existed, fetch the actual ID (scan into string first, then parse)
+	var existingRoleIDStr string
+	err = suite.GetDB().Raw("SELECT id FROM roles WHERE name = ?", roleName).Scan(&existingRoleIDStr).Error
+	require.NoError(t, err)
+	if existingRoleIDStr != "" {
+		existingRoleID, parseErr := uuid.Parse(existingRoleIDStr)
+		require.NoError(t, parseErr, "failed to parse role ID")
+		roleID = existingRoleID
+	}
+
+	err = suite.GetDB().Exec(`
 		INSERT INTO user_roles (user_id, role_id, assigned_at)
 		VALUES (?, ?, NOW())
+		ON CONFLICT (user_id, role_id) DO UPDATE SET assigned_at = NOW()
 	`, userID, roleID).Error
 	require.NoError(t, err)
 
@@ -370,19 +397,24 @@ func CreateUserWithPermissions(t *testing.T, suite SuiteProvider, enforcer *perm
 		err = suite.GetDB().Exec(`
 			INSERT INTO permissions (id, name, resource, action, scope, created_at, updated_at)
 			VALUES (?, ?, ?, ?, 'all', NOW(), NOW())
+			ON CONFLICT (name) DO UPDATE SET resource = EXCLUDED.resource, action = EXCLUDED.action, updated_at = NOW()
 		`, permID, permName, resource, action).Error
-		if err != nil {
-			var existingID uuid.UUID
-			err = suite.GetDB().Raw("SELECT id FROM permissions WHERE name = ?", permName).Scan(&existingID).Error
-			if err == nil {
-				permID = existingID
-			}
+		require.NoError(t, err, "permission upsert should succeed for %s", permName)
+
+		// If permission already existed, fetch the actual ID (scan into string first, then parse)
+		var existingPermIDStr string
+		err = suite.GetDB().Raw("SELECT id FROM permissions WHERE name = ?", permName).Scan(&existingPermIDStr).Error
+		require.NoError(t, err, "should find permission %s after upsert", permName)
+		if existingPermIDStr != "" {
+			existingPermID, parseErr := uuid.Parse(existingPermIDStr)
+			require.NoError(t, parseErr, "failed to parse permission ID")
+			permID = existingPermID
 		}
 
 		err = suite.GetDB().Exec(`
 		INSERT INTO role_permissions (role_id, permission_id, assigned_at)
 		VALUES (?, ?, NOW())
-		ON CONFLICT DO NOTHING
+		ON CONFLICT (role_id, permission_id) DO UPDATE SET assigned_at = NOW()
 	`, roleID, permID).Error
 		require.NoError(t, err)
 	}
@@ -414,36 +446,42 @@ func CreateUserWithPermissions(t *testing.T, suite SuiteProvider, enforcer *perm
 
 // SeedRoles creates base roles (admin, user) with permissions and syncs the enforcer.
 func SeedRoles(t *testing.T, suite SuiteProvider, enforcer *permission.Enforcer) {
-	var adminID uuid.UUID
+	var adminIDStr string
 	err := suite.GetDB().Raw(`
 		INSERT INTO roles (id, name, description, created_at, updated_at)
 		VALUES (gen_random_uuid(), 'admin', 'Administrator role', NOW(), NOW())
 		ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
 		RETURNING id
-	`).Scan(&adminID).Error
+	`).Scan(&adminIDStr).Error
 	require.NoError(t, err)
+	adminID, err := uuid.Parse(adminIDStr)
+	require.NoError(t, err, "failed to parse admin role ID")
 
-	var userID uuid.UUID
+	var userIDStr string
 	err = suite.GetDB().Raw(`
 		INSERT INTO roles (id, name, description, created_at, updated_at)
 		VALUES (gen_random_uuid(), 'user', 'User role', NOW(), NOW())
 		ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
 		RETURNING id
-	`).Scan(&userID).Error
+	`).Scan(&userIDStr).Error
 	require.NoError(t, err)
+	_, err = uuid.Parse(userIDStr)
+	require.NoError(t, err, "failed to parse user role ID")
 
-	var permIDs []uuid.UUID
-	err = suite.GetDB().Raw("SELECT id FROM permissions").Scan(&permIDs).Error
-	if err != nil {
+	var permIDStrs []string
+	err = suite.GetDB().Raw("SELECT id FROM permissions").Scan(&permIDStrs).Error
+	if err != nil || len(permIDStrs) == 0 {
 		t.Logf("Warning: no permissions found to assign to admin: %v", err)
 		return
 	}
 
-	for _, permID := range permIDs {
+	for _, permIDStr := range permIDStrs {
+		permID, parseErr := uuid.Parse(permIDStr)
+		require.NoError(t, parseErr, "failed to parse permission ID")
 		err = suite.GetDB().Exec(`
 			INSERT INTO role_permissions (role_id, permission_id, created_at)
 			VALUES (?, ?, NOW())
-			ON CONFLICT DO NOTHING
+			ON CONFLICT (role_id, permission_id) DO UPDATE SET assigned_at = NOW()
 		`, adminID, permID).Error
 		require.NoError(t, err)
 	}

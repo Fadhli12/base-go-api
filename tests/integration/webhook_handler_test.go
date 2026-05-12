@@ -89,7 +89,7 @@ func TestWebhookService_Create_ValidData(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, storedEvents, "user.created")
 
-	assert.True(t, webhook.Active) // defaults to true
+	assert.True(t, webhook.GetActive()) // defaults to true
 	assert.Equal(t, 100, webhook.RateLimit)
 
 	// ToCreateResponse includes secret
@@ -128,7 +128,7 @@ func TestWebhookService_Create_InvalidURL(t *testing.T) {
 			name: "Private IP URL",
 			req: &request.CreateWebhookRequest{
 				Name:   "Private Webhook",
-				URL:    "http://127.0.0.1/webhook",
+				URL:    "https://127.0.0.1/webhook",
 				Events: []string{"user.created"},
 			},
 			wantErr: "private",
@@ -211,14 +211,14 @@ func TestWebhookService_ListByOrg(t *testing.T) {
 	// Create 2 webhooks with orgID
 	_, err = webhookSvc.Create(ctx, &orgID, &request.CreateWebhookRequest{
 		Name:   "Org Webhook 1",
-		URL:    "https://org1.example.com/webhook",
+		URL:    "https://example.com/hooks/org1",
 		Events: []string{"user.created"},
 	})
 	require.NoError(t, err)
 
 	_, err = webhookSvc.Create(ctx, &orgID, &request.CreateWebhookRequest{
 		Name:   "Org Webhook 2",
-		URL:    "https://org2.example.com/webhook",
+		URL:    "https://example.com/hooks/org2",
 		Events: []string{"invoice.paid"},
 	})
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestWebhookService_ListByOrg(t *testing.T) {
 	// Create 1 global webhook (no org)
 	_, err = webhookSvc.Create(ctx, nil, &request.CreateWebhookRequest{
 		Name:   "Global Webhook",
-		URL:    "https://global.example.com/webhook",
+		URL:    "https://example.com/hooks/global",
 		Events: []string{"news.published"},
 	})
 	require.NoError(t, err)
@@ -276,10 +276,10 @@ func TestWebhookService_Update(t *testing.T) {
 
 	// Update URL -> should regenerate secret
 	updated2, err := webhookSvc.Update(ctx, webhook.ID, &request.UpdateWebhookRequest{
-		URL: ptrStr("https://new-url.example.com/webhook"),
+		URL: ptrStr("https://example.com/hooks/new-url"),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "https://new-url.example.com/webhook", updated2.URL)
+	assert.Equal(t, "https://example.com/hooks/new-url", updated2.URL)
 	assert.NotEqual(t, originalSecret, updated2.Secret)
 	assert.True(t, strings.HasPrefix(updated2.Secret, "whsec_"))
 }
@@ -298,7 +298,7 @@ func TestWebhookService_SoftDelete(t *testing.T) {
 
 	webhook, err := webhookSvc.Create(ctx, nil, &request.CreateWebhookRequest{
 		Name:   "Delete Me",
-		URL:    "https://delete.example.com/webhook",
+		URL:    "https://example.com/hooks/delete",
 		Events: []string{"user.created"},
 	})
 	require.NoError(t, err)

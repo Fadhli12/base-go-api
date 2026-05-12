@@ -28,8 +28,11 @@ import (
 )
 
 func createMediaVersionTables(t *testing.T, db *gorm.DB) {
-	migration := `
-	CREATE TABLE IF NOT EXISTS media_versions (
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	_, _ = sqlDB.Exec("SET search_path TO public")
+	_, _ = sqlDB.Exec(`
+CREATE TABLE IF NOT EXISTS media_versions (
 		id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		media_id        UUID NOT NULL,
 		version         INTEGER NOT NULL,
@@ -44,20 +47,13 @@ func createMediaVersionTables(t *testing.T, db *gorm.DB) {
 		updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
 		deleted_at      TIMESTAMPTZ DEFAULT NULL,
 		CONSTRAINT uq_media_versions_version UNIQUE (media_id, version)
-	);
+	)
+	`)
+	_, _ = sqlDB.Exec(`CREATE INDEX IF NOT EXISTS idx_media_versions_media_id ON media_versions(media_id) WHERE deleted_at IS NULL`)
 
-	CREATE INDEX IF NOT EXISTS idx_media_versions_media_id
-		ON media_versions(media_id) WHERE deleted_at IS NULL;
-	`
+	_, _ = sqlDB.Exec("ALTER TABLE media ADD COLUMN IF NOT EXISTS current_version INTEGER NOT NULL DEFAULT 1")
 
-	result := db.Exec(migration)
-	require.NoError(t, result.Error, "Failed to create media_versions table")
-
-	// Add current_version column to media if it doesn't exist
-	db.Exec("ALTER TABLE media ADD COLUMN IF NOT EXISTS current_version INTEGER NOT NULL DEFAULT 1")
-
-	// Ensure foreign keys exist (create if not already present)
-	db.Exec(`
+	_, _ = sqlDB.Exec(`
 		DO $$
 		BEGIN
 			IF NOT EXISTS (
@@ -75,7 +71,7 @@ func createMediaVersionTables(t *testing.T, db *gorm.DB) {
 					FOREIGN KEY (uploaded_by_id) REFERENCES users(id) ON DELETE RESTRICT;
 			END IF;
 		END;
-		$$;
+		$$
 	`)
 }
 
@@ -166,14 +162,13 @@ func seedMediaWithVersions(t *testing.T, db *gorm.DB, userID uuid.UUID) uuid.UUI
 
 	// Seed versions
 	for v := 1; v <= 3; v++ {
+		checksum := fmt.Sprintf("%064d", v)
 		err = db.Exec(`
 			INSERT INTO media_versions (id, media_id, version, filename, original_filename,
 				mime_type, size, file_path, checksum, uploaded_by_id)
-			VALUES (gen_random_uuid(), ?, ?, ?, 'original-v'+CAST(? AS VARCHAR)+'.pdf',
-				'application/pdf', ?, '/test/path/v'+CAST(? AS VARCHAR)+'.pdf',
-				LPAD(?, 64, '0'), ?)
-		`, mediaID, v, fmt.Sprintf("v%d.pdf", v), v, 1024*int64(v), v,
-			fmt.Sprintf("%064d", v), userID).Error
+			VALUES (gen_random_uuid(), ?, ?, ?, ?, 'application/pdf', ?, ?, ?, ?)
+		`, mediaID, v, fmt.Sprintf("v%d.pdf", v), fmt.Sprintf("original-v%d.pdf", v),
+			1024*int64(v), fmt.Sprintf("/test/path/v%d.pdf", v), checksum, userID).Error
 		require.NoError(t, err)
 	}
 
@@ -237,6 +232,9 @@ func TestListVersions(t *testing.T) {
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, req)
 
+		if rec.Code != http.StatusOK {
+			t.Logf("Response status=%d, body=%s", rec.Code, rec.Body.String())
+		}
 		assert.Equal(t, http.StatusOK, rec.Code)
 
 		var envelope response.Envelope
@@ -264,13 +262,20 @@ func TestListVersions(t *testing.T) {
 		createMediaTables(t, suite.DB)
 		createMediaVersionTables(t, suite.DB)
 
-		mediaID := uuid.New()
+		fakeUserID := uuid.New()
 		err := suite.DB.Exec(`
+			INSERT INTO users (id, email, password_hash, created_at, updated_at)
+			VALUES (?, 'unauth-test@example.com', '$2a$12$hashedpassword', NOW(), NOW())
+		`, fakeUserID).Error
+		require.NoError(t, err)
+
+		mediaID := uuid.New()
+		err = suite.DB.Exec(`
 			INSERT INTO media (id, model_type, model_id, collection_name, filename, original_filename,
 				mime_type, size, path, uploaded_by_id)
 			VALUES (?, 'news', gen_random_uuid(), 'default', 'f.pdf', 'f.pdf',
-				'application/pdf', 100, '/test/f.pdf', gen_random_uuid())
-		`, mediaID).Error
+				'application/pdf', 100, '/test/f.pdf', ?)
+		`, mediaID, fakeUserID).Error
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodGet,
@@ -681,13 +686,20 @@ func TestDeleteVersion(t *testing.T) {
 		createMediaTables(t, suite.DB)
 		createMediaVersionTables(t, suite.DB)
 
-		mediaID := uuid.New()
+		fakeUserID := uuid.New()
 		err := suite.DB.Exec(`
+			INSERT INTO users (id, email, password_hash, created_at, updated_at)
+			VALUES (?, 'delete-auth@example.com', '$2a$12$hashedpassword', NOW(), NOW())
+		`, fakeUserID).Error
+		require.NoError(t, err)
+
+		mediaID := uuid.New()
+		err = suite.DB.Exec(`
 			INSERT INTO media (id, model_type, model_id, collection_name, filename, original_filename,
 				mime_type, size, path, uploaded_by_id, current_version)
 			VALUES (?, 'news', gen_random_uuid(), 'default', 'f.pdf', 'f.pdf',
-				'application/pdf', 100, '/test/f.pdf', gen_random_uuid(), 1)
-		`, mediaID).Error
+				'application/pdf', 100, '/test/f.pdf', ?, 1)
+		`, mediaID, fakeUserID).Error
 		require.NoError(t, err)
 
 		req := httptest.NewRequest(http.MethodDelete,
@@ -697,5 +709,134 @@ func TestDeleteVersion(t *testing.T) {
 		e.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+}
+
+func TestChecksumDedup(t *testing.T) {
+	suite := NewTestSuite(t)
+	defer suite.Cleanup()
+	suite.RunMigrations(t)
+	createMediaTables(t, suite.DB)
+	createMediaVersionTables(t, suite.DB)
+
+	e, _, _ := setupMediaVersionHandler(t, suite, nil)
+
+	t.Run("uploading duplicate content returns 409", func(t *testing.T) {
+		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		createMediaVersionTables(t, suite.DB)
+
+		enforcer := setupTestEnforcer(t, suite.DB)
+		user := createTestUserWithVersionPerms(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
+
+		mediaID := uuid.New()
+		err := suite.DB.Exec(`
+			INSERT INTO media (id, model_type, model_id, collection_name, filename, original_filename,
+				mime_type, size, path, uploaded_by_id, current_version)
+			VALUES (?, 'news', gen_random_uuid(), 'default', 'base.pdf', 'base.pdf',
+				'application/pdf', 1024, '/test/base.pdf', ?, 1)
+		`, mediaID, user.ID).Error
+		require.NoError(t, err)
+
+		fileContent := []byte("%PDF-1.4 duplicate content test")
+
+		var b1 bytes.Buffer
+		writer1 := multipart.NewWriter(&b1)
+		part1, err := writer1.CreateFormFile("file", "v2.pdf")
+		require.NoError(t, err)
+		_, err = part1.Write(fileContent)
+		require.NoError(t, err)
+		writer1.Close()
+
+		req1 := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/v1/media/%s/versions", mediaID.String()), &b1)
+		req1.Header.Set("Content-Type", writer1.FormDataContentType())
+		req1.Header.Set("Authorization", "Bearer "+token)
+
+		rec1 := httptest.NewRecorder()
+		e.ServeHTTP(rec1, req1)
+		assert.Equal(t, http.StatusCreated, rec1.Code)
+
+		// Upload same content again - should get 409
+		var b2 bytes.Buffer
+		writer2 := multipart.NewWriter(&b2)
+		part2, err := writer2.CreateFormFile("file", "v2_duplicate.pdf")
+		require.NoError(t, err)
+		_, err = part2.Write(fileContent)
+		require.NoError(t, err)
+		writer2.Close()
+
+		req2 := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/v1/media/%s/versions", mediaID.String()), &b2)
+		req2.Header.Set("Content-Type", writer2.FormDataContentType())
+		req2.Header.Set("Authorization", "Bearer "+token)
+
+		rec2 := httptest.NewRecorder()
+		e.ServeHTTP(rec2, req2)
+		assert.Equal(t, http.StatusConflict, rec2.Code)
+		assert.Contains(t, rec2.Body.String(), "CONFLICT")
+	})
+}
+
+func TestRestoreVersion(t *testing.T) {
+	suite := NewTestSuite(t)
+	defer suite.Cleanup()
+	suite.RunMigrations(t)
+	createMediaTables(t, suite.DB)
+	createMediaVersionTables(t, suite.DB)
+
+	e, _, _ := setupMediaVersionHandler(t, suite, nil)
+
+	t.Run("restore previous version", func(t *testing.T) {
+		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		createMediaVersionTables(t, suite.DB)
+
+		enforcer := setupTestEnforcer(t, suite.DB)
+		user := createTestUserWithVersionPerms(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
+		mediaID := seedMediaWithVersions(t, suite.DB, user.ID)
+
+		// Current version is 3, restore version 1
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/v1/media/%s/versions/1/restore", mediaID.String()), nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var envelope response.Envelope
+		err := json.Unmarshal(rec.Body.Bytes(), &envelope)
+		require.NoError(t, err)
+
+		// Verify current_version is now 1
+		var m domain.Media
+		err = suite.DB.First(&m, "id = ?", mediaID).Error
+		require.NoError(t, err)
+		assert.Equal(t, 1, m.CurrentVersion)
+	})
+
+	t.Run("restore current version returns 400", func(t *testing.T) {
+		suite.SetupTest(t)
+		createMediaTables(t, suite.DB)
+		createMediaVersionTables(t, suite.DB)
+
+		enforcer := setupTestEnforcer(t, suite.DB)
+		user := createTestUserWithVersionPerms(t, suite.DB, enforcer)
+		token := generateTestTokenForMedia(user.ID)
+		mediaID := seedMediaWithVersions(t, suite.DB, user.ID)
+
+		// Current version is 3, try to restore 3
+		req := httptest.NewRequest(http.MethodPost,
+			fmt.Sprintf("/api/v1/media/%s/versions/3/restore", mediaID.String()), nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 }

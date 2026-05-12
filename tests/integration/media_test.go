@@ -5,11 +5,13 @@ package integration
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -488,7 +490,10 @@ func TestMediaAdminEndpoints(t *testing.T) {
 
 // createMediaTables creates the necessary media tables for testing
 func createMediaTables(t *testing.T, db *gorm.DB) {
-	migration := `
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+
+	execStmts(t, sqlDB, `
 CREATE TABLE IF NOT EXISTS media (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     model_type VARCHAR(255) NOT NULL,
@@ -502,6 +507,7 @@ CREATE TABLE IF NOT EXISTS media (
     path VARCHAR(2000) NOT NULL,
     metadata JSONB DEFAULT '{}',
     custom_properties JSONB DEFAULT '{}',
+    current_version INTEGER NOT NULL DEFAULT 1,
     uploaded_by_id UUID NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -540,9 +546,57 @@ CREATE TABLE IF NOT EXISTS media_downloads (
 
 CREATE INDEX IF NOT EXISTS idx_media_downloads_media_id ON media_downloads(media_id);
 CREATE INDEX IF NOT EXISTS idx_media_downloads_downloaded_at ON media_downloads(downloaded_at);
-`
-	result := db.Exec(migration)
-	require.NoError(t, result.Error, "Failed to create media tables")
+
+CREATE TABLE IF NOT EXISTS media_versions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    media_id        UUID NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    version         INTEGER NOT NULL,
+    filename        VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(500) NOT NULL,
+    mime_type       VARCHAR(100) NOT NULL,
+    size            BIGINT NOT NULL,
+    file_path       VARCHAR(2000) NOT NULL,
+    checksum        CHAR(64) NOT NULL,
+    uploaded_by_id  UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at      TIMESTAMPTZ DEFAULT NULL,
+    CONSTRAINT uq_media_versions_version UNIQUE (media_id, version),
+    CONSTRAINT chk_media_versions_size CHECK (size > 0),
+    CONSTRAINT chk_media_versions_version_positive CHECK (version > 0),
+    CONSTRAINT chk_media_versions_mime_type CHECK (mime_type ~ '^[a-z]+/[a-zA-Z0-9+\-\.]+$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_versions_media_id ON media_versions(media_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_uploaded_by ON media_versions(uploaded_by_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_checksum ON media_versions(media_id, checksum) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_media_versions_created_at ON media_versions(created_at DESC) WHERE deleted_at IS NULL;
+`)
+}
+
+func execStmts(t *testing.T, sqlDB *sql.DB, rawSQL string) {
+	stmts := strings.Split(rawSQL, ";")
+	for _, stmt := range stmts {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		_, err := sqlDB.Exec(stmt)
+		if err != nil {
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "already exists") {
+				continue
+			}
+			require.NoError(t, err, "Failed to execute: %s", stmt[:min(len(stmt), 60)])
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // createTestUserForMedia creates a test user

@@ -6,6 +6,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func createTestWebhookForEvents(t *testing.T, db *gorm.DB, url string, events []
 		URL:       url,
 		Secret:    secret,
 		Events:    eventsJSON,
-		Active:    active,
+		Active:    domain.BoolPtr(active),
 		RateLimit: 100,
 	}
 	require.NoError(t, db.Create(wh).Error)
@@ -54,12 +55,24 @@ func createTestOrgWebhookForEvents(t *testing.T, db *gorm.DB, orgID uuid.UUID, u
 		URL:            url,
 		Secret:         secret,
 		Events:         eventsJSON,
-		Active:         active,
+		Active:         domain.BoolPtr(active),
 		RateLimit:      100,
 		OrganizationID: &orgID,
 	}
 	require.NoError(t, db.Create(wh).Error)
 	return wh
+}
+
+// createTestOrganizationForWebhook creates an org record for FK constraint satisfaction.
+func createTestOrganizationForWebhook(t *testing.T, db *gorm.DB, name string) *domain.Organization {
+	user := createTestUserForWebhook(t, db)
+	org := &domain.Organization{
+		Name:    name,
+		Slug:    fmt.Sprintf("%s-%s", strings.ToLower(strings.ReplaceAll(name, " ", "-")), uuid.New().String()[:8]),
+		OwnerID: user.ID,
+	}
+	require.NoError(t, db.Create(org).Error)
+	return org
 }
 
 // newWebhookServiceWithDeps creates a WebhookService with real repos, queue and rate limiter.
@@ -169,8 +182,8 @@ func TestWebhookEventEmission_MultipleWebhooksMatch(t *testing.T) {
 	defer eventBus.Stop()
 
 	// Create two webhooks both subscribing to user.created with unique URLs
-	wh1 := createTestWebhookForEvents(t, suite.DB, "https://hook1.example.com/webhook", []string{"user.created"}, true)
-	wh2 := createTestWebhookForEvents(t, suite.DB, "https://hook2.example.com/webhook", []string{"user.created"}, true)
+	wh1 := createTestWebhookForEvents(t, suite.DB, "https://example.com/hooks/multi1", []string{"user.created"}, true)
+	wh2 := createTestWebhookForEvents(t, suite.DB, "https://example.com/hooks/multi2", []string{"user.created"}, true)
 
 	payload := map[string]interface{}{"user_id": uuid.New().String()}
 	err = eventBus.Publish(domain.WebhookEvent{Type: "user.created", Payload: payload})
@@ -267,17 +280,20 @@ func TestWebhookEventEmission_OrgScopedEvent(t *testing.T) {
 	require.NoError(t, err)
 	defer eventBus.Stop()
 
-	orgID := uuid.New()
-	otherOrgID := uuid.New()
+	// Create org records so the FK constraint is satisfied
+	org := createTestOrganizationForWebhook(t, suite.DB, "Test Org")
+	orgID := org.ID
+	otherOrg := createTestOrganizationForWebhook(t, suite.DB, "Other Org")
+	otherOrgID := otherOrg.ID
 
 	// Create a GLOBAL webhook subscribed to user.created
-	globalWH := createTestWebhookForEvents(t, suite.DB, "https://global.example.com/webhook", []string{"user.created"}, true)
+	globalWH := createTestWebhookForEvents(t, suite.DB, "https://example.com/hooks/global", []string{"user.created"}, true)
 
 	// Create an ORG-SCOPED webhook for orgID subscribed to user.created
-	orgWH := createTestOrgWebhookForEvents(t, suite.DB, orgID, "https://org.example.com/webhook", []string{"user.created"}, true)
+	orgWH := createTestOrgWebhookForEvents(t, suite.DB, orgID, "https://example.com/hooks/org", []string{"user.created"}, true)
 
 	// Create an ORG-SCOPED webhook for a DIFFERENT org subscribed to user.created
-	otherOrgWH := createTestOrgWebhookForEvents(t, suite.DB, otherOrgID, "https://other.example.com/webhook", []string{"user.created"}, true)
+	otherOrgWH := createTestOrgWebhookForEvents(t, suite.DB, otherOrgID, "https://example.com/hooks/other-org", []string{"user.created"}, true)
 
 	// Publish an event WITH org context
 	payload := map[string]interface{}{"user_id": uuid.New().String()}
