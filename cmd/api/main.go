@@ -612,12 +612,17 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "comment:manage", Description: "Pin, unpin, and manage comments", Resource: "comment", Action: "manage"},
 		{Name: "activity:view", Description: "View activity feed and history", Resource: "activity", Action: "view"},
 		{Name: "activity:manage", Description: "Manage activities (delete, admin)", Resource: "activity", Action: "manage"},
+		{Name: "tag:view", Description: "View tags", Resource: "tag", Action: "view"},
+		{Name: "tag:create", Description: "Create tags", Resource: "tag", Action: "create"},
+		{Name: "tag:update", Description: "Update tags", Resource: "tag", Action: "update"},
+		{Name: "tag:delete", Description: "Delete tags", Resource: "tag", Action: "delete"},
+		{Name: "tag:manage", Description: "Attach and detach tags to entities", Resource: "tag", Action: "manage"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage"},
 			},
 		},
 	}
