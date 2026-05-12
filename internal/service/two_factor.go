@@ -310,7 +310,12 @@ func (s *TwoFactorService) Verify2FALogin(ctx context.Context, pendingToken stri
 		return nil, apperrors.NewAppError("INVALID_TWO_FACTOR_SECRET", "Failed to decrypt two-factor secret", 400)
 	}
 
-	valid, err := totp.ValidateCustom(totpCode, string(secretBytes), time.Now(), totp.ValidateOpts{Skew: 1})
+	valid, err := totp.ValidateCustom(totpCode, string(secretBytes), time.Now(), totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
 	if err != nil || !valid {
 		return nil, apperrors.NewAppError("INVALID_TOTP_CODE", "Invalid TOTP code", 401)
 	}
@@ -489,7 +494,12 @@ func (s *TwoFactorService) RegenerateCodes(ctx context.Context, userID uuid.UUID
 	}
 
 	// Validate TOTP code with ±1 time step tolerance
-	valid, err := totp.ValidateCustom(totpCode, string(secretBytes), time.Now(), totp.ValidateOpts{Skew: 1})
+	valid, err := totp.ValidateCustom(totpCode, string(secretBytes), time.Now(), totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
 	if err != nil || !valid {
 		return nil, apperrors.NewAppError("INVALID_TOTP_CODE", "Invalid TOTP code", 401)
 	}
