@@ -42,7 +42,9 @@ type Server struct {
 	auditSvc       *service.AuditService
 	emailWorker    *service.EmailWorker
 	webhookWorker  *service.WebhookWorker
-	webhookService *service.WebhookService
+	webhookService  *service.WebhookService
+	activityService *service.ActivityService
+	activityReaper  *service.ActivityReaper
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -290,6 +292,26 @@ func (s *Server) SetWebhookService(webhookService *service.WebhookService) {
 // WebhookService returns the webhook service
 func (s *Server) WebhookService() *service.WebhookService {
 	return s.webhookService
+}
+
+// SetActivityService sets the activity service
+func (s *Server) SetActivityService(activityService *service.ActivityService) {
+	s.activityService = activityService
+}
+
+// ActivityService returns the activity service
+func (s *Server) ActivityService() *service.ActivityService {
+	return s.activityService
+}
+
+// SetActivityReaper sets the activity reaper
+func (s *Server) SetActivityReaper(reaper *service.ActivityReaper) {
+	s.activityReaper = reaper
+}
+
+// ActivityReaper returns the activity reaper
+func (s *Server) ActivityReaper() *service.ActivityReaper {
+	return s.activityReaper
 }
 
 // EventBus returns the event bus
@@ -689,6 +711,16 @@ func (s *Server) RegisterRoutes() {
 	notificationService := service.NewNotificationService(notificationRepo, notificationPrefRepo, emailService, userRepo, s.cache, slog.Default())
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 	s.RegisterNotificationRoutes(v1, notificationHandler)
+
+	// Activity feed routes
+	activityRepo := repository.NewActivityRepository(s.db)
+	activityReadRepo := repository.NewActivityReadRepository(s.db)
+	activityFollowRepo := repository.NewActivityFollowRepository(s.db)
+	activityService := service.NewActivityService(activityRepo, activityReadRepo, activityFollowRepo, userRepo, s.enforcer, auditService, slog.Default())
+	activityFollowService := service.NewActivityFollowService(activityFollowRepo, s.enforcer, auditService, slog.Default())
+	s.SetActivityService(activityService)
+	activityHandler := handler.NewActivityHandler(activityService, activityFollowService, s.enforcer)
+	activityHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 
 	// Search routes
 	savedSearchRepo := repository.NewSavedSearchRepository(s.db)
