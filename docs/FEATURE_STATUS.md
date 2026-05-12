@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-11 — Feature Flags system complete
+**Last Updated:** 2026-05-12 — Comment system documented, remaining features verified
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -220,14 +220,52 @@ Set `EMAIL_PROVIDER=smtp|sendgrid|ses` with provider-specific credentials:
 
 ---
 
-## Priority 2: Enhanced Features (Partial Analysis)
+### 2.4 Comment System
 
-These features from the recommendations were not checked in this analysis (lower priority):
+**Status:** ✅ FULLY IMPLEMENTED
 
-- **2.2 File Versioning** - ✅ FULLY IMPLEMENTED (see below)
-- **2.4 Comment System** - Not checked
-- **2.5 Tagging System** - Not checked
-- **2.6 Activity Feed / Timeline** - Not checked
+| Component | Location |
+|-----------|----------|
+| Domain entity | `internal/domain/comment.go` (Comment struct, CommentResponse, CommentableTypes) |
+| Repository (interface + impl) | `internal/repository/comment.go` (CommentRepository: Create, FindByID, FindByCommentable, FindReplies, Update, SoftDelete, CountByCommentable, CountReplies) |
+| Service | `internal/service/comment.go` (CommentService: Create, GetByID, ListByCommentable, ListReplies, Update, Delete, Pin, Unpin, mention parsing) |
+| Handler | `internal/http/handler/comment.go` (CommentHandler: Create, GetByID, ListByCommentable, ListReplies, Update, Delete, Pin, Unpin) |
+| Request DTOs | `internal/http/request/comment.go` (CreateCommentRequest, UpdateCommentRequest with validation) |
+| Response DTOs | `internal/http/response/comment.go` (CommentListResponse) |
+| DI wiring | `internal/http/server.go:475-477, 510, 680-681, 1154-1191` |
+| Permissions seed | `cmd/api/main.go:581-585` (5 permissions: view, create, delete, delete_any, manage) |
+| Migration | `migrations/000022_create_comments.up.sql`, `.down.sql` |
+| Unit tests | `tests/unit/comment_service_test.go` (54 test cases) |
+
+**Key Features:**
+- Polymorphic commentable types: `news`, `invoice`, `media` (validated via `IsValidCommentableType`)
+- Threaded comments with `parent_id` for replies
+- `@mention` support: `parseMentions` extracts mentioned user IDs from content
+- Pin/Unpin comments for admin moderation
+- Organization-scoped: all comments tied to `organization_id`
+- Soft delete with `deleted_at`
+- Partial unique indexes for consistency
+- RBAC enforcement: 5 permission levels (view, create, delete own, delete any, manage)
+- Audit logging on all mutations
+
+**Endpoints:**
+- `POST /api/v1/:type/:id/comments` - Create comment on commentable entity
+- `GET /api/v1/:type/:id/comments` - List comments for commentable entity
+- `GET /api/v1/comments/:id` - Get comment by ID
+- `GET /api/v1/comments/:id/replies` - List replies to a comment
+- `PUT /api/v1/comments/:id` - Update comment
+- `DELETE /api/v1/comments/:id` - Soft-delete comment
+- `POST /api/v1/comments/:id/pin` - Pin comment
+- `POST /api/v1/comments/:id/unpin` - Unpin comment
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| `comment:view` | comment | view | View comments |
+| `comment:create` | comment | create | Create and edit own comments |
+| `comment:delete` | comment | delete | Delete own comments |
+| `comment:delete_any` | comment | delete_any | Delete any comment (admin) |
+| `comment:manage` | comment | manage | Pin, unpin, and manage comments |
 
 ---
 
@@ -467,18 +505,84 @@ Import:
 
 ---
 
-## Priority 3: Features
+## Priority 3: Advanced Features (Not Implemented)
 
-These features from the recommendations were not checked in this analysis:
+### 3.1 Real-time Communication (WebSocket)
 
-- **3.1 Real-time Communication (WebSocket)** - Not checked
-- **3.3 Analytics Dashboard** - Not checked
+**Status:** ❌ NOT IMPLEMENTED
+
+**Description:** Room-based WebSocket hub for live collaboration, notifications, and presence indicators. Requires Redis pub/sub for multi-instance scaling.
+
+**Recommended Implementation:**
+- `WebSocketHub` with room-based broadcasting
+- `Client` with presence/typing indicators
+- Redis pub/sub for cross-instance messaging
+- `internal/domain/websocket.go`, `internal/service/websocket_hub.go`, `internal/http/handler/websocket.go`
+
+---
+
+### 3.3 Analytics Dashboard
+
+**Status:** ❌ NOT IMPLEMENTED
+
+**Description:** Usage analytics, metrics, and dashboard data aggregation. Uses built-in PostgreSQL for storage.
+
+**Recommended Implementation:**
+- `MetricEvent` entity for raw event capture with JSONB metadata
+- `DashboardMetric` for pre-aggregated data (daily/weekly/monthly)
+- REST endpoints for metric ingestion and dashboard queries
+- Background aggregation worker
+
+---
+
+## Priority 2: Enhanced Features (Not Implemented)
+
+### 2.5 Tagging System
+
+**Status:** ❌ NOT IMPLEMENTED
+
+**Description:** Flexible polymorphic tagging system with tag autocomplete.
+
+**Recommended Implementation:**
+- `Tag` entity (name, slug, color, usage_count)
+- `EntityTag` polymorphic join table (entity_type, entity_id, tag_id)
+- CRUD endpoints + autocomplete endpoint
+- Soft delete with usage count tracking
+
+**Est. Effort:** 1 day | **Complexity:** Low | **Dependencies:** None
+
+---
+
+### 2.6 Activity Feed / Timeline
+
+**Status:** ❌ NOT IMPLEMENTED
+
+**Description:** Chronological activity stream for users showing actions across the system. Depends on the Notification system (✅ implemented).
+
+**Recommended Implementation:**
+- `Activity` entity with actor, action_type, resource_type, metadata (JSONB)
+- Predefined activity constants (`invoice.created`, `news.published`, etc.)
+- EventBus integration for automatic activity generation
+- Paginated feed endpoint with filtering
+
+**Est. Effort:** 2 days | **Complexity:** Medium | **Dependencies:** Notification system ✅
+
+---
+
+## Recommended Next Steps
+
+Based on the analysis, the following should be prioritized:
+
+1. **Tagging System** (1 day, P2, no deps) — simplest remaining feature, enhances search/filter
+2. **Activity Feed / Timeline** (2 days, P2, notification dep met) — high user value, builds on EventBus
+3. **Real-time WebSocket** (3-4 days, P3, Redis dep met) — significant effort but enables real-time features
+4. **Analytics Dashboard** (4-5 days, P3, no deps) — largest remaining effort
 
 ---
 
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (12 features verified complete)
+### ✅ Implemented (13 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|
@@ -489,33 +593,23 @@ These features from the recommendations were not checked in this analysis:
 | Webhook System | P1 | ✅ Complete |
 | 2FA | P2 | ✅ Complete |
 | Search & Filtering | P2 | ✅ Complete |
-| Background Job Queue | P2 | ✅ Complete |
 | File Versioning | P2 | ✅ Complete |
+| Comment System | P2 | ✅ Complete |
+| Background Job Queue | P3 | ✅ Complete |
 | Data Import/Export System | P3 | ✅ Complete |
 | Settings & Configuration | P3 | ✅ Complete |
 | Feature Flags | P3 | ✅ Complete |
 
-### ❌ Not Checked in This Analysis
+### ❌ Not Implemented (4 features remaining)
 
-These features from `FEATURE_RECOMMENDATIONS.md` were not evaluated (lower priority / out of scope):
+These features from `FEATURE_RECOMMENDATIONS.md` have been verified as NOT present in the codebase:
 
-| Feature | Priority | Status |
-|---------|----------|--------|
-| Comment System | P2 | ❌ Not checked |
-| Tagging System | P2 | ❌ Not checked |
-| Activity Feed / Timeline | P2 | ❌ Not checked |
-| Real-time (WebSocket) | P3 | ❌ Not checked |
-| Analytics Dashboard | P3 | ❌ Not checked |
-| Feature Flags | P3 | ❌ Not checked |
-
----
-
-## Recommended Next Steps
-
-Based on the analysis, the following should be prioritized:
-
-1. **Add unit tests** - Several features lack unit tests despite having integration tests
-2. **Analyze Priority 2/3 features** - Complete the analysis for remaining features
+| Feature | Priority | Complexity | Est. Effort | Dependencies |
+|---------|----------|------------|-------------|--------------|
+| Tagging System | P2 | Low | 1 day | None |
+| Activity Feed / Timeline | P2 | Medium | 2 days | Notification system ✅ |
+| Real-time Communication (WebSocket) | P3 | High | 3-4 days | Redis pub/sub ✅ |
+| Analytics Dashboard | P3 | High | 4-5 days | None |
 
 ---
 
