@@ -62,6 +62,11 @@ type PasswordResetConfig struct {
 	TokenExpiry time.Duration `mapstructure:"token_expiry"`
 }
 
+// TwoFactorConfig holds two-factor authentication configuration.
+type TwoFactorConfig struct {
+	EncryptionKey string `mapstructure:"encryption_key"`
+}
+
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	Port int `mapstructure:"port"`
@@ -109,6 +114,7 @@ type Config struct {
 	Activity         ActivityConfig         `mapstructure:"activity"`
 	WebSocket        WsConfig               `mapstructure:"websocket"`
 	Analytics        AnalyticsConfig        `mapstructure:"analytics"`
+	TwoFactor        TwoFactorConfig        `mapstructure:"two_factor"`
 }
 
 var (
@@ -207,6 +213,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseAnalyticsConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse analytics config: %w", err)
+	}
+
+	if err := parseTwoFactorConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse two factor config: %w", err)
 	}
 
 	// Validate required fields
@@ -347,6 +357,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("analytics.reaper_interval", "60s")
 	v.SetDefault("analytics.default_page_size", 20)
 	v.SetDefault("analytics.max_page_size", 100)
+
+	// Two-factor authentication defaults
+	v.SetDefault("two_factor.encryption_key", "")
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)
@@ -844,6 +857,16 @@ func getEnvDurationOrDefault(envKey, value string) time.Duration {
 	}
 	return d
 }
+
+// parseTwoFactorConfig parses two-factor authentication configuration from environment.
+func parseTwoFactorConfig(v *viper.Viper, cfg *Config) error {
+	cfg.TwoFactor.EncryptionKey = os.Getenv("TWO_FACTOR_ENCRYPTION_KEY")
+	if cfg.TwoFactor.EncryptionKey == "" {
+		cfg.TwoFactor.EncryptionKey = v.GetString("two_factor.encryption_key")
+	}
+	return nil
+}
+
 // GetProjectRoot returns the project root directory.
 func GetProjectRoot() string {
 	// Try to find project root by looking for go.mod

@@ -8,7 +8,8 @@
     { "key": "token", "value": "" },
     { "key": "org_id", "value": "" },
     { "key": "user_id", "value": "" },
-    { "key": "refresh_token", "value": "" }
+    { "key": "refresh_token", "value": "" },
+    { "key": "pending_token", "value": "" }
   ],
   "item": [
     {
@@ -65,6 +66,9 @@
                   "}",
                   "if (res.data && res.data.refresh_token) {",
                   "    pm.collectionVariables.set('refresh_token', res.data.refresh_token);",
+                  "}",
+                  "if (res.data && res.data.pending_token) {",
+                  "    pm.collectionVariables.set('pending_token', res.data.pending_token);",
                   "}"
                 ]
               }
@@ -135,14 +139,28 @@
       ]
     },
     {
-      "name": "2FA / Sessions",
+      "name": "2FA",
       "item": [
         {
           "name": "Setup 2FA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.secret) {",
+                  "    pm.collectionVariables.set('two_factor_secret', res.data.secret);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/2fa/setup", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "setup"] }
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/setup", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "setup"] }
           },
           "response": []
         },
@@ -156,9 +174,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"123456\"\n}"
+              "raw": "{\n  \"totp_code\": \"123456\"\n}"
             },
-            "url": { "raw": "{{base_url}}/api/v1/2fa/verify-enable", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "verify-enable"] }
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/verify-enable", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "verify-enable"] }
           },
           "response": []
         },
@@ -167,7 +185,7 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/2fa/status", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "status"] }
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/status", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "status"] }
           },
           "response": []
         },
@@ -175,8 +193,15 @@
           "name": "Disable 2FA",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/2fa", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa"] }
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totp_code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa"] }
           },
           "response": []
         },
@@ -184,11 +209,49 @@
           "name": "Regenerate Recovery Codes",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": { "raw": "{{base_url}}/api/v1/2fa/regenerate-codes", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "regenerate-codes"] }
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totp_code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/regenerate-codes", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "regenerate-codes"] }
           },
           "response": []
         },
+        {
+          "name": "Verify 2FA Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pending_token\": \"{{pending_token}}\",\n  \"totp_code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/verify", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "verify"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Recovery Code Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pending_token\": \"{{pending_token}}\",\n  \"code\": \"abcd-efgh\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/2fa/recovery-login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "2fa", "recovery-login"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "item": [
         {
           "name": "List Sessions",
           "request": {

@@ -708,6 +708,11 @@ func (s *Server) RegisterRoutes() {
 		twoFactor.GET("/status", twoFactorHandler.GetStatus)
 		twoFactor.DELETE("", twoFactorHandler.Disable)
 		twoFactor.POST("/regenerate-codes", twoFactorHandler.RegenerateCodes)
+
+		// 2FA login verification (public - no JWT required, uses pending token)
+		twoFactorPublic := v1.Group("/auth/2fa")
+		twoFactorPublic.POST("/verify", twoFactorHandler.Verify2FALogin)
+		twoFactorPublic.POST("/recovery-login", twoFactorHandler.UseRecoveryCode)
 	}
 
 	// MED-006: Auth metrics endpoint (protected, admin-only in production)
