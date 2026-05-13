@@ -536,7 +536,7 @@ func (s *Server) RegisterRoutes() {
 	orgService := service.NewOrganizationService(organizationRepo, userRepo, s.enforcer, auditService, emailService, slog.Default())
 
 	// Initialize webhook service and handler
-	webhookService := service.NewWebhookService(webhookRepo, webhookDeliveryRepo, &s.config.Webhook, s.logger)
+	webhookService := service.NewWebhookService(webhookRepo, webhookDeliveryRepo, &s.config.Webhook, s.logger, s.config.SSRF.ToInternal())
 	s.SetWebhookService(webhookService)
 	webhookHandler := handler.NewWebhookHandler(webhookService, s.enforcer, s.logger)
 
@@ -831,7 +831,8 @@ func (s *Server) RegisterEmailRoutes(api *echo.Group) {
 	var emailProvider service.EmailProvider
 	switch s.config.Email.Provider {
 	case "sendgrid":
-		emailProvider = service.NewSendGridProvider(&s.config.Email)
+		ssrfCfg := s.config.SSRF.ToInternal()
+		emailProvider = service.NewSendGridProvider(&s.config.Email, &ssrfCfg)
 	case "ses":
 		sesCfg := &config.SESConfig{
 			Region:          s.config.Email.AWSRegion,

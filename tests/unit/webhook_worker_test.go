@@ -181,13 +181,7 @@ func defaultTestConfig() *config.WebhookConfig {
 
 func TestWebhookWorker_NewWebhookWorker(t *testing.T) {
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(
-		cfg,
-		&mockWebhookDeliveryRepository{},
-		&mockWebhookRepository{},
-		&mockWebhookQueue{},
-		newMockWebhookRateLimiter(),
-	)
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, &mockWebhookQueue{}, newMockWebhookRateLimiter(), nil)
 
 	assert.NotNil(t, worker)
 	m := worker.Metrics()
@@ -202,13 +196,7 @@ func TestWebhookWorker_NewWebhookWorker(t *testing.T) {
 
 func TestWebhookWorker_Metrics(t *testing.T) {
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(
-		cfg,
-		&mockWebhookDeliveryRepository{},
-		&mockWebhookRepository{},
-		&mockWebhookQueue{},
-		newMockWebhookRateLimiter(),
-	)
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, &mockWebhookQueue{}, newMockWebhookRateLimiter(), nil)
 
 	m := worker.Metrics()
 	assert.Len(t, m, 3)
@@ -228,13 +216,7 @@ func TestWebhookWorker_Metrics(t *testing.T) {
 
 func TestWebhookWorker_GracefulShutdown(t *testing.T) {
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(
-		cfg,
-		&mockWebhookDeliveryRepository{},
-		&mockWebhookRepository{},
-		&mockWebhookQueue{},
-		newMockWebhookRateLimiter(),
-	)
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, &mockWebhookQueue{}, newMockWebhookRateLimiter(), nil)
 
 	worker.Start()
 	time.Sleep(100 * time.Millisecond)
@@ -243,13 +225,7 @@ func TestWebhookWorker_GracefulShutdown(t *testing.T) {
 
 func TestWebhookWorker_StartStopMultiple(t *testing.T) {
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(
-		cfg,
-		&mockWebhookDeliveryRepository{},
-		&mockWebhookRepository{},
-		&mockWebhookQueue{},
-		newMockWebhookRateLimiter(),
-	)
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, &mockWebhookQueue{}, newMockWebhookRateLimiter(), nil)
 
 	worker.Start()
 	time.Sleep(50 * time.Millisecond)
@@ -272,7 +248,7 @@ func TestWebhookWorker_EmptyQueue(t *testing.T) {
 	}
 
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter())
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter(), nil)
 	worker.Start()
 	time.Sleep(1100 * time.Millisecond)
 	worker.Stop()
@@ -299,7 +275,7 @@ func TestWebhookWorker_InvalidDeliveryID(t *testing.T) {
 	}
 
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter())
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter(), nil)
 	worker.Start()
 	time.Sleep(1500 * time.Millisecond)
 	worker.Stop()
@@ -334,7 +310,7 @@ func TestWebhookWorker_Delivery_DeliveryNotFound(t *testing.T) {
 	}
 
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(cfg, deliveryRepo, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter())
+	worker := service.NewWebhookWorker(cfg, deliveryRepo, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter(), nil)
 	worker.Start()
 	time.Sleep(1500 * time.Millisecond)
 	worker.Stop()
@@ -386,7 +362,7 @@ func TestWebhookWorker_Delivery_WebhookNotFound(t *testing.T) {
 	}
 
 	cfg := defaultTestConfig()
-	worker := service.NewWebhookWorker(cfg, deliveryRepo, webhookRepo, queue, newMockWebhookRateLimiter())
+	worker := service.NewWebhookWorker(cfg, deliveryRepo, webhookRepo, queue, newMockWebhookRateLimiter(), nil)
 	worker.Start()
 	time.Sleep(1500 * time.Millisecond)
 	worker.Stop()
@@ -411,7 +387,7 @@ func TestWebhookWorker_ConcurrentWorkers(t *testing.T) {
 		},
 	}
 
-	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter())
+	worker := service.NewWebhookWorker(cfg, &mockWebhookDeliveryRepository{}, &mockWebhookRepository{}, queue, newMockWebhookRateLimiter(), nil)
 	worker.Start()
 	time.Sleep(2500 * time.Millisecond)
 	worker.Stop()

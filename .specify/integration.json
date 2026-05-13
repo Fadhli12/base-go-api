@@ -1,4 +1,15 @@
 {
+  "version": "0.8.9.dev0",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "opencode"
+  ],
+  "integration_settings": {
+    "opencode": {
+      "script": "ps",
+      "invoke_separator": "."
+    }
+  },
   "integration": "opencode",
-  "version": "0.7.4.dev0"
+  "default_integration": "opencode"
 }

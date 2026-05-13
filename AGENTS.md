@@ -5,8 +5,8 @@
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/018-analytics-dashboard/plan.md](specs/018-analytics-dashboard/plan.md) - Analytics Dashboard
-**Latest Feature**: [specs/018-analytics-dashboard/plan.md](specs/018-analytics-dashboard/plan.md) - Analytics Dashboard ✅
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
 <!-- SPECKIT END -->
 
 ---

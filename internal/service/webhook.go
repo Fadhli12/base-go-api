@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -16,18 +14,21 @@ import (
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/logger"
 	"github.com/example/go-api-base/internal/repository"
+	"github.com/example/go-api-base/internal/ssrf"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
+	"log/slog"
 )
 
 // WebhookService handles webhook-related business logic.
 type WebhookService struct {
-	webhookRepo   repository.WebhookRepository
-	deliveryRepo  repository.WebhookDeliveryRepository
-	config        *config.WebhookConfig
-	logger        logger.Logger
-	queue         WebhookQueue
-	rateLimiter   WebhookRateLimiterInterface
+	webhookRepo  repository.WebhookRepository
+	deliveryRepo repository.WebhookDeliveryRepository
+	config       *config.WebhookConfig
+	logger       logger.Logger
+	queue        WebhookQueue
+	rateLimiter  WebhookRateLimiterInterface
+	validator    *ssrf.SSRFValidator
 }
 
 // NewWebhookService creates a new WebhookService instance.
@@ -36,12 +37,15 @@ func NewWebhookService(
 	deliveryRepo repository.WebhookDeliveryRepository,
 	config *config.WebhookConfig,
 	logger logger.Logger,
+	ssrfCfg ssrf.SSRFConfig,
 ) *WebhookService {
+	validator := ssrf.NewValidator(ssrfCfg, slog.Default())
 	return &WebhookService{
 		webhookRepo:  webhookRepo,
 		deliveryRepo: deliveryRepo,
 		config:       config,
 		logger:       logger,
+		validator:    validator,
 	}
 }
 
@@ -73,8 +77,8 @@ func (s *WebhookService) Create(
 	}
 
 	// Validate URL
-	if err := validateURL(req.URL, s.config.AllowHTTP); err != nil {
-		return nil, err
+	if err := s.validator.ValidateURL(req.URL); err != nil {
+		return nil, apperrors.NewAppError("VALIDATION_ERROR", err.Error(), 422)
 	}
 
 	// Validate events
@@ -193,8 +197,8 @@ func (s *WebhookService) Update(
 
 	// URL
 	if req.URL != nil {
-		if err := validateURL(*req.URL, s.config.AllowHTTP); err != nil {
-			return nil, err
+		if err := s.validator.ValidateURL(*req.URL); err != nil {
+			return nil, apperrors.NewAppError("VALIDATION_ERROR", err.Error(), 422)
 		}
 		if *req.URL != webhook.URL {
 			urlChanged = true
@@ -317,15 +321,15 @@ func (s *WebhookService) ReplayDelivery(
 	delivery.Replay()
 
 	updates := map[string]interface{}{
-		"status":               domain.WebhookDeliveryStatusQueued,
-		"attempt_number":       1,
-		"response_code":        nil,
-		"response_body":       "",
-		"duration_ms":         nil,
-		"last_error":          "",
-		"next_retry_at":       nil,
+		"status":                domain.WebhookDeliveryStatusQueued,
+		"attempt_number":        1,
+		"response_code":         nil,
+		"response_body":         "",
+		"duration_ms":           nil,
+		"last_error":            "",
+		"next_retry_at":         nil,
 		"processing_started_at": nil,
-		"delivered_at":        nil,
+		"delivered_at":          nil,
 	}
 
 	if err := s.deliveryRepo.UpdateStatus(ctx, deliveryID, domain.WebhookDeliveryStatusQueued, updates); err != nil {
@@ -508,69 +512,6 @@ func (s *WebhookService) SubscribeToEventBus(bus *domain.EventBus) {
 			)
 		}
 	})
-}
-
-// validateURL validates a webhook URL and blocks private/internal IPs (SSRF protection).
-func validateURL(rawURL string, allowHTTP bool) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return apperrors.NewAppError("VALIDATION_ERROR", "invalid URL", 422)
-	}
-
-	switch u.Scheme {
-	case "https":
-		// always allowed
-	case "http":
-		if !allowHTTP {
-			return apperrors.NewAppError("VALIDATION_ERROR", "URL must use HTTPS", 422)
-		}
-	default:
-		return apperrors.NewAppError("VALIDATION_ERROR", "URL scheme must be http or https", 422)
-	}
-
-	host := u.Hostname()
-	if host == "" {
-		return apperrors.NewAppError("VALIDATION_ERROR", "URL must have a valid host", 422)
-	}
-
-	// Resolve host to IP addresses
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		// If DNS lookup fails, try parsing as a literal IP
-		ip := net.ParseIP(host)
-		if ip == nil {
-			return apperrors.NewAppError("VALIDATION_ERROR", "unable to resolve URL host", 422)
-		}
-		ips = []net.IP{ip}
-	}
-
-	for _, ip := range ips {
-		if isPrivateIP(ip) {
-			return apperrors.NewAppError("VALIDATION_ERROR", "URL resolves to a private or internal IP address", 422)
-		}
-	}
-
-	return nil
-}
-
-// isPrivateIP checks if an IP address is in a private/link-local/loopback range.
-func isPrivateIP(ip net.IP) bool {
-	// Loopback: 127.0.0.0/8, ::1
-	if ip.IsLoopback() {
-		return true
-	}
-
-	// Private (RFC1918): 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-	if ip.IsPrivate() {
-		return true
-	}
-
-	// Link-local: 169.254.0.0/16, fe80::/10
-	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-		return true
-	}
-
-	return false
 }
 
 // validateEvents validates that all provided events are supported.

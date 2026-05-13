@@ -20,7 +20,7 @@ func newTestSendGridProvider(baseURL string) *service.SendGridProvider {
 		SendGridFromAddress: "noreply@example.com",
 		SendGridFromName:    "Test App",
 	}
-	provider := service.NewSendGridProvider(cfg)
+	provider := service.NewSendGridProvider(cfg, nil)
 	provider.SetBaseURL(baseURL)
 	provider.SetHTTPClient(&http.Client{Timeout: 5 * time.Second})
 	return provider
@@ -347,7 +347,7 @@ func TestSendGridProvider_Send_MissingFromAddress(t *testing.T) {
 		SendGridFromAddress: "",
 		SendGridFromName:    "Test",
 	}
-	provider := service.NewSendGridProvider(cfg)
+	provider := service.NewSendGridProvider(cfg, nil)
 	provider.SetBaseURL("http://localhost")
 	provider.SetHTTPClient(&http.Client{Timeout: 5 * time.Second})
 
@@ -370,7 +370,7 @@ func TestSendGridProvider_Send_MissingAPIKey(t *testing.T) {
 		SendGridAPIKey:      "",
 		SendGridFromAddress: "noreply@example.com",
 	}
-	provider := service.NewSendGridProvider(cfg)
+	provider := service.NewSendGridProvider(cfg, nil)
 	provider.SetBaseURL("http://localhost")
 	provider.SetHTTPClient(&http.Client{Timeout: 5 * time.Second})
 

@@ -46,6 +46,7 @@ import (
 	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/service"
+	"github.com/example/go-api-base/internal/ssrf"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
@@ -362,7 +363,8 @@ func runServer() error {
 	}
 
 	// Initialize WebhookWorker for background webhook delivery
-	webhookWorker := initWebhookWorker(cfg, db, redisClient, server)
+	ssrfCfg := cfg.SSRF.ToInternal()
+	webhookWorker := initWebhookWorker(cfg, db, redisClient, server, &ssrfCfg)
 	if webhookWorker != nil {
 		server.SetWebhookWorker(webhookWorker)
 	}
@@ -754,7 +756,7 @@ func initEmailWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client,
 }
 
 // initWebhookWorker initializes the webhook worker for background delivery processing.
-func initWebhookWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, server *apphttp.Server) *service.WebhookWorker {
+func initWebhookWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, server *apphttp.Server, ssrfCfg *ssrf.SSRFConfig) *service.WebhookWorker {
 	slog.Info("Initializing webhook worker...")
 
 	// Initialize webhook repositories
@@ -767,13 +769,14 @@ func initWebhookWorker(cfg *config.Config, db *gorm.DB, redisClient *redis.Clien
 	// Initialize webhook rate limiter
 	webhookRateLimiter := service.NewWebhookRateLimiter(redisClient, cfg.Webhook.RateLimit)
 
-	// Initialize webhook worker
+	// Initialize webhook worker with SSRF protection
 	webhookWorker := service.NewWebhookWorker(
 		&cfg.Webhook,
 		webhookDeliveryRepo,
 		webhookRepo,
 		webhookQueue,
 		webhookRateLimiter,
+		ssrfCfg,
 	)
 
 	slog.Info("Webhook worker initialized",

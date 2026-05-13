@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/repository"
+	"github.com/example/go-api-base/internal/ssrf"
 	"github.com/google/uuid"
 )
 
@@ -25,7 +25,7 @@ type WebhookWorker struct {
 	webhookRepo  repository.WebhookRepository
 	redisQueue   WebhookQueue
 	rateLimiter  WebhookRateLimiterInterface
-	httpClient   *http.Client // nil = use NewHTTPClient (SSRF-protected)
+	httpClient   *http.Client // SSRF-safe HTTP client
 
 	// Lifecycle management
 	ctx    context.Context
@@ -45,14 +45,31 @@ func NewWebhookWorker(
 	webhookRepo repository.WebhookRepository,
 	redisQueue WebhookQueue,
 	rateLimiter WebhookRateLimiterInterface,
+	ssrfCfg *ssrf.SSRFConfig,
 ) *WebhookWorker {
-	return &WebhookWorker{
+	var httpClient *http.Client
+	if ssrfCfg != nil {
+		httpClient = ssrf.NewClient(ssrfCfg, slog.Default())
+		// Override SSRF client timeout with webhook-specific delivery timeout
+		httpClient.Timeout = config.DeliveryTimeout
+	} else {
+		// No SSRF config — use default secure config instead of unprotected client.
+		// This ensures SSRF protection is always active, even if config is missing.
+		defaultCfg := ssrf.DefaultSSRFConfig()
+		httpClient = ssrf.NewClient(&defaultCfg, slog.Default())
+		httpClient.Timeout = config.DeliveryTimeout
+		slog.Warn("SSRF config not provided, using default secure config for webhook worker")
+	}
+
+	worker := &WebhookWorker{
 		config:       config,
 		deliveryRepo: deliveryRepo,
 		webhookRepo:  webhookRepo,
 		redisQueue:   redisQueue,
 		rateLimiter:  rateLimiter,
+		httpClient:   httpClient,
 	}
+	return worker
 }
 
 // SetHTTPClient injects a custom HTTP client for testing.
@@ -259,9 +276,6 @@ func (w *WebhookWorker) processDelivery(deliveryID uuid.UUID) error {
 
 	// Execute HTTP request
 	client := w.httpClient
-	if client == nil {
-		client = w.NewHTTPClient()
-	}
 	start := time.Now()
 	resp, err := client.Do(req)
 	durationMs := time.Since(start).Milliseconds()
@@ -453,26 +467,6 @@ func (w *WebhookWorker) retentionCleanup() {
 				slog.Info("Webhook retention cleanup completed")
 			}
 		}
-	}
-}
-
-// NewHTTPClient creates an HTTP client with SSRF protection.
-func (w *WebhookWorker) NewHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: w.config.DeliveryTimeout,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, _, _ := net.SplitHostPort(addr)
-				ip := net.ParseIP(host)
-				if ip != nil && isPrivateIP(ip) {
-					return nil, fmt.Errorf("SSRF blocked: private IP %s", host)
-				}
-				return (&net.Dialer{}).DialContext(ctx, network, addr)
-			},
-		},
 	}
 }
 

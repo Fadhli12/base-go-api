@@ -115,6 +115,7 @@ type Config struct {
 	WebSocket        WsConfig               `mapstructure:"websocket"`
 	Analytics        AnalyticsConfig        `mapstructure:"analytics"`
 	TwoFactor        TwoFactorConfig        `mapstructure:"two_factor"`
+	SSRF             SSRFConfig             `mapstructure:"ssrf"`
 }
 
 var (
@@ -217,6 +218,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseTwoFactorConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse two factor config: %w", err)
+	}
+
+	if err := parseSSRFConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse ssrf config: %w", err)
 	}
 
 	// Validate required fields
@@ -360,6 +365,12 @@ func setDefaults(v *viper.Viper) {
 
 	// Two-factor authentication defaults
 	v.SetDefault("two_factor.encryption_key", "")
+
+	// SSRF protection defaults
+	v.SetDefault("ssrf.allow_private_ips", false)
+	v.SetDefault("ssrf.allowed_schemes", "https")
+	v.SetDefault("ssrf.blocked_hosts", "metadata.internal,metadata.google.internal,instance-data.ec2.internal")
+	v.SetDefault("ssrf.timeout", "30s")
 
 	// Data portability defaults
 	v.SetDefault("data_portability.export_worker_concurrency", 5)

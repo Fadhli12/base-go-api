@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/example/go-api-base/internal/config"
+	"github.com/example/go-api-base/internal/ssrf"
 )
 
 const (
@@ -54,15 +56,25 @@ type SendGridProvider struct {
 }
 
 // NewSendGridProvider creates a new SendGrid email provider from the shared EmailConfig.
-func NewSendGridProvider(cfg *config.EmailConfig) *SendGridProvider {
+func NewSendGridProvider(cfg *config.EmailConfig, ssrfCfg *ssrf.SSRFConfig) *SendGridProvider {
+	var client *http.Client
+	if ssrfCfg != nil {
+		// Use SSRF-safe client but override timeout to SendGrid-specific 15s
+		client = ssrf.NewClient(ssrfCfg, slog.Default())
+		client.Timeout = 15 * time.Second
+	} else {
+		// No SSRF config — use default secure config with SendGrid timeout
+		defaultCfg := ssrf.DefaultSSRFConfig()
+		client = ssrf.NewClient(&defaultCfg, slog.Default())
+		client.Timeout = 15 * time.Second
+		slog.Warn("SSRF config not provided, using default secure config for SendGrid provider")
+	}
 	return &SendGridProvider{
 		apiKey:     cfg.SendGridAPIKey,
 		fromAddr:   cfg.SendGridFromAddress,
 		fromName:   cfg.SendGridFromName,
-		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
-		},
-		baseURL: sendgridAPIURL,
+		httpClient: client,
+		baseURL:    sendgridAPIURL,
 	}
 }
 
