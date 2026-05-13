@@ -22,12 +22,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -60,12 +65,127 @@ var serveCmd = &cobra.Command{
 	},
 }
 
+// ANSI color codes for CLI output
+const (
+	colorGreen  = "\033[32m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorReset  = "\033[0m"
+	colorBold   = "\033[1m"
+)
+
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: "Run database migrations",
+	Short: "Run pending database migrations",
+	Long:  `Run all pending database migrations. Equivalent to Laravel's "php artisan migrate".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runMigrations()
+		down, _ := cmd.Flags().GetBool("down")
+		if down {
+			fmt.Printf("%sWarning: --down is deprecated. Use 'migrate:rollback' instead.%s\n", colorYellow, colorReset)
+			return runMigrateRollback(1, false)
+		}
+		return runMigrateUp()
 	},
+}
+
+var migrateRollbackCmd = &cobra.Command{
+	Use:   "migrate:rollback",
+	Short: "Rollback the last batch of migrations",
+	Long: `Rollback database migrations.
+Use --step=N to rollback N migrations (default: 1).
+Use --all to rollback all migrations.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		all, _ := cmd.Flags().GetBool("all")
+		if all {
+			return runMigrateRollback(0, true)
+		}
+		step, _ := cmd.Flags().GetInt("step")
+		return runMigrateRollback(step, false)
+	},
+}
+
+var migrateStatusCmd = &cobra.Command{
+	Use:   "migrate:status",
+	Short: "Show the status of each migration",
+	Long:  `Show a table with the status (Ran/Pending) of each migration file. Equivalent to Laravel's "php artisan migrate:status".`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runMigrateStatus()
+	},
+}
+
+var migrateRefreshCmd = &cobra.Command{
+	Use:   "migrate:refresh",
+	Short: "Rollback all migrations and re-run them",
+	Long:  `Rollback ALL migrations and then run them again from scratch. Equivalent to Laravel's "php artisan migrate:refresh".`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		force, _ := cmd.Flags().GetBool("force")
+		if !force {
+			fmt.Printf("%sThis will rollback ALL migrations and re-run them. Continue? [y/N]: %s", colorYellow, colorReset)
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				fmt.Println("Cancelled.")
+				return nil
+			}
+		}
+		return runMigrateRefresh()
+	},
+}
+
+var migrateFreshCmd = &cobra.Command{
+	Use:   "migrate:fresh",
+	Short: "Drop all tables and re-run migrations from scratch",
+	Long:  `Drop all tables in the database and re-run migrations from scratch. Equivalent to Laravel's "php artisan migrate:fresh".`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		force, _ := cmd.Flags().GetBool("force")
+		skipSeed, _ := cmd.Flags().GetBool("skip-seed")
+
+		if !force {
+			fmt.Printf("%sThis will DROP ALL TABLES and re-run migrations. Continue? [y/N]: %s", colorRed, colorReset)
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				fmt.Println("Cancelled.")
+				return nil
+			}
+		}
+		return runMigrateFresh(skipSeed)
+	},
+}
+
+func init() {
+	// migrate command flags
+	migrateCmd.Flags().Bool("down", false, "(deprecated) Use 'migrate:rollback' instead")
+
+	// migrate:rollback flags
+	migrateRollbackCmd.Flags().Int("step", 1, "Number of migrations to rollback")
+	migrateRollbackCmd.Flags().Bool("all", false, "Rollback all migrations")
+
+	// migrate:refresh flags
+	migrateRefreshCmd.Flags().Bool("force", false, "Skip confirmation prompt")
+
+	// migrate:fresh flags
+	migrateFreshCmd.Flags().Bool("force", false, "Skip confirmation prompt")
+	migrateFreshCmd.Flags().Bool("skip-seed", false, "Skip seeding after fresh migration")
+
+	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(migrateCmd)
+	rootCmd.AddCommand(migrateRollbackCmd)
+	rootCmd.AddCommand(migrateStatusCmd)
+	rootCmd.AddCommand(migrateRefreshCmd)
+	rootCmd.AddCommand(migrateFreshCmd)
+	rootCmd.AddCommand(seedCmd)
+	rootCmd.AddCommand(permissionSyncCmd)
+
+	// Initialize structured logging
+	opts := &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}
+	handler := slog.NewJSONHandler(os.Stdout, opts)
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 }
 
 var seedCmd = &cobra.Command{
@@ -97,20 +217,7 @@ This command will:
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(serveCmd)
-	rootCmd.AddCommand(migrateCmd)
-	rootCmd.AddCommand(seedCmd)
-	rootCmd.AddCommand(permissionSyncCmd)
-
-	// Initialize structured logging
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}
-	handler := slog.NewJSONHandler(os.Stdout, opts)
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-}
+// init is removed — registration is done in the init() above with all migration commands
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -204,6 +311,46 @@ func runServer() error {
 	server.SetEnforcer(enforcer)
 	server.SetPermissionCache(permCache)
 	server.SetInvalidator(invalidator)
+
+	// Initialize 2FA service if encryption key is configured
+	if cfg.TwoFactor.EncryptionKey != "" {
+		encryptionKey := []byte(cfg.TwoFactor.EncryptionKey)
+		if len(encryptionKey) != 32 {
+			// If the key isn't 32 bytes when decoded as-is, try base64 decoding
+			decoded, err := base64.StdEncoding.DecodeString(cfg.TwoFactor.EncryptionKey)
+			if err != nil || len(decoded) != 32 {
+				slog.Error("TWO_FACTOR_ENCRYPTION_KEY must be 32 bytes (use: openssl rand -base64 32)", "key_length", len(encryptionKey))
+				return fmt.Errorf("invalid TWO_FACTOR_ENCRYPTION_KEY: must decode to 32 bytes for AES-256")
+			}
+			encryptionKey = decoded
+		}
+		twoFactorRecoveryCodeRepo := repository.NewTwoFactorRecoveryCodeRepository(db)
+		refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+		userRepo := repository.NewUserRepository(db)
+		tokenService := service.NewTokenService(
+			cfg.JWT.Secret,
+			cfg.JWT.Issuer,
+			cfg.JWT.Audience,
+			cfg.JWT.AccessExpiry,
+			cfg.JWT.RefreshExpiry,
+		)
+		auditService := service.NewAuditService(
+			repository.NewAuditLogRepository(db),
+			service.DefaultAuditServiceConfig(),
+		)
+		twoFactorSvc := service.NewTwoFactorService(
+			userRepo,
+			twoFactorRecoveryCodeRepo,
+			refreshTokenRepo,
+			tokenService,
+			service.TwoFactorServiceConfig{EncryptionKey: encryptionKey},
+			auditService,
+		)
+		server.SetTwoFactorService(twoFactorSvc)
+		slog.Info("Two-factor authentication service initialized")
+	} else {
+		slog.Warn("TWO_FACTOR_ENCRYPTION_KEY not set, 2FA endpoints will be disabled")
+	}
 
 	// Configure routes
 	server.RegisterRoutes()
@@ -824,90 +971,419 @@ func runPermissionSync() error {
 	return nil
 }
 
-// runMigrations runs all pending database migrations.
-func runMigrations() error {
-	slog.Info("Starting database migrations")
+// newMigrator is a helper that loads config, connects to DB, and creates a Migrate instance.
+// The caller must defer m.Close() and database.Close(db).
+func newMigrator() (*gorm.DB, *database.Migrate, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
 
-	// Load configuration
+	setLogLevel(cfg.Log.Level)
+
+	db, err := database.NewPostgresDB(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	m, err := database.NewMigrate(db, "file://migrations")
+	if err != nil {
+		database.Close(db)
+		return nil, nil, fmt.Errorf("failed to create migration handler: %w", err)
+	}
+
+	return db, m, nil
+}
+
+// runMigrateUp runs all pending migrations one-by-one with per-migration output.
+func runMigrateUp() error {
+	db, m, err := newMigrator()
+	if err != nil {
+		return err
+	}
+	defer database.Close(db)
+	defer m.Close()
+
+	fmt.Println("")
+	fmt.Printf("%sRunning migrations...%s\n", colorBold, colorReset)
+
+	// Get current version before starting
+	version, dirty, _ := m.Version()
+	if dirty {
+		fmt.Printf("%s⚠ Dirty state detected at version %d, forcing clean...%s\n", colorYellow, version, colorReset)
+		if forceErr := m.Force(int(version)); forceErr != nil {
+			return fmt.Errorf("failed to force clean version: %w", forceErr)
+		}
+		fmt.Printf("%s✓ Cleaned dirty state at version %d%s\n", colorGreen, version, colorReset)
+	}
+
+	applied := 0
+	failed := 0
+
+	// Step through migrations one at a time for detailed output
+	for {
+		currentVersion, _, _ := m.Version()
+
+		err := m.Steps(1)
+		if err != nil {
+			// No more migrations to run — this is expected
+			break
+		}
+
+		newVersion, _, _ := m.Version()
+		migrationName := findMigrationName(newVersion)
+		fmt.Printf("  %s✓ %s%s\n", colorGreen, migrationName, colorReset)
+		applied++
+		_ = currentVersion // suppress unused warning
+	}
+
+	if failed > 0 {
+		fmt.Printf("\n%s%d migrations ran, %d failed.%s\n", colorRed, applied, failed, colorReset)
+		return fmt.Errorf("%d migrations failed", failed)
+	}
+
+	if applied == 0 {
+		fmt.Printf("%sNothing to migrate.%s\n", colorYellow, colorReset)
+	} else {
+		fmt.Printf("\n%s✓ %d migration(s) ran successfully.%s\n", colorGreen, applied, colorReset)
+	}
+
+	return nil
+}
+
+// runMigrateRollback rolls back N migrations (or all if all=true).
+func runMigrateRollback(steps int, all bool) error {
+	db, m, err := newMigrator()
+	if err != nil {
+		return err
+	}
+	defer database.Close(db)
+	defer m.Close()
+
+	fmt.Println("")
+	if all {
+		fmt.Printf("%sRolling back all migrations...%s\n", colorBold, colorReset)
+	} else {
+		fmt.Printf("%sRolling back %d migration(s)...%s\n", colorBold, steps, colorReset)
+	}
+
+	rolledBack := 0
+
+	if all {
+		// Roll back one at a time for progress output
+		for {
+			currentVersion, _, verr := m.Version()
+			if verr != nil || currentVersion == 0 {
+				break // no more versions
+			}
+
+			migrationName := findMigrationName(currentVersion)
+			if err := m.Steps(-1); err != nil {
+				fmt.Printf("  %s✗ %s (error: %v)%s\n", colorRed, migrationName, err, colorReset)
+				break
+			}
+			fmt.Printf("  %s✓ %s%s\n", colorGreen, migrationName, colorReset)
+			rolledBack++
+		}
+	} else {
+		for i := 0; i < steps; i++ {
+			currentVersion, _, verr := m.Version()
+			if verr != nil || currentVersion == 0 {
+				break // no more versions
+			}
+
+			migrationName := findMigrationName(currentVersion)
+			if err := m.Steps(-1); err != nil {
+				fmt.Printf("  %s✗ %s (error: %v)%s\n", colorRed, migrationName, err, colorReset)
+				break
+			}
+			fmt.Printf("  %s✓ %s%s\n", colorGreen, migrationName, colorReset)
+			rolledBack++
+		}
+	}
+
+	if rolledBack == 0 {
+		fmt.Printf("%sNothing to rollback.%s\n", colorYellow, colorReset)
+	} else {
+		fmt.Printf("\n%s✓ %d migration(s) rolled back.%s\n", colorGreen, rolledBack, colorReset)
+	}
+
+	return nil
+}
+
+// runMigrateStatus shows a table with the status of each migration.
+func runMigrateStatus() error {
+	db, m, err := newMigrator()
+	if err != nil {
+		return err
+	}
+	defer database.Close(db)
+	defer m.Close()
+
+	// Read migration files from the migrations/ directory
+	migrationsDir := "migrations"
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("failed to read migrations directory: %w", err)
+	}
+
+	// Collect unique migration names (from .up.sql files)
+	type migrationEntry struct {
+		version uint
+		name    string
+	}
+	var migrations []migrationEntry
+	seen := make(map[uint]bool)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		// Extract version number from filename (format: NNNNNN_name.up.sql)
+		parts := strings.SplitN(name, "_", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		version, verr := strconv.ParseUint(parts[0], 10, 32)
+		if verr != nil {
+			continue
+		}
+		if seen[uint(version)] {
+			continue
+		}
+		seen[uint(version)] = true
+		// Remove the .up.sql suffix for display
+		migName := strings.TrimSuffix(name, ".up.sql")
+		migrations = append(migrations, migrationEntry{version: uint(version), name: migName})
+	}
+
+	// Sort by version
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].version < migrations[j].version
+	})
+
+	// Get current version
+	currentVersion, dirty, _ := m.Version()
+
+	// Calculate column widths
+	maxNameLen := len("Migration")
+	for _, mig := range migrations {
+		if len(mig.name) > maxNameLen {
+			maxNameLen = len(mig.name)
+		}
+	}
+
+	// Print table header
+	sepLine := strings.Repeat("-", maxNameLen+2)
+
+	fmt.Println("")
+	fmt.Printf("%sMigration Status%s\n", colorBold, colorReset)
+	fmt.Println("")
+
+	fmt.Printf("| %-4s | %-*s | %-8s |\n", "#", maxNameLen, "Migration", "Status")
+	fmt.Printf("+------+%s+----------+\n", sepLine)
+
+	for i, mig := range migrations {
+		status := "Pending"
+		statusColor := colorYellow
+		// A migration is "Ran" if its version is <= current version
+		// and current version > 0 (meaning at least some migrations have run)
+		if currentVersion > 0 && mig.version <= currentVersion {
+			status = "Ran"
+			statusColor = colorGreen
+		}
+
+		fmt.Printf("| %-4d | %-*s | %s%-8s%s |\n", i+1, maxNameLen, mig.name, statusColor, status, colorReset)
+	}
+
+	fmt.Printf("+------+%s+----------+\n", sepLine)
+
+	// Show dirty state if applicable
+	if dirty {
+		fmt.Printf("\n%s⚠ Dirty state detected at version %d%s\n", colorYellow, currentVersion, colorReset)
+		fmt.Printf("%sRun 'migrate' to continue or 'migrate:rollback' to revert.%s\n", colorYellow, colorReset)
+	}
+
+	pending := 0
+	if currentVersion == 0 {
+		pending = len(migrations)
+	} else {
+		for _, mig := range migrations {
+			if mig.version > currentVersion {
+				pending++
+			}
+		}
+	}
+
+	ran := len(migrations) - pending
+	fmt.Printf("\n%d migration(s) ran, %d pending\n", ran, pending)
+
+	return nil
+}
+
+// runMigrateRefresh rolls back all migrations and re-runs them.
+func runMigrateRefresh() error {
+	db, m, err := newMigrator()
+	if err != nil {
+		return err
+	}
+	defer database.Close(db)
+	defer m.Close()
+
+	fmt.Println("")
+	fmt.Printf("%sRolling back all migrations...%s\n", colorBold, colorReset)
+
+	rolledBack := 0
+	for {
+		currentVersion, _, verr := m.Version()
+		if verr != nil || currentVersion == 0 {
+			break
+		}
+		migrationName := findMigrationName(currentVersion)
+		if rollbackErr := m.Steps(-1); rollbackErr != nil {
+			fmt.Printf("  %s✗ %s (error: %v)%s\n", colorRed, migrationName, rollbackErr, colorReset)
+			return fmt.Errorf("rollback failed at migration %s: %w", migrationName, rollbackErr)
+		}
+		fmt.Printf("  %s✓ Rolled back %s%s\n", colorGreen, migrationName, colorReset)
+		rolledBack++
+	}
+
+	if rolledBack == 0 {
+		fmt.Printf("%sNothing to rollback.%s\n", colorYellow, colorReset)
+	} else {
+		fmt.Printf("\n%s✓ %d migration(s) rolled back.%s\n", colorGreen, rolledBack, colorReset)
+	}
+
+	fmt.Println("")
+	fmt.Printf("%sRunning migrations up...%s\n", colorBold, colorReset)
+
+	applied := 0
+	for {
+		if stepErr := m.Steps(1); stepErr != nil {
+			break
+		}
+		newVersion, _, _ := m.Version()
+		migrationName := findMigrationName(newVersion)
+		fmt.Printf("  %s✓ %s%s\n", colorGreen, migrationName, colorReset)
+		applied++
+	}
+
+	if applied == 0 {
+		fmt.Printf("%sNothing to migrate.%s\n", colorYellow, colorReset)
+	} else {
+		fmt.Printf("\n%s✓ %d migration(s) ran successfully.%s\n", colorGreen, applied, colorReset)
+	}
+
+	fmt.Printf("\n%sRefresh complete.%s\n", colorGreen, colorReset)
+	return nil
+}
+
+// runMigrateFresh drops all tables and re-runs migrations from scratch.
+func runMigrateFresh(skipSeed bool) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	// Set log level
 	setLogLevel(cfg.Log.Level)
 
-	// Initialize database
 	db, err := database.NewPostgresDB(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer func() {
-		if closeErr := database.Close(db); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
-	}()
+	defer database.Close(db)
 
-	// Create migration handler
+	fmt.Println("")
+	fmt.Printf("%sDropping all tables...%s\n", colorBold, colorReset)
+
+	// Drop all tables by dropping and recreating the public schema
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	if _, err := sqlDB.Exec("DROP SCHEMA public CASCADE"); err != nil {
+		return fmt.Errorf("failed to drop public schema: %w", err)
+	}
+	if _, err := sqlDB.Exec("CREATE SCHEMA public"); err != nil {
+		return fmt.Errorf("failed to recreate public schema: %w", err)
+	}
+	fmt.Printf("  %s✓ Dropped all tables%s\n", colorGreen, colorReset)
+
+	// Now run migrations from scratch
 	m, err := database.NewMigrate(db, "file://migrations")
 	if err != nil {
 		return fmt.Errorf("failed to create migration handler: %w", err)
 	}
-	defer func() {
-		if closeErr := m.Close(); closeErr != nil {
-			slog.Error("Failed to close migration handler", "error", closeErr)
-		}
-	}()
+	defer m.Close()
 
-	// Get current version before migration
-	version, dirty, err := m.Version()
-	if err != nil {
-		slog.Info("No migrations applied yet, starting fresh")
+	fmt.Println("")
+	fmt.Printf("%sRunning migrations from scratch...%s\n", colorBold, colorReset)
+
+	currentVersion, dirty, _ := m.Version()
+	if dirty {
+		fmt.Printf("%s⚠ Dirty state detected at version %d, forcing clean...%s\n", colorYellow, currentVersion, colorReset)
+		if forceErr := m.Force(int(currentVersion)); forceErr != nil {
+			return fmt.Errorf("failed to force clean version: %w", forceErr)
+		}
+	}
+
+	applied := 0
+	for {
+		if stepErr := m.Steps(1); stepErr != nil {
+			break
+		}
+		newVersion, _, _ := m.Version()
+		migrationName := findMigrationName(newVersion)
+		fmt.Printf("  %s✓ %s%s\n", colorGreen, migrationName, colorReset)
+		applied++
+	}
+
+	if applied == 0 {
+		fmt.Printf("%sNothing to migrate.%s\n", colorYellow, colorReset)
 	} else {
-		slog.Info("Current migration state", "version", version, "dirty", dirty)
+		fmt.Printf("\n%s✓ %d migration(s) ran successfully.%s\n", colorGreen, applied, colorReset)
+	}
 
-		// Check if database already has tables (from previous setup)
-		sqlDB, _ := db.DB()
-		var tableCount int
-		sqlDB.QueryRow("SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public'").Scan(&tableCount)
-		slog.Info("Current table count in public schema", "count", tableCount)
-
-		if version > 0 && tableCount > 10 && !dirty {
-			// Database has tables and a valid version - assume migrations already applied
-			slog.Info("Database already migrated, skipping", "version", version, "table_count", tableCount)
-			return nil
+	// Optionally run seed
+	if !skipSeed {
+		fmt.Println("")
+		fmt.Printf("%sRunning seed...%s\n", colorBold, colorReset)
+		if seedErr := runSeed(); seedErr != nil {
+			fmt.Printf("%s✗ Seed failed: %v%s\n", colorRed, seedErr, colorReset)
+			return seedErr
 		}
-
-		if dirty {
-			slog.Info("Database in dirty state, forcing to version", "version", version)
-			if forceErr := m.Force(int(version)); forceErr != nil {
-				return fmt.Errorf("failed to force migration version: %w", forceErr)
-			}
-			slog.Info("Forced migration to clean state")
-
-			// After forcing, check again - if we still have tables and version > 0, skip Up
-			newVersion, newDirty, _ := m.Version()
-			if !newDirty && newVersion > 0 && tableCount > 10 {
-				slog.Info("Database now clean, skipping migrations", "version", newVersion)
-				return nil
-			}
-		}
+		fmt.Printf("%s✓ Seed complete.%s\n", colorGreen, colorReset)
 	}
 
-	// Run migrations
-	if err := m.Up(); err != nil {
-		return fmt.Errorf("migration failed: %w", err)
-	}
-
-	// Get new version after migration
-	newVersion, _, err := m.Version()
-	if err != nil {
-		slog.Info("Migrations completed")
-	} else {
-		slog.Info("Migrations completed successfully", "version", newVersion)
-	}
-
+	fmt.Printf("\n%sFresh migration complete.%s\n", colorGreen, colorReset)
 	return nil
+}
+
+// findMigrationName finds the migration name for a given version number by reading the migrations directory.
+func findMigrationName(version uint) string {
+	migrationsDir := "migrations"
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return fmt.Sprintf("%06d", version)
+	}
+
+	versionStr := fmt.Sprintf("%06d", version)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, versionStr+"_") && strings.HasSuffix(name, ".up.sql") {
+			// Return just the name without the .up.sql suffix
+			return strings.TrimSuffix(name, ".up.sql")
+		}
+	}
+	return versionStr
 }
 
 // runSeed seeds the database with initial roles and permissions.

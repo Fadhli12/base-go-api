@@ -140,3 +140,28 @@ func (m *Migrate) Force(version int) error {
 	}
 	return nil
 }
+
+// DropAll drops all tables in the public schema by dropping and recreating it.
+// This is used by migrate:fresh to start from a clean slate.
+//
+// Parameters:
+//   - db: GORM database connection (used for raw SQL execution)
+//
+// Returns:
+//   - error: If the drop fails
+func (m *Migrate) DropAll(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	// Drop and recreate the public schema — cascading removes all objects
+	if _, err := sqlDB.Exec("DROP SCHEMA public CASCADE"); err != nil {
+		return fmt.Errorf("failed to drop public schema: %w", err)
+	}
+	if _, err := sqlDB.Exec("CREATE SCHEMA public"); err != nil {
+		return fmt.Errorf("failed to recreate public schema: %w", err)
+	}
+
+	return nil
+}
