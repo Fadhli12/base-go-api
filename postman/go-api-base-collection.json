@@ -1,0 +1,2087 @@
+{
+  "info": {
+    "name": "Go API Base",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "org_id", "value": "" },
+    { "key": "user_id", "value": "" },
+    { "key": "refresh_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/healthz", "host": ["{{base_url}}"], "path": ["healthz"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/readyz", "host": ["{{base_url}}"], "path": ["readyz"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Test User\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "register"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.access_token) {",
+                  "    pm.collectionVariables.set('token', res.data.access_token);",
+                  "    pm.collectionVariables.set('user_id', res.data.user.id);",
+                  "}",
+                  "if (res.data && res.data.refresh_token) {",
+                  "    pm.collectionVariables.set('refresh_token', res.data.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "refresh"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Password Reset",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/password-reset", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "password-reset"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Password Reset Confirm",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token\",\n  \"new_password\": \"NewPassword123!\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/password-reset/confirm", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "password-reset", "confirm"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/auth/logout", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "logout"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2FA / Sessions",
+      "item": [
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/2fa/setup", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "setup"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Enable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/2fa/verify-enable", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "verify-enable"] }
+          },
+          "response": []
+        },
+        {
+          "name": "2FA Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/2fa/status", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "status"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/2fa", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Regenerate Recovery Codes",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/2fa/regenerate-codes", "host": ["{{base_url}}"], "path": ["api", "v1", "2fa", "regenerate-codes"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Sessions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Session",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/sessions/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Other Sessions",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/sessions/others", "host": ["{{base_url}}"], "path": ["api", "v1", "sessions", "others"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "Auth Metrics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/metrics/auth", "host": ["{{base_url}}"], "path": ["api", "v1", "metrics", "auth"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new@example.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"New User\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/users/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": \"role-uuid\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "roles"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/roles/:roleId", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "roles", ":roleId"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List User Roles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "roles"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": \"resource\",\n  \"action\": \"action\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/permissions", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "permissions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Permission",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/permissions/:permId", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "permissions", ":permId"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Effective Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/:id/effective-permissions", "host": ["{{base_url}}"], "path": ["api", "v1", "users", ":id", "effective-permissions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Current User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/users/me", "host": ["{{base_url}}"], "path": ["api", "v1", "users", "me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"editor\",\n  \"description\": \"Editor role\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "roles"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "roles"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/roles/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "roles", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"updated-editor\",\n  \"description\": \"Updated role\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/roles/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "roles", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/roles/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "roles", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Permission to Role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/roles/:id/permissions/:pid", "host": ["{{base_url}}"], "path": ["api", "v1", "roles", ":id", "permissions", ":pid"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Permission from Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/roles/:id/permissions/:pid", "host": ["{{base_url}}"], "path": ["api", "v1", "roles", ":id", "permissions", ":pid"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Permissions",
+      "item": [
+        {
+          "name": "Create Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": \"resource\",\n  \"action\": \"action\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/permissions", "host": ["{{base_url}}"], "path": ["api", "v1", "permissions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/permissions", "host": ["{{base_url}}"], "path": ["api", "v1", "permissions"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "Create Organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Org\",\n  \"description\": \"Organization description\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/organizations", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Organizations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/organizations", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Organization",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Organization",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Org\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Organization",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user-uuid\",\n  \"role\": \"member\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id/members", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id", "members"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id/members", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id", "members"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/organizations/:id/members/:user_id", "host": ["{{base_url}}"], "path": ["api", "v1", "organizations", ":id", "members", ":user_id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Create Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Invoice #001\",\n  \"amount\": 100.50,\n  \"status\": \"pending\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/invoices", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Invoices",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/invoices", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/invoices/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"paid\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/invoices/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/invoices/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Create Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/webhook\",\n  \"events\": [\"user.created\", \"invoice.paid\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/webhooks", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Webhooks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Webhook",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Webhook",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/webhook-updated\",\n  \"events\": [\"user.created\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Webhook",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Deliveries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/:id/deliveries", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", ":id", "deliveries"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Delivery",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/deliveries/:delivery_id", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "deliveries", ":delivery_id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Replay Delivery",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/webhooks/deliveries/:delivery_id/replay", "host": ["{{base_url}}"], "path": ["api", "v1", "webhooks", "deliveries", ":delivery_id", "replay"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "Upload Media",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/media", "host": ["{{base_url}}"], "path": ["api", "v1", "media"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Media",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Media",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alt_text\": \"Updated alt\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/media/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Media URL",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:id/url", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":id", "url"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Download Media",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:id/download", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":id", "download"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin List Media",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/admin/media", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "media"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Media Cleanup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/admin/media/cleanup", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "media", "cleanup"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Media Versioning",
+      "item": [
+        {
+          "name": "Upload Version",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Versions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Version",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions/:version", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions", ":version"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Download Version",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions/:version/download", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions", ":version", "download"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Version Signed URL",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions/:version/url", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions", ":version", "url"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Version",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions/:version/restore", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions", ":version", "restore"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Version",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/media/:media_id/versions/:version", "host": ["{{base_url}}"], "path": ["api", "v1", "media", ":media_id", "versions", ":version"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Data Portability - Exports",
+      "item": [
+        {
+          "name": "Create Export",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"types\": [\"users\", \"invoices\"],\n  \"format\": \"json\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/exports", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "exports"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Exports",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/exports", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "exports"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Export",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/exports/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "exports", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Download Export",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/exports/:id/download", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "exports", ":id", "download"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Export",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/exports/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "exports", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Data Portability - Imports",
+      "item": [
+        {
+          "name": "Preview Import",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/imports/preview", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "imports", "preview"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Import",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/imports", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "imports"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Imports",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/imports", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "imports"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Import",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/imports/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "imports", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Import",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/data-portability/imports/:id/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "data-portability", "imports", ":id", "cancel"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get User Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/settings/user", "host": ["{{base_url}}"], "path": ["api", "v1", "settings", "user"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"theme\": \"dark\",\n  \"notifications_enabled\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/settings/user", "host": ["{{base_url}}"], "path": ["api", "v1", "settings", "user"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Effective Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/settings/effective", "host": ["{{base_url}}"], "path": ["api", "v1", "settings", "effective"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get System Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/settings/system", "host": ["{{base_url}}"], "path": ["api", "v1", "settings", "system"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update System Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maintenance_mode\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/settings/system", "host": ["{{base_url}}"], "path": ["api", "v1", "settings", "system"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Keys",
+      "item": [
+        {
+          "name": "Create API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My API Key\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List API Keys",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/api-keys", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get API Key",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/api-keys/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/api-keys/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "api-keys", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Email Templates",
+      "item": [
+        {
+          "name": "Create Email Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Welcome Email\",\n  \"subject\": \"Welcome\",\n  \"body\": \"Hello {{name}}\",\n  \"type\": \"welcome\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/email-templates", "host": ["{{base_url}}"], "path": ["api", "v1", "email-templates"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Email Templates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/email-templates", "host": ["{{base_url}}"], "path": ["api", "v1", "email-templates"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Email Template",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/email-templates/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "email-templates", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Email Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Updated Subject\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/email-templates/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "email-templates", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Email Template",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/email-templates/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "email-templates", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Emails",
+      "item": [
+        {
+          "name": "Send Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"user@example.com\",\n  \"subject\": \"Test\",\n  \"template_name\": \"welcome\",\n  \"template_data\": { \"name\": \"Test\" }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/emails", "host": ["{{base_url}}"], "path": ["api", "v1", "emails"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Email",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/emails/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "emails", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Email Webhooks",
+      "item": [
+        {
+          "name": "Delivery Webhook",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"delivered\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/emails/:provider/delivery", "host": ["{{base_url}}"], "path": ["api", "v1", "emails", ":provider", "delivery"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Bounce Webhook",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"bounced\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/emails/:provider/bounce", "host": ["{{base_url}}"], "path": ["api", "v1", "emails", ":provider", "bounce"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications/unread-count", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", "unread-count"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications/:id/read", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", ":id", "read"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications/read-all", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", "read-all"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Preferences",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/notifications/preferences", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", "preferences"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_enabled\": true,\n  \"push_enabled\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/notifications/preferences", "host": ["{{base_url}}"], "path": ["api", "v1", "notifications", "preferences"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Activity Feed",
+      "item": [
+        {
+          "name": "List Activities",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities", "host": ["{{base_url}}"], "path": ["api", "v1", "activities"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Count Unread",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/count-unread", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", "count-unread"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/read-all", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", "read-all"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Activity Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/:id/read", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", ":id", "read"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Follow Resource",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource_type\": \"invoice\",\n  \"resource_id\": \"uuid\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/activities/follow", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", "follow"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Unfollow Resource",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/follow/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", "follow", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Follows",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/follows", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", "follows"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Activity",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/activities/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "activities", ":id"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/analytics/dashboard", "host": ["{{base_url}}"], "path": ["api", "v1", "analytics", "dashboard"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/analytics/metrics", "host": ["{{base_url}}"], "path": ["api", "v1", "analytics", "metrics"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Preferences",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/analytics/dashboard/preferences", "host": ["{{base_url}}"], "path": ["api", "v1", "analytics", "dashboard", "preferences"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categories\": [\"user_activity\", \"content_metrics\", \"engagement_metrics\", \"system_metrics\"],\n  \"visible\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/analytics/dashboard/preferences", "host": ["{{base_url}}"], "path": ["api", "v1", "analytics", "dashboard", "preferences"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Aggregation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/analytics/aggregate", "host": ["{{base_url}}"], "path": ["api", "v1", "analytics", "aggregate"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Search",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/search?q=test&type=all", "host": ["{{base_url}}"], "path": ["api", "v1", "search"], "query": [{ "key": "q", "value": "test" }, { "key": "type", "value": "all" }] }
+          },
+          "response": []
+        },
+        {
+          "name": "Save Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Search\",\n  \"query\": \"test\",\n  \"type\": \"all\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/search/saved", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "saved"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Saved Searches",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/search/saved", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "saved"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Saved Search",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/search/saved/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "saved", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Saved Search",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Search\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/search/saved/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "saved", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Saved Search",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/search/saved/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "saved", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/search/autocomplete?q=tes", "host": ["{{base_url}}"], "path": ["api", "v1", "search", "autocomplete"], "query": [{ "key": "q", "value": "tes" }] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Create Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"export\",\n  \"payload\": { \"format\": \"json\" }\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/jobs", "host": ["{{base_url}}"], "path": ["api", "v1", "jobs"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/jobs", "host": ["{{base_url}}"], "path": ["api", "v1", "jobs"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/jobs/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "jobs", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/jobs/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "jobs", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Resubmit Job",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/jobs/:id/resubmit", "host": ["{{base_url}}"], "path": ["api", "v1", "jobs", ":id", "resubmit"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feature Flags",
+      "item": [
+        {
+          "name": "Create Feature Flag",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"new_feature\",\n  \"name\": \"New Feature\",\n  \"description\": \"Feature description\",\n  \"enabled\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Feature Flags",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Evaluate All Flags",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags/evaluate", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags", "evaluate"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Feature Flag",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Feature Flag",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Feature Flag",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Evaluate Flag by Key",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/feature-flags/:key/evaluate", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags", ":key", "evaluate"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "Create Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Great post!\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/comments/:type/:id/comments", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":type", ":id", "comments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:type/:id/comments", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":type", ":id", "comments"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Comment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Updated comment\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Comment",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Replies",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id/replies", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id", "replies"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Pin Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id/pin", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id", "pin"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Unpin Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/comments/:id/unpin", "host": ["{{base_url}}"], "path": ["api", "v1", "comments", ":id", "unpin"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "Create Tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Important\",\n  \"color\": \"#FF0000\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/tags", "host": ["{{base_url}}"], "path": ["api", "v1", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags", "host": ["{{base_url}}"], "path": ["api", "v1", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tag",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Tag",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Tag\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/tags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Tag",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags/:id", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":id"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Tag Autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags/autocomplete?q=Imp", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", "autocomplete"], "query": [{ "key": "q", "value": "Imp" }] }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tag by Slug",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags/slug/:slug", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", "slug", ":slug"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Attach Tags to Entity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tag_ids\": [\"uuid1\", \"uuid2\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/tags/:type/:id/tags", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":type", ":id", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Detach Tags from Entity",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tag_ids\": [\"uuid1\"]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/tags/:type/:id/tags", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":type", ":id", "tags"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Entity Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "X-Organization-ID", "value": "{{org_id}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/v1/tags/:type/:id/tags", "host": ["{{base_url}}"], "path": ["api", "v1", "tags", ":type", ":id", "tags"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "WebSocket",
+      "item": [
+        {
+          "name": "WebSocket Connect",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "ws://{{base_url}}/ws", "host": ["{{base_url}}"], "path": ["ws"] }
+          },
+          "response": []
+        },
+        {
+          "name": "List Rooms",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/ws/rooms", "host": ["{{base_url}}"], "path": ["api", "v1", "ws", "rooms"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Organization Presence",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/presence/org/:orgID", "host": ["{{base_url}}"], "path": ["api", "v1", "presence", "org", ":orgID"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
