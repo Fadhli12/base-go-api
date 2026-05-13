@@ -124,7 +124,6 @@ func (w *ExportWorker) processLoop() {
 			return
 		case <-ticker.C:
 			if w.queue == nil {
-				slog.Warn("Export worker queue not configured, skipping poll")
 				continue
 			}
 			jobID, err := w.dequeueJob()
