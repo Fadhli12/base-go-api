@@ -149,6 +149,9 @@ func (s *exportService) SetEventBus(eventBus *domain.EventBus) {
 // record count relative to SyncThreshold, then delegates accordingly.
 func (s *exportService) CreateExport(ctx context.Context, req *ExportRequest) (*domain.ExportJob, error) {
 	// 1. Permission check — MUST happen before any data access.
+	if s.enforcer == nil {
+		return nil, apperrors.NewAppError("INTERNAL_ERROR", "permission enforcer not configured", 500)
+	}
 	orgIDStr := "*"
 	if req.OrgID != nil {
 		orgIDStr = req.OrgID.String()

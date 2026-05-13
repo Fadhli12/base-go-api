@@ -291,8 +291,12 @@ func (s *TestSuite) SetupTest(t *testing.T) {
 		"media_versions",
 		"media",
 		"feature_flags",
+		"activity_follows",
+		"activity_reads",
+		"activities",
 		"comments",
-		"comments",
+		"entity_tags",
+		"tags",
 		"export_jobs",
 		"import_jobs",
 		"import_id_maps",
@@ -396,10 +400,15 @@ DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS webhooks CASCADE;
 	DROP TABLE IF EXISTS feature_flags CASCADE;
 	DROP TABLE IF EXISTS comments CASCADE;
+	DROP TABLE IF EXISTS activity_follows CASCADE;
+	DROP TABLE IF EXISTS activity_reads CASCADE;
+	DROP TABLE IF EXISTS activities CASCADE;
 	DROP TABLE IF EXISTS import_id_maps CASCADE;
 	DROP TABLE IF EXISTS import_jobs CASCADE;
 	DROP TABLE IF EXISTS export_jobs CASCADE;
 	DROP TABLE IF EXISTS media_versions CASCADE;
+	DROP TABLE IF EXISTS entity_tags CASCADE;
+	DROP TABLE IF EXISTS tags CASCADE;
 	DROP TABLE IF EXISTS casbin_rule CASCADE;
 	DROP TABLE IF EXISTS permissions CASCADE;
 	DROP TABLE IF EXISTS roles CASCADE;
@@ -428,7 +437,9 @@ DROP TRIGGER IF EXISTS update_notifications_updated_at ON notifications CASCADE;
 DROP TRIGGER IF EXISTS update_notification_preferences_updated_at ON notification_preferences CASCADE;
 DROP TRIGGER IF EXISTS update_user_settings_updated_at ON user_settings CASCADE;
 DROP TRIGGER IF EXISTS update_system_settings_updated_at ON system_settings CASCADE;
-DROP TRIGGER IF EXISTS update_saved_searches_updated_at ON saved_searches CASCADE;
+	DROP TRIGGER IF EXISTS update_saved_searches_updated_at ON saved_searches CASCADE;
+	DROP TRIGGER IF EXISTS update_tags_updated_at ON tags CASCADE;
+	DROP TRIGGER IF EXISTS update_activities_updated_at ON activities CASCADE;
 
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
@@ -1335,6 +1346,132 @@ CREATE INDEX IF NOT EXISTS idx_comments_deleted_at ON comments(deleted_at);
 `
 	if err := s.DB.Exec(migration022).Error; err != nil {
 		errs = append(errs, fmt.Errorf("migration 000022 (comments): %w", err))
+	}
+
+	// Migration 000023: Activities, activity reads, activity follows
+	migration023 := `
+CREATE TABLE IF NOT EXISTS activities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_id UUID NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    resource_type VARCHAR(50) NOT NULL,
+    resource_id VARCHAR(100) NOT NULL,
+    organization_id UUID,
+    metadata JSONB,
+    archived_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activities_organization_id ON activities(organization_id) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_actor_id ON activities(actor_id) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_resource ON activities(resource_type, resource_id) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_action_type ON activities(action_type) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at DESC) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_feed ON activities(organization_id, created_at DESC) WHERE archived_at IS NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_archived_at ON activities(archived_at) WHERE archived_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_activities_deleted_at ON activities(deleted_at);
+
+ALTER TABLE activities DROP CONSTRAINT IF EXISTS fk_activities_actor;
+ALTER TABLE activities ADD CONSTRAINT fk_activities_actor FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE activities DROP CONSTRAINT IF EXISTS fk_activities_organization;
+ALTER TABLE activities ADD CONSTRAINT fk_activities_organization FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+DROP TRIGGER IF EXISTS update_activities_updated_at ON activities CASCADE;
+CREATE TRIGGER update_activities_updated_at
+    BEFORE UPDATE ON activities
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS activity_reads (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    activity_id UUID NOT NULL,
+    read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_reads_user_activity ON activity_reads(user_id, activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_reads_user_id ON activity_reads(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_reads_activity_id ON activity_reads(activity_id);
+
+ALTER TABLE activity_reads DROP CONSTRAINT IF EXISTS fk_activity_reads_user;
+ALTER TABLE activity_reads ADD CONSTRAINT fk_activity_reads_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE activity_reads DROP CONSTRAINT IF EXISTS fk_activity_reads_activity;
+ALTER TABLE activity_reads ADD CONSTRAINT fk_activity_reads_activity FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS activity_follows (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    resource_type VARCHAR(50) NOT NULL,
+    resource_id VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_follows_user_resource ON activity_follows(user_id, resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_activity_follows_user_id ON activity_follows(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_follows_resource ON activity_follows(resource_type, resource_id);
+
+ALTER TABLE activity_follows DROP CONSTRAINT IF EXISTS fk_activity_follows_user;
+ALTER TABLE activity_follows ADD CONSTRAINT fk_activity_follows_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+`
+	if err := s.DB.Exec(migration023).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000023 (activities): %w", err))
+	}
+
+	// Migration 000024: Tags and entity tags
+	migration024 := `
+CREATE TABLE IF NOT EXISTS tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(120) NOT NULL,
+    color VARCHAR(7),
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name_org_active ON tags (organization_id, name) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_slug_org_active ON tags (organization_id, slug) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_tags_organization_id ON tags (organization_id);
+CREATE INDEX IF NOT EXISTS idx_tags_deleted_at ON tags (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_tags_usage_count ON tags (usage_count DESC);
+
+ALTER TABLE tags DROP CONSTRAINT IF EXISTS fk_tags_organization;
+ALTER TABLE tags ADD CONSTRAINT fk_tags_organization FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+
+DROP TRIGGER IF EXISTS update_tags_updated_at ON tags CASCADE;
+CREATE TRIGGER update_tags_updated_at
+    BEFORE UPDATE ON tags
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TABLE IF NOT EXISTS entity_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    organization_id UUID NOT NULL,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_tags_unique ON entity_tags (organization_id, entity_type, entity_id, tag_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tags_entity ON entity_tags (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tags_tag_id ON entity_tags (tag_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tags_organization_id ON entity_tags (organization_id);
+CREATE INDEX IF NOT EXISTS idx_entity_tags_created_by ON entity_tags (created_by);
+
+ALTER TABLE entity_tags DROP CONSTRAINT IF EXISTS fk_entity_tags_tag;
+ALTER TABLE entity_tags ADD CONSTRAINT fk_entity_tags_tag FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE;
+ALTER TABLE entity_tags DROP CONSTRAINT IF EXISTS fk_entity_tags_organization;
+ALTER TABLE entity_tags ADD CONSTRAINT fk_entity_tags_organization FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE entity_tags DROP CONSTRAINT IF EXISTS fk_entity_tags_created_by;
+ALTER TABLE entity_tags ADD CONSTRAINT fk_entity_tags_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE;
+`
+	if err := s.DB.Exec(migration024).Error; err != nil {
+		errs = append(errs, fmt.Errorf("migration 000024 (tags): %w", err))
 	}
 
 	if len(errs) > 0 {

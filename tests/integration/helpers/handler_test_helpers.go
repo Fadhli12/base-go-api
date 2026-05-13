@@ -280,6 +280,32 @@ func MakeRequest(t *testing.T, server *Server, method, path string, body interfa
 	return rec
 }
 
+// MakeRequestWithHeaders executes an HTTP request with custom headers.
+func MakeRequestWithHeaders(t *testing.T, server *Server, method, path string, body interface{}, token string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var reqBody io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(t, err, "body should marshal to JSON")
+		reqBody = bytes.NewReader(jsonBody)
+	}
+
+	req := httptest.NewRequest(method, path, reqBody)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	if token != "" {
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	}
+
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	rec := httptest.NewRecorder()
+	server.Echo().ServeHTTP(rec, req)
+	return rec
+}
+
 // ParseEnvelope parses the response body into a response.Envelope.
 func ParseEnvelope(t *testing.T, rec *httptest.ResponseRecorder) *response.Envelope {
 	var env response.Envelope
@@ -336,7 +362,15 @@ func CreateAdminUser(t *testing.T, suite SuiteProvider, enforcer *permission.Enf
 }
 
 // CreateUserWithPermissions creates a user with specific permissions.
+// It delegates to CreateUserWithPermissionsReturningID and returns only the token.
 func CreateUserWithPermissions(t *testing.T, suite SuiteProvider, enforcer *permission.Enforcer, perms []string) (string, func()) {
+	token, _, _, cleanup := CreateUserWithPermissionsReturningID(t, suite, enforcer, perms)
+	return token, cleanup
+}
+
+// CreateUserWithPermissionsReturningID creates a user with specific permissions and returns token, userID, roleName.
+func CreateUserWithPermissionsReturningID(t *testing.T, suite SuiteProvider, enforcer *permission.Enforcer, perms []string) (string, uuid.UUID, string, func()) {
+	t.Helper()
 	email := UniqueEmail(t)
 	password := TestPassword
 
@@ -441,7 +475,47 @@ func CreateUserWithPermissions(t *testing.T, suite SuiteProvider, enforcer *perm
 	token, err := auth.GenerateAccessTokenWithClaims(userID.String(), email, "test-secret-key-min-32-chars-long!", 15*time.Minute, "go-api-base-test", "api-test")
 	require.NoError(t, err, "failed to generate access token")
 
-	return token, func() {}
+	return token, userID, roleName, func() {}
+}
+
+// CreateTestOrganization creates an organization in the database and returns its ID.
+func CreateTestOrganization(t *testing.T, suite SuiteProvider, ownerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	orgID := uuid.New()
+	slug := "test-org-" + orgID.String()[:8]
+	err := suite.GetDB().Exec(`
+		INSERT INTO organizations (id, name, slug, owner_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, NOW(), NOW())
+	`, orgID, "Test Org "+orgID.String()[:8], slug, ownerID).Error
+	require.NoError(t, err, "should create test organization")
+	return orgID
+}
+
+// AddOrgScopedPolicies adds organization-scoped Casbin policies for a user.
+// This is needed when testing endpoints that enforce permissions with an organization domain
+// (e.g., tags), because the default "AddRoleForUser" and "AddPolicy" calls use the "default" domain,
+// but org-scoped endpoints use the organization ID as the domain.
+func AddOrgScopedPolicies(t *testing.T, enforcer *permission.Enforcer, userID, orgID uuid.UUID, roleName string, perms []string) {
+	t.Helper()
+	if enforcer == nil {
+		return
+	}
+	orgDomain := orgID.String()
+
+	err := enforcer.AddRoleForUser(userID.String(), roleName, orgDomain)
+	if err != nil {
+		t.Logf("Warning: AddRoleForUser for org domain failed: %v", err)
+	}
+
+	for _, permName := range perms {
+		parts := splitPerm(permName)
+		resource := parts[0]
+		action := parts[1]
+		err = enforcer.AddPolicy(roleName, orgDomain, resource, action)
+		if err != nil {
+			t.Logf("Warning: AddPolicy for org domain failed: %v", err)
+		}
+	}
 }
 
 // SeedRoles creates base roles (admin, user) with permissions and syncs the enforcer.
