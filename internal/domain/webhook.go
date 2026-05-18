@@ -29,6 +29,8 @@ const (
 	WebhookEventInvoicePaid    = "invoice.paid"
 	WebhookEventNewsPublished  = "news.published"
 	WebhookEventNewsDeleted    = "news.deleted"
+	WebhookEventOAuthLinked    = "auth.oauth.linked"
+	WebhookEventOAuthUnlinked  = "auth.oauth.unlinked"
 )
 
 // ValidWebhookEvents is a lookup map for valid webhook event types.
@@ -39,6 +41,8 @@ var ValidWebhookEvents = map[string]bool{
 	WebhookEventInvoicePaid:    true,
 	WebhookEventNewsPublished:  true,
 	WebhookEventNewsDeleted:    true,
+	WebhookEventOAuthLinked:    true,
+	WebhookEventOAuthUnlinked:  true,
 }
 
 // Webhook represents an outgoing webhook endpoint.

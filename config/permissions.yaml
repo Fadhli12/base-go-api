@@ -1,0 +1,18 @@
+# OAuth permissions for permission:sync command
+# These permissions are synced to the database via `go run ./cmd/api permission:sync`
+
+permissions:
+  - name: "oauth:view"
+    description: "View OAuth providers and linked accounts"
+    resource: "oauth"
+    action: "view"
+
+  - name: "oauth:link"
+    description: "Link and unlink OAuth providers"
+    resource: "oauth"
+    action: "link"
+
+  - name: "oauth:manage"
+    description: "Manage OAuth provider configurations"
+    resource: "oauth"
+    action: "manage"
