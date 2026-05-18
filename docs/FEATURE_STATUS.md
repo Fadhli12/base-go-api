@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-18 — V1 + V2: SSRF + OAuth Social Login complete
+**Last Updated:** 2026-05-18 — V1 + V2: SSRF + OAuth Social Login complete (code review fixes merged)
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -843,6 +843,8 @@ Webhook worker makes outbound HTTP requests. Without URL validation, attackers c
 - Unlink enforces "at least one auth method" rule (password + linked providers count)
 - SSRF-safe HTTP clients for outbound OAuth requests (via `internal/ssrf`)
 - Audit logging on all CRUD and link/unlink operations
+- Services do NOT hold enforcer — permission enforcement via middleware.RequirePermission on route groups (two-tier model)
+- Migration down files include DROP TRIGGER for proper cleanup
 
 ---
 
