@@ -51,6 +51,7 @@ type Server struct {
 	analyticsReaper   *service.AnalyticsReaper
 	aggregationWorker *service.AggregationWorker
 	oauthProviderService *service.OAuthProviderService
+	oauthLoginService    *service.OAuthLoginService
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -373,6 +374,16 @@ func (s *Server) SetOAuthProviderService(oauthProviderService *service.OAuthProv
 // OAuthProviderService returns the OAuth provider service
 func (s *Server) OAuthProviderService() *service.OAuthProviderService {
 	return s.oauthProviderService
+}
+
+// SetOAuthLoginService sets the OAuth login service
+func (s *Server) SetOAuthLoginService(loginService *service.OAuthLoginService) {
+	s.oauthLoginService = loginService
+}
+
+// OAuthLoginService returns the OAuth login service
+func (s *Server) OAuthLoginService() *service.OAuthLoginService {
+	return s.oauthLoginService
 }
 
 // AggregationWorker returns the aggregation worker
@@ -821,13 +832,17 @@ func (s *Server) RegisterRoutes() {
 		analyticsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 	}
 
-	// OAuth provider routes
+	// OAuth provider and login routes
 	oauthEncryptionService, encryptionErr := service.NewOAuthEncryptionService([]byte(s.config.JWT.Secret))
 	if encryptionErr != nil {
 		slog.Error("Failed to create OAuth encryption service", "error", encryptionErr)
 	}
 	if oauthEncryptionService != nil {
 		oauthProviderRepo := repository.NewOAuthProviderRepository(s.db)
+		oauthAccountRepo := repository.NewOAuthAccountRepository(s.db)
+		oauthStateManager := service.NewRedisOAuthStateManager(s.redis, s.config.OAuth, s.logger)
+
+		// OAuth provider service (admin CRUD)
 		oauthProviderService := service.NewOAuthProviderService(
 			oauthProviderRepo,
 			oauthEncryptionService,
@@ -839,6 +854,42 @@ func (s *Server) RegisterRoutes() {
 		s.SetOAuthProviderService(oauthProviderService)
 		oauthProviderHandler := handler.NewOAuthProviderHandler(oauthProviderService, s.enforcer, s.logger)
 		oauthProviderHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+
+		// OAuth login service (login, callback, link flows)
+		oauthLoginService := service.NewOAuthLoginService(
+			oauthProviderRepo,
+			oauthAccountRepo,
+			userRepo,
+			roleRepo,
+			userRoleRepo,
+			refreshTokenRepo,
+			oauthStateManager,
+			oauthEncryptionService,
+			tokenService,
+			auditService,
+			s.enforcer,
+			s.config.OAuth,
+			s.logger,
+			s.config.SSRF.ToInternal(),
+		)
+		s.SetOAuthLoginService(oauthLoginService)
+
+		// OAuth login handler (initiate, callback, link)
+		oauthLoginHandler := handler.NewOAuthLoginHandler(oauthLoginService, s.enforcer, s.logger, s.config.OAuth)
+		oauthLoginHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+
+		// OAuth account handler (unlink, list linked accounts)
+		oauthAccountHandler := handler.NewOAuthAccountHandler(
+			oauthLoginService,
+			oauthProviderService,
+			oauthAccountRepo,
+			oauthProviderRepo,
+			userRepo,
+			s.enforcer,
+			s.auditSvc,
+			s.logger,
+		)
+		oauthAccountHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 	}
 
 	// Search routes

@@ -160,6 +160,69 @@ func (s *OAuthLoginService) SetEventBus(bus *domain.EventBus) {
 	s.eventBus = bus
 }
 
+// Config returns the OAuth configuration.
+func (s *OAuthLoginService) Config() config.OAuthConfig {
+	return s.config
+}
+
+// FindProviderByName delegates to the provider repository to find a provider by name.
+func (s *OAuthLoginService) FindProviderByName(ctx context.Context, name string) (*domain.OAuthProvider, error) {
+	return s.providerRepo.FindByName(ctx, name)
+}
+
+// FindAccountByUserAndProvider finds an OAuth account by user ID and provider ID.
+func (s *OAuthLoginService) FindAccountByUserAndProvider(ctx context.Context, userID, providerID uuid.UUID) (*domain.OAuthAccount, error) {
+	return s.accountRepo.FindByUserAndProvider(ctx, userID, providerID)
+}
+
+// CountUserAuthMethods counts the number of authentication methods a user has:
+// returns true for hasPassword if the user has a real (non-placeholder) password hash,
+// and returns the count of linked OAuth providers.
+func (s *OAuthLoginService) CountUserAuthMethods(ctx context.Context, userID uuid.UUID) (hasPassword bool, providerCount int64, err error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return false, 0, err
+	}
+	// Check if user has a real password (not an OAuth placeholder)
+	hasPassword = !strings.HasPrefix(user.PasswordHash, "oauth-")
+
+	count, err := s.accountRepo.CountAuthMethodsByUserID(ctx, userID)
+	if err != nil {
+		return hasPassword, 0, err
+	}
+	return hasPassword, count, nil
+}
+
+// UnlinkAccount soft-deletes an OAuth account and publishes an unlinked event.
+func (s *OAuthLoginService) UnlinkAccount(ctx context.Context, account *domain.OAuthAccount, provider *domain.OAuthProvider) error {
+	if err := s.accountRepo.SoftDelete(ctx, account.ID); err != nil {
+		return apperrors.WrapInternal(err)
+	}
+
+	// Publish auth.oauth.unlinked event
+	if s.eventBus != nil {
+		go func() {
+			payload := map[string]interface{}{
+				"account_id":        account.ID.String(),
+				"user_id":          account.UserID.String(),
+				"provider":         provider.Name,
+				"provider_user_id": account.ProviderUserID,
+			}
+			var orgID *uuid.UUID
+			if provider.OrganizationID != nil {
+				orgID = provider.OrganizationID
+			}
+			_ = s.eventBus.Publish(domain.WebhookEvent{
+				Type:    domain.OAuthEventUnlinked,
+				Payload: payload,
+				OrgID:   orgID,
+			})
+		}()
+	}
+
+	return nil
+}
+
 // ──────────────────────────────────────────────
 // Login flow: initiation
 // ──────────────────────────────────────────────
