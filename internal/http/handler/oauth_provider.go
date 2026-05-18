@@ -16,10 +16,12 @@ import (
 
 // OAuthProviderHandler handles OAuth provider admin CRUD endpoints
 // and the public provider listing endpoint.
+// Permission enforcement is done via middleware.RequirePermission on route groups,
+// following the project's two-tier permission model.
 type OAuthProviderHandler struct {
 	providerService *service.OAuthProviderService
-	enforcer       *permission.Enforcer
-	logger         logger.Logger
+	enforcer        *permission.Enforcer
+	logger          logger.Logger
 }
 
 // NewOAuthProviderHandler creates a new OAuthProviderHandler instance.
@@ -30,14 +32,16 @@ func NewOAuthProviderHandler(
 ) *OAuthProviderHandler {
 	return &OAuthProviderHandler{
 		providerService: providerService,
-		enforcer:       enforcer,
-		logger:         logger,
+		enforcer:        enforcer,
+		logger:          logger,
 	}
 }
 
 // RegisterRoutes registers all OAuth provider routes on the Echo group.
+// Public route (providers listing) has no auth.
+// Admin routes require JWT + oauth:manage permission via middleware.
 func (h *OAuthProviderHandler) RegisterRoutes(v1 *echo.Group, jwtSecret string) {
-	// Public routes (no auth required)
+	// Public route (no auth required)
 	auth := v1.Group("/auth/oauth")
 	auth.GET("/providers", h.ListPublicProviders)
 
@@ -48,9 +52,11 @@ func (h *OAuthProviderHandler) RegisterRoutes(v1 *echo.Group, jwtSecret string) 
 		ContextKey: "user",
 	}))
 	providers.Use(middleware.ExtractOrganizationID())
+	providers.Use(middleware.RequirePermission(h.enforcer, "oauth", "manage"))
+
 	providers.POST("", h.Create)
-	providers.GET("", h.List)
 	providers.GET("/:id", h.GetByID)
+	providers.GET("", h.List)
 	providers.PUT("/:id", h.Update)
 	providers.DELETE("/:id", h.Delete)
 }
@@ -89,6 +95,7 @@ func (h *OAuthProviderHandler) ListPublicProviders(c echo.Context) error {
 }
 
 // Create handles OAuth provider creation.
+// Permission is enforced by middleware.RequirePermission on the route group.
 //
 //	@Summary		Create an OAuth provider
 //	@Description		Create a new OAuth provider configuration (requires oauth:manage permission)
@@ -114,16 +121,6 @@ func (h *OAuthProviderHandler) Create(c echo.Context) error {
 	}
 
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveOAuthOrgDomain(hasOrgID, orgID)
-
-	allowed, enfErr := h.enforcer.Enforce(userID.String(), orgDomain, "oauth", "manage")
-	if enfErr != nil || !allowed {
-		log.Warn(ctx, "create OAuth provider failed - permission denied",
-			log.String("user_id", userID.String()),
-			log.String("org_domain", orgDomain),
-		)
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
 
 	var orgIDPtr *uuid.UUID
 	if hasOrgID && orgID != uuid.Nil {
@@ -149,7 +146,6 @@ func (h *OAuthProviderHandler) Create(c echo.Context) error {
 	log.Info(ctx, "creating OAuth provider",
 		log.String("name", req.Name),
 		log.String("user_id", userID.String()),
-		log.String("org_domain", orgDomain),
 	)
 
 	result, err := h.providerService.Create(ctx, orgIDPtr, &req)
@@ -178,6 +174,7 @@ func (h *OAuthProviderHandler) Create(c echo.Context) error {
 }
 
 // List retrieves all OAuth providers for the current organization context (admin).
+// Permission is enforced by middleware.RequirePermission on the route group.
 //
 //	@Summary		List OAuth providers
 //	@Description		Retrieve OAuth providers scoped to the current organization context with pagination
@@ -196,23 +193,7 @@ func (h *OAuthProviderHandler) List(c echo.Context) error {
 	log := middleware.GetLogger(c)
 	ctx := c.Request().Context()
 
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		log.Warn(ctx, "list OAuth providers failed - not authenticated")
-		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
-	}
-
 	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveOAuthOrgDomain(hasOrgID, orgID)
-
-	allowed, enfErr := h.enforcer.Enforce(userID.String(), orgDomain, "oauth", "manage")
-	if enfErr != nil || !allowed {
-		log.Warn(ctx, "list OAuth providers failed - permission denied",
-			log.String("user_id", userID.String()),
-			log.String("org_domain", orgDomain),
-		)
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
 
 	var orgIDPtr *uuid.UUID
 	if hasOrgID && orgID != uuid.Nil {
@@ -222,8 +203,6 @@ func (h *OAuthProviderHandler) List(c echo.Context) error {
 	pagination := ParsePagination(c)
 
 	log.Info(ctx, "listing OAuth providers",
-		log.String("user_id", userID.String()),
-		log.String("org_domain", orgDomain),
 		log.Int("limit", pagination.Limit),
 		log.Int("offset", pagination.Offset),
 	)
@@ -232,16 +211,12 @@ func (h *OAuthProviderHandler) List(c echo.Context) error {
 	if err != nil {
 		if appErr := apperrors.GetAppError(err); appErr != nil {
 			log.Error(ctx, "failed to retrieve OAuth providers",
-				log.String("user_id", userID.String()),
 				log.String("error_code", appErr.Code),
 				logger.Err(err),
 			)
 			return c.JSON(appErr.HTTPStatus, response.ErrorWithContext(c, appErr.Code, appErr.Message))
 		}
-		log.Error(ctx, "failed to retrieve OAuth providers",
-			log.String("user_id", userID.String()),
-			logger.Err(err),
-		)
+		log.Error(ctx, "failed to retrieve OAuth providers", logger.Err(err))
 		return c.JSON(http.StatusInternalServerError, response.ErrorWithContext(c, "INTERNAL_ERROR", "Failed to retrieve OAuth providers"))
 	}
 
@@ -254,6 +229,7 @@ func (h *OAuthProviderHandler) List(c echo.Context) error {
 }
 
 // GetByID retrieves a single OAuth provider by ID (admin).
+// Permission is enforced by middleware.RequirePermission on the route group.
 //
 //	@Summary		Get OAuth provider by ID
 //	@Description		Retrieve a specific OAuth provider configuration by its ID
@@ -280,27 +256,8 @@ func (h *OAuthProviderHandler) GetByID(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid provider ID"))
 	}
 
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		log.Warn(ctx, "get OAuth provider failed - not authenticated")
-		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
-	}
-
-	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveOAuthOrgDomain(hasOrgID, orgID)
-
-	allowed, enfErr := h.enforcer.Enforce(userID.String(), orgDomain, "oauth", "manage")
-	if enfErr != nil || !allowed {
-		log.Warn(ctx, "get OAuth provider failed - permission denied",
-			log.String("provider_id", id.String()),
-			log.String("user_id", userID.String()),
-		)
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
-
 	log.Info(ctx, "fetching OAuth provider",
 		log.String("provider_id", id.String()),
-		log.String("user_id", userID.String()),
 	)
 
 	result, err := h.providerService.FindByID(ctx, id)
@@ -324,6 +281,7 @@ func (h *OAuthProviderHandler) GetByID(c echo.Context) error {
 }
 
 // Update handles OAuth provider updates.
+// Permission is enforced by middleware.RequirePermission on the route group.
 //
 //	@Summary		Update an OAuth provider
 //	@Description		Update an OAuth provider configuration (requires oauth:manage permission)
@@ -351,24 +309,6 @@ func (h *OAuthProviderHandler) Update(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid provider ID"))
 	}
 
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		log.Warn(ctx, "update OAuth provider failed - not authenticated")
-		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
-	}
-
-	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveOAuthOrgDomain(hasOrgID, orgID)
-
-	allowed, enfErr := h.enforcer.Enforce(userID.String(), orgDomain, "oauth", "manage")
-	if enfErr != nil || !allowed {
-		log.Warn(ctx, "update OAuth provider failed - permission denied",
-			log.String("provider_id", id.String()),
-			log.String("user_id", userID.String()),
-		)
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
-
 	var req request.UpdateOAuthProviderRequest
 	if err := c.Bind(&req); err != nil {
 		log.Error(ctx, "failed to bind request", logger.Err(err))
@@ -382,7 +322,6 @@ func (h *OAuthProviderHandler) Update(c echo.Context) error {
 
 	log.Info(ctx, "updating OAuth provider",
 		log.String("provider_id", id.String()),
-		log.String("user_id", userID.String()),
 	)
 
 	result, err := h.providerService.Update(ctx, id, &req)
@@ -411,6 +350,7 @@ func (h *OAuthProviderHandler) Update(c echo.Context) error {
 }
 
 // Delete handles OAuth provider soft deletion.
+// Permission is enforced by middleware.RequirePermission on the route group.
 //
 //	@Summary		Delete an OAuth provider
 //	@Description		Soft delete an OAuth provider configuration (requires oauth:manage permission)
@@ -437,27 +377,8 @@ func (h *OAuthProviderHandler) Delete(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, response.ErrorWithContext(c, "BAD_REQUEST", "Invalid provider ID"))
 	}
 
-	userID, err := middleware.GetUserID(c)
-	if err != nil {
-		log.Warn(ctx, "delete OAuth provider failed - not authenticated")
-		return c.JSON(http.StatusUnauthorized, response.ErrorWithContext(c, "UNAUTHORIZED", "User not authenticated"))
-	}
-
-	orgID, hasOrgID := middleware.GetOrganizationID(c)
-	orgDomain := resolveOAuthOrgDomain(hasOrgID, orgID)
-
-	allowed, enfErr := h.enforcer.Enforce(userID.String(), orgDomain, "oauth", "manage")
-	if enfErr != nil || !allowed {
-		log.Warn(ctx, "delete OAuth provider failed - permission denied",
-			log.String("provider_id", id.String()),
-			log.String("user_id", userID.String()),
-		)
-		return c.JSON(http.StatusForbidden, response.ErrorWithContext(c, "FORBIDDEN", "Insufficient permissions"))
-	}
-
 	log.Info(ctx, "deleting OAuth provider",
 		log.String("provider_id", id.String()),
-		log.String("user_id", userID.String()),
 	)
 
 	if err := h.providerService.Delete(ctx, id); err != nil {
@@ -481,14 +402,4 @@ func (h *OAuthProviderHandler) Delete(c echo.Context) error {
 	)
 
 	return c.NoContent(http.StatusNoContent)
-}
-
-// resolveOAuthOrgDomain converts the optional organization ID to a Casbin domain string.
-// Returns "default" for global scope, or the org UUID for org-scoped permissions.
-func resolveOAuthOrgDomain(hasOrgID bool, orgID uuid.UUID) string {
-	orgDomain := "default"
-	if hasOrgID && orgID != uuid.Nil {
-		orgDomain = orgID.String()
-	}
-	return orgDomain
 }

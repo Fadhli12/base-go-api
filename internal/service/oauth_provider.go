@@ -9,7 +9,6 @@ import (
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/http/request"
 	"github.com/example/go-api-base/internal/logger"
-	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	apperrors "github.com/example/go-api-base/pkg/errors"
 	"github.com/google/uuid"
@@ -18,11 +17,11 @@ import (
 
 // OAuthProviderService handles admin CRUD for OAuth provider configurations
 // with encryption and audit logging.
+// Permission enforcement is done at the handler/middleware level, not in the service.
 type OAuthProviderService struct {
 	providerRepo repository.OAuthProviderRepository
 	encryption   *OAuthEncryptionService
 	auditService *AuditService
-	enforcer     *permission.Enforcer
 	config       config.OAuthConfig
 	logger       logger.Logger
 	eventBus     *domain.EventBus
@@ -33,7 +32,6 @@ func NewOAuthProviderService(
 	providerRepo repository.OAuthProviderRepository,
 	encryption *OAuthEncryptionService,
 	auditService *AuditService,
-	enforcer *permission.Enforcer,
 	cfg config.OAuthConfig,
 	logger logger.Logger,
 ) *OAuthProviderService {
@@ -41,7 +39,6 @@ func NewOAuthProviderService(
 		providerRepo: providerRepo,
 		encryption:   encryption,
 		auditService: auditService,
-		enforcer:     enforcer,
 		config:       cfg,
 		logger:       logger,
 	}

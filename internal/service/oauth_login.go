@@ -16,7 +16,6 @@ import (
 	"github.com/example/go-api-base/internal/config"
 	"github.com/example/go-api-base/internal/domain"
 	"github.com/example/go-api-base/internal/logger"
-	"github.com/example/go-api-base/internal/permission"
 	"github.com/example/go-api-base/internal/repository"
 	"github.com/example/go-api-base/internal/ssrf"
 	apperrors "github.com/example/go-api-base/pkg/errors"
@@ -101,6 +100,7 @@ func getMicrosoftEmail(raw map[string]interface{}) string {
 
 // OAuthLoginService handles OAuth login flows: initiation, callback processing,
 // user creation, and account linking.
+// Permission enforcement is done at the handler/middleware level, not in the service.
 type OAuthLoginService struct {
 	providerRepo     repository.OAuthProviderRepository
 	accountRepo      repository.OAuthAccountRepository
@@ -112,7 +112,6 @@ type OAuthLoginService struct {
 	encryption       *OAuthEncryptionService
 	tokenService     *TokenService
 	audit            *AuditService
-	enforcer         *permission.Enforcer
 	config           config.OAuthConfig
 	logger           logger.Logger
 	ssrfClient       *http.Client
@@ -131,7 +130,6 @@ func NewOAuthLoginService(
 	encryption *OAuthEncryptionService,
 	tokenService *TokenService,
 	audit *AuditService,
-	enforcer *permission.Enforcer,
 	cfg config.OAuthConfig,
 	log logger.Logger,
 	ssrfCfg ssrf.SSRFConfig,
@@ -147,7 +145,6 @@ func NewOAuthLoginService(
 		encryption:        encryption,
 		tokenService:      tokenService,
 		audit:             audit,
-		enforcer:          enforcer,
 		config:            cfg,
 		logger:            log,
 		ssrfClient:        ssrf.NewClient(&ssrfCfg, nil),

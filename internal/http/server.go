@@ -847,7 +847,6 @@ func (s *Server) RegisterRoutes() {
 			oauthProviderRepo,
 			oauthEncryptionService,
 			s.auditSvc,
-			s.enforcer,
 			s.config.OAuth,
 			s.logger,
 		)
@@ -867,7 +866,6 @@ func (s *Server) RegisterRoutes() {
 			oauthEncryptionService,
 			tokenService,
 			auditService,
-			s.enforcer,
 			s.config.OAuth,
 			s.logger,
 			s.config.SSRF.ToInternal(),
