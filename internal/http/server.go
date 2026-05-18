@@ -50,6 +50,7 @@ type Server struct {
 	analyticsService *service.AnalyticsService
 	analyticsReaper   *service.AnalyticsReaper
 	aggregationWorker *service.AggregationWorker
+	oauthProviderService *service.OAuthProviderService
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -362,6 +363,16 @@ func (s *Server) AnalyticsReaper() *service.AnalyticsReaper {
 // SetAggregationWorker sets the aggregation worker
 func (s *Server) SetAggregationWorker(worker *service.AggregationWorker) {
 	s.aggregationWorker = worker
+}
+
+// SetOAuthProviderService sets the OAuth provider service
+func (s *Server) SetOAuthProviderService(oauthProviderService *service.OAuthProviderService) {
+	s.oauthProviderService = oauthProviderService
+}
+
+// OAuthProviderService returns the OAuth provider service
+func (s *Server) OAuthProviderService() *service.OAuthProviderService {
+	return s.oauthProviderService
 }
 
 // AggregationWorker returns the aggregation worker
@@ -808,6 +819,26 @@ func (s *Server) RegisterRoutes() {
 	if s.analyticsService != nil {
 		analyticsHandler := handler.NewAnalyticsHandler(s.analyticsService, s.enforcer, s.aggregationWorker)
 		analyticsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
+
+	// OAuth provider routes
+	oauthEncryptionService, encryptionErr := service.NewOAuthEncryptionService([]byte(s.config.JWT.Secret))
+	if encryptionErr != nil {
+		slog.Error("Failed to create OAuth encryption service", "error", encryptionErr)
+	}
+	if oauthEncryptionService != nil {
+		oauthProviderRepo := repository.NewOAuthProviderRepository(s.db)
+		oauthProviderService := service.NewOAuthProviderService(
+			oauthProviderRepo,
+			oauthEncryptionService,
+			s.auditSvc,
+			s.enforcer,
+			s.config.OAuth,
+			s.logger,
+		)
+		s.SetOAuthProviderService(oauthProviderService)
+		oauthProviderHandler := handler.NewOAuthProviderHandler(oauthProviderService, s.enforcer, s.logger)
+		oauthProviderHandler.RegisterRoutes(v1, s.config.JWT.Secret)
 	}
 
 	// Search routes
