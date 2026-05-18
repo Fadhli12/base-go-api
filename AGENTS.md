@@ -5,7 +5,9 @@
 ---
 
 <!-- SPECKIT START -->
-**Current Feature**: [specs/019-idempotency-keys/plan.md](specs/019-idempotency-keys/plan.md) - Idempotency Keys ✅
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+at specs/021-oauth-social-login/plan.md
 <!-- SPECKIT END -->
 
 ---

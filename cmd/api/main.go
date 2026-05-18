@@ -476,6 +476,14 @@ func runServer() error {
 		newsService.SetEventBus(eventBus)
 		slog.Info("News service wired to event bus")
 	}
+	if oauthLoginService := server.OAuthLoginService(); oauthLoginService != nil {
+		oauthLoginService.SetEventBus(eventBus)
+		slog.Info("OAuth login service wired to event bus")
+	}
+	if oauthProviderService := server.OAuthProviderService(); oauthProviderService != nil {
+		oauthProviderService.SetEventBus(eventBus)
+		slog.Info("OAuth provider service wired to event bus")
+	}
 
 	// Wire EventBus into data portability services
 	if exportSvc := server.ExportService(); exportSvc != nil {

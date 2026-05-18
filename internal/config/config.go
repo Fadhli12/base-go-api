@@ -117,6 +117,7 @@ type Config struct {
 	Idempotency      IdempotencyConfig      `mapstructure:"idempotency"`
 	TwoFactor        TwoFactorConfig        `mapstructure:"two_factor"`
 	SSRF             SSRFConfig             `mapstructure:"ssrf"`
+	OAuth            OAuthConfig            `mapstructure:"oauth"`
 }
 
 var (
@@ -227,6 +228,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseSSRFConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse ssrf config: %w", err)
+	}
+
+	if err := parseOAuthConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse oauth config: %w", err)
 	}
 
 	// Validate required fields
@@ -397,6 +402,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("data_portability.import_worker_concurrency", 5)
 	v.SetDefault("data_portability.import_rate_limit", 5)
 	v.SetDefault("data_portability.import_rate_limit_records", 50000)
+
+	// OAuth defaults
+	v.SetDefault("oauth.allow_http", false)
+	v.SetDefault("oauth.frontend_callback_url", "http://localhost:3000/auth/callback")
+	v.SetDefault("oauth.state_ttl_seconds", 600)
 }
 
 // loadYAMLConfig attempts to load configuration from YAML files.
@@ -942,6 +952,23 @@ func parseTwoFactorConfig(v *viper.Viper, cfg *Config) error {
 	if cfg.TwoFactor.EncryptionKey == "" {
 		cfg.TwoFactor.EncryptionKey = v.GetString("two_factor.encryption_key")
 	}
+	return nil
+}
+
+// parseOAuthConfig parses OAuth configuration from environment variables via Viper.
+func parseOAuthConfig(v *viper.Viper, cfg *Config) error {
+	cfg.OAuth = DefaultOAuthConfig()
+
+	cfg.OAuth.EncryptionKey = os.Getenv("OAUTH_ENCRYPTION_KEY")
+	if cfg.OAuth.EncryptionKey == "" {
+		cfg.OAuth.EncryptionKey = v.GetString("oauth.encryption_key")
+	}
+
+	cfg.OAuth.AllowHTTP = getEnvBoolOrDefault("OAUTH_ALLOW_HTTP", v.GetBool("oauth.allow_http"))
+	cfg.OAuth.FrontendCallbackURL = getEnvOrDefault("OAUTH_FRONTEND_CALLBACK_URL", v.GetString("oauth.frontend_callback_url"))
+	cfg.OAuth.StateTTLSeconds = getEnvIntOrDefault("OAUTH_STATE_TTL", v.GetInt("oauth.state_ttl_seconds"))
+	cfg.OAuth.StateTTL = time.Duration(cfg.OAuth.StateTTLSeconds) * time.Second
+
 	return nil
 }
 
