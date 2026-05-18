@@ -45,6 +45,10 @@ Production-ready Go REST API with RBAC (Casbin), JWT, and permission management.
 | **Analytics domain** | **`internal/domain/metric_event.go`, `dashboard_metric.go`, `dashboard_preference.go`, `analytics_events.go`** | **Entities, DTOs, AnalyticsMapping registry** |
 | **Analytics config** | **`internal/config/analytics.go`** | **AnalyticsConfig: retention, aggregation interval, reaper interval** |
 | **Analytics migrations** | **`migrations/000025_create_analytics*.sql`** | **metric_events, dashboard_metrics, dashboard_preferences tables** |
+| **SSRF protection** | **`internal/ssrf/`** | **Validator, Transport, Config — two-layer SSRF defense** |
+| **SSRF config** | **`internal/config/ssrf.go`** | **SSRFConfig env var mapping with defaults** |
+| **SSRF integration** | **`internal/service/webhook_worker.go`, `webhook.go`, `email_sendgrid_provider.go`** | **SSRF-safe HTTP clients for outbound requests** |
+| **SSRF tests** | **`internal/ssrf/validator_test.go`, `transport_test.go`, `config_test.go`** | **1262 lines of tests (531 + 422 + 309)** |
 
 ## CODE MAP
 
