@@ -9,6 +9,7 @@ This document provides practical examples for using the Go API Base REST API.
 3. [Managing Roles and Permissions](#managing-roles-and-permissions)
 4. [Invoice Management](#invoice-management)
 5. [Common Workflows](#common-workflows)
+6. [Idempotency](#idempotency)
 
 ## Base URL
 
@@ -507,3 +508,85 @@ Check your rate limit status via response headers:
 - `X-RateLimit-Limit` - Maximum requests per window
 - `X-RateLimit-Remaining` - Remaining requests
 - `X-RateLimit-Reset` - Unix timestamp when limit resets
+
+## Idempotency
+
+The API supports idempotency keys for safe request retries. Include an `Idempotency-Key` header on mutating requests (POST, PUT, PATCH) to prevent duplicate processing.
+
+### Making an Idempotent Request
+
+```bash
+curl -X POST http://localhost:8080/api/v1/invoices \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-invoice-001" \
+  -d '{
+    "title": "Invoice #001",
+    "amount": 100.00
+  }'
+```
+
+### Response Headers
+
+Every response to a request with an `Idempotency-Key` includes:
+
+| Header | Description |
+|--------|-------------|
+| `X-Idempotency-Key` | Echoes back the idempotency key |
+| `X-Idempotency-Replayed` | `true` if response was replayed from cache, `false` for new |
+
+### Replay Behavior
+
+If you retry the same request with the same `Idempotency-Key`:
+
+- **Completed request**: The original response is replayed. `X-Idempotency-Replayed` is set to `true`.
+- **In-flight request**: Returns `409 Conflict` with `Retry-After: 5` header. Wait and retry.
+- **No key header**: Request is processed normally without idempotency guarantees.
+
+### 409 Conflict Response
+
+```json
+{
+  "error": {
+    "code": "IDEMPOTENCY_PROCESSING",
+    "message": "A request with this idempotency key is currently being processed"
+  },
+  "meta": {
+    "request_id": "abc127",
+    "timestamp": "2026-05-18T10:00:00Z"
+  }
+}
+```
+
+### Key Format Requirements
+
+- Pattern: `^[a-zA-Z0-9_-]+$` (alphanumeric, hyphens, underscores)
+- Maximum length: 128 characters
+- Only applies to: POST, PUT, PATCH (GET, DELETE, OPTIONS, HEAD are skipped)
+- Scoped to user + organization to prevent cross-user conflicts
+
+### Fail-Open Behavior
+
+If Redis is unavailable, the middleware passes through without idempotency guarantees. Requests complete normally, and a warning is logged. This ensures the API remains operational even during Redis outages.
+
+### Admin Endpoints
+
+Manage idempotency keys via the admin API:
+
+```bash
+# List your idempotency keys
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/idempotency/keys?page=1&per_page=20"
+
+# Get a specific key
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/idempotency/keys/<id>"
+
+# Delete a key (requires idempotency:manage)
+curl -X DELETE -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/idempotency/keys/<id>"
+
+# Trigger cleanup of expired keys (requires idempotency:manage)
+curl -X POST -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/api/v1/idempotency/cleanup?retention_days=7"
+```

@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-13 — All 17 features complete
+**Last Updated:** 2026-05-13 — All 18 features complete
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -693,9 +693,105 @@ Based on the analysis, the following should be prioritized:
 
 ---
 
+---
+
+### P2: Idempotency Keys
+
+**Status:** ✅ FULLY IMPLEMENTED
+
+| Component | Location |
+|-----------|----------|
+| Domain entity | internal/domain/idempotency.go (IdempotencyKey entity, DTOs, status constants) |
+| Cache extension | internal/cache/cache.go (SetNX method on Driver interface), internal/cache/redis.go, internal/cache/memory.go, internal/cache/noop.go |
+| Repository | internal/repository/idempotency.go (IdempotencyKeyRepository interface + GORM impl) |
+| Service | internal/service/idempotency.go (IdempotencyService: CRUD + embedded reaper) |
+| Middleware | internal/http/middleware/idempotency.go (request/response capture, Redis-first guard, header replay) |
+| Handler | internal/http/handler/idempotency.go (5 endpoints: List, GetByID, Delete, TriggerCleanup + audit logging) |
+| Config | internal/config/idempotency.go (IdempotencyConfig with defaults) |
+| Migration | migrations/000027_create_idempotency_keys.up.sql + .down.sql |
+| Unit tests | tests/unit/idempotency_service_test.go (20 tests), internal/domain/idempotency_test.go (11 tests), internal/http/middleware/idempotency_test.go (25 tests) |
+| Integration tests | tests/integration/idempotency_handler_test.go (16 tests) |
+
+**Key Features:**
+- Redis-first idempotency: SETNX for in-flight guard, async goroutine for DB write
+- Two Redis keys per request: :lock (5min TTL) and :record (24h TTL)
+- Key scoping: idem:{orgID}:{userID}:{method}:{path}:{key}
+- 409 Conflict + Retry-After for in-flight duplicates
+- 4KB Redis cache threshold; larger responses store reference only
+- Fail-open on Redis errors
+- Response header replay via allowlist (Content-Type, Content-Encoding, Content-Length, Location, X-Request-Id, Retry-After)
+- Background reaper with soft-delete via deleted_at
+- Key format validation: max 128 chars, ^[a-zA-Z0-9_-]+$
+
+**Endpoints (admin only):**
+| Method | Path | Permission | Description |
+|--------|------|------------|-------------|
+| GET | /api/v1/idempotency/keys | idempotency:view | List keys (paginated) |
+| GET | /api/v1/idempotency/keys/:id | idempotency:view | Get key by ID |
+| DELETE | /api/v1/idempotency/keys/:id | idempotency:manage | Delete key (soft-delete) |
+| POST | /api/v1/idempotency/cleanup | idempotency:manage | Trigger cleanup (accepted async) |
+
+**Middleware Integration:**
+`
+Request → Recover → RequestID → CORS → RateLimit → JWT → Idempotency → Handler
+                                                              │
+                                                              ▼
+                                                    Check Idempotency-Key header
+                                                    ├─ No key → pass through
+                                                    ├─ Redis hit → replay cached response
+                                                    └─ Redis miss → SETNX lock → process → cache result
+`
+
+**Configuration (Environment Variables):**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| IDEMPOTENCY_ENABLED | true | Enable/disable idempotency middleware |
+| IDEMPOTENCY_LOCK_TTL | 300s | Lock TTL for in-flight requests |
+| IDEMPOTENCY_RECORD_TTL | 86400s | Record TTL for cached responses |
+| IDEMPOTENCY_REAPER_INTERVAL | 60s | Cleanup interval for expired keys |
+| IDEMPOTENCY_REAPER_RETENTION_DAYS | 7 | Days before soft-deleting records |
+| IDEMPOTENCY_MAX_KEY_LENGTH | 128 | Max characters for idempotency key |
+
+**Permissions:**
+| Permission | Resource | Action | Description |
+|-----------|----------|--------|-------------|
+| idempotency:view | idempotency | view | List and view keys |
+| idempotency:manage | idempotency | manage | Delete keys; trigger cleanup |
+
+**Startup Wiring:**
+`go
+// Idempotency service + middleware (cmd/api/main.go)
+idempotencyRepo := repository.NewIdempotencyKeyRepository(db)
+idempotencyService := service.NewIdempotencyService(
+    idempotencyRepo, cacheDriver, auditService, enforcer, slog.Default(), cfg.Idempotency,
+)
+idempotencyHandler := handler.NewIdempotencyHandler(idempotencyService, auditService, enforcer)
+idempotencyHandler.RegisterRoutes(v1, jwtSecret)
+idempotencyService.StartReaper(ctx)
+
+// Graceful shutdown order:
+// server → eventBus → activityReaper → analyticsReaper → idempotencyService → workers → enforcer → db → redis
+`
+
+**Design Decisions:**
+- cache.Driver extended with SetNX method (all 3 backends: Redis, Memory, Noop)
+- Middleware wraps cho.Response to capture status, body, and replay headers
+- 
+eplayHeaders allowlist: Content-Type, Content-Encoding, Location, X-Request-Id, Retry-After
+- Goroutine for DB write after Redis cache (fire-and-forget, fail-open)
+- Panic recovery in storeResult goroutine
+- Audit logging on Delete and TriggerCleanup (handler-level)
+- Content-Length added to replayHeaders allowlist
+- CleanupExpired uses soft-delete via deleted_at (not hard delete)
+- RequirePermission(enforcer, resource, action) returns cho.MiddlewareFunc
+- Handler-level permission enforcement only — IdempotencyService does NOT call enforcer.Enforce()
+- Idempotency-Key header is validated before processing: max 128 chars, alphanumeric + hyphens/underscores
+- Fail-open: Redis errors do NOT block requests; middleware proceeds without idempotency guarantee
+
+
 ## Summary: Implemented vs Not Implemented
 
-### ✅ Implemented (16 features verified complete)
+### ✅ Implemented (18 features verified complete)
 
 | Feature | Priority | Status |
 |---------|----------|--------|

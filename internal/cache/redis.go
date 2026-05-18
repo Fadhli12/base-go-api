@@ -49,6 +49,21 @@ func (c *redisCache) Set(ctx context.Context, key string, value []byte, ttlSecon
 	return c.client.Set(ctx, key, value, expiration).Err()
 }
 
+// SetNX sets the key only if it does not already exist (atomic SET if Not eXists).
+// Returns true if the key was set (acquired), false if the key already existed.
+func (c *redisCache) SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error) {
+	if c.client == nil {
+		return false, errors.New("redis client not initialized")
+	}
+
+	expiration := time.Duration(ttlSeconds) * time.Second
+	result, err := c.client.SetNX(ctx, key, value, expiration).Result()
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
 // Delete removes a key from Redis
 func (c *redisCache) Delete(ctx context.Context, key string) error {
 	if c.client == nil {

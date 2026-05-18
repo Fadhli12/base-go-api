@@ -114,6 +114,7 @@ type Config struct {
 	Activity         ActivityConfig         `mapstructure:"activity"`
 	WebSocket        WsConfig               `mapstructure:"websocket"`
 	Analytics        AnalyticsConfig        `mapstructure:"analytics"`
+	Idempotency      IdempotencyConfig      `mapstructure:"idempotency"`
 	TwoFactor        TwoFactorConfig        `mapstructure:"two_factor"`
 }
 
@@ -213,6 +214,10 @@ func loadConfig() (*Config, error) {
 
 	if err := parseAnalyticsConfig(v, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse analytics config: %w", err)
+	}
+
+	if err := parseIdempotencyConfig(v, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse idempotency config: %w", err)
 	}
 
 	if err := parseTwoFactorConfig(v, cfg); err != nil {
@@ -357,6 +362,20 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("analytics.reaper_interval", "60s")
 	v.SetDefault("analytics.default_page_size", 20)
 	v.SetDefault("analytics.max_page_size", 100)
+
+	// Idempotency key defaults
+	v.SetDefault("idempotency.enabled", true)
+	v.SetDefault("idempotency.max_key_length", 128)
+	v.SetDefault("idempotency.key_pattern", `^[a-zA-Z0-9_-]+$`)
+	v.SetDefault("idempotency.default_ttl", "24h")
+	v.SetDefault("idempotency.min_ttl", "1h")
+	v.SetDefault("idempotency.max_ttl", "72h")
+	v.SetDefault("idempotency.guard_ttl", "5m")
+	v.SetDefault("idempotency.max_cached_response_size", 4096)
+	v.SetDefault("idempotency.reaper_interval", "1h")
+	v.SetDefault("idempotency.retention_days", 30)
+	v.SetDefault("idempotency.default_page_size", 20)
+	v.SetDefault("idempotency.max_page_size", 100)
 
 	// Two-factor authentication defaults
 	v.SetDefault("two_factor.encryption_key", "")
@@ -846,6 +865,54 @@ func parseAnalyticsConfig(v *viper.Viper, cfg *Config) error {
 		return fmt.Errorf("invalid ANALYTICS_REAPER_INTERVAL: %w", err)
 	}
 	cfg.Analytics.ReaperInterval = reaperDuration
+
+	return nil
+}
+
+// parseIdempotencyConfig parses idempotency key configuration from environment.
+func parseIdempotencyConfig(v *viper.Viper, cfg *Config) error {
+	cfg.Idempotency.Enabled = getEnvBoolOrDefault("IDEMPOTENCY_ENABLED", v.GetBool("idempotency.enabled"))
+	cfg.Idempotency.MaxKeyLength = getEnvIntOrDefault("IDEMPOTENCY_MAX_KEY_LENGTH", v.GetInt("idempotency.max_key_length"))
+	cfg.Idempotency.KeyPattern = getEnvOrDefault("IDEMPOTENCY_KEY_PATTERN", v.GetString("idempotency.key_pattern"))
+	cfg.Idempotency.MaxCachedResponseSize = getEnvIntOrDefault("IDEMPOTENCY_MAX_CACHED_RESPONSE_SIZE", v.GetInt("idempotency.max_cached_response_size"))
+	cfg.Idempotency.RetentionDays = getEnvIntOrDefault("IDEMPOTENCY_RETENTION_DAYS", v.GetInt("idempotency.retention_days"))
+	cfg.Idempotency.DefaultPageSize = getEnvIntOrDefault("IDEMPOTENCY_DEFAULT_PAGE_SIZE", v.GetInt("idempotency.default_page_size"))
+	cfg.Idempotency.MaxPageSize = getEnvIntOrDefault("IDEMPOTENCY_MAX_PAGE_SIZE", v.GetInt("idempotency.max_page_size"))
+
+	defaultTTL := getEnvOrDefault("IDEMPOTENCY_DEFAULT_TTL", v.GetString("idempotency.default_ttl"))
+	defaultTTLDuration, err := time.ParseDuration(defaultTTL)
+	if err != nil {
+		return fmt.Errorf("invalid IDEMPOTENCY_DEFAULT_TTL: %w", err)
+	}
+	cfg.Idempotency.DefaultTTL = defaultTTLDuration
+
+	minTTL := getEnvOrDefault("IDEMPOTENCY_MIN_TTL", v.GetString("idempotency.min_ttl"))
+	minTTLDuration, err := time.ParseDuration(minTTL)
+	if err != nil {
+		return fmt.Errorf("invalid IDEMPOTENCY_MIN_TTL: %w", err)
+	}
+	cfg.Idempotency.MinTTL = minTTLDuration
+
+	maxTTL := getEnvOrDefault("IDEMPOTENCY_MAX_TTL", v.GetString("idempotency.max_ttl"))
+	maxTTLDuration, err := time.ParseDuration(maxTTL)
+	if err != nil {
+		return fmt.Errorf("invalid IDEMPOTENCY_MAX_TTL: %w", err)
+	}
+	cfg.Idempotency.MaxTTL = maxTTLDuration
+
+	guardTTL := getEnvOrDefault("IDEMPOTENCY_GUARD_TTL", v.GetString("idempotency.guard_ttl"))
+	guardTTLDuration, err := time.ParseDuration(guardTTL)
+	if err != nil {
+		return fmt.Errorf("invalid IDEMPOTENCY_GUARD_TTL: %w", err)
+	}
+	cfg.Idempotency.GuardTTL = guardTTLDuration
+
+	reaperInterval := getEnvOrDefault("IDEMPOTENCY_REAPER_INTERVAL", v.GetString("idempotency.reaper_interval"))
+	reaperDuration, err := time.ParseDuration(reaperInterval)
+	if err != nil {
+		return fmt.Errorf("invalid IDEMPOTENCY_REAPER_INTERVAL: %w", err)
+	}
+	cfg.Idempotency.ReaperInterval = reaperDuration
 
 	return nil
 }
