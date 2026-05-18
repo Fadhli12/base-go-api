@@ -880,7 +880,6 @@ func (s *Server) RegisterRoutes() {
 
 		// OAuth account handler (unlink, list linked accounts)
 		oauthAccountHandler := handler.NewOAuthAccountHandler(
-			oauthLoginService,
 			oauthProviderService,
 			oauthAccountRepo,
 			oauthProviderRepo,

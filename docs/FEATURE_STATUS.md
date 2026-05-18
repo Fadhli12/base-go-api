@@ -1,7 +1,7 @@
 # Feature Implementation Status
 
 **Generated:** 2026-05-08
-**Last Updated:** 2026-05-18 — V1 complete (17/17), V2: SSRF complete, 13 features pending
+**Last Updated:** 2026-05-18 — V1 + V2: SSRF + OAuth Social Login complete
 **Build Status:** `go build ./...` ✅ PASSES
 
 ---
@@ -787,41 +787,62 @@ Webhook worker makes outbound HTTP requests. Without URL validation, attackers c
 
 ### 4.3 OAuth 2.0 Social Login
 
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ FULLY IMPLEMENTED
 
-**Complexity:** Medium-High | **Effort:** 3-4 days | **Dependencies:** Existing JWT auth system
-
-**Description:**
-"Sign in with Google/GitHub/Microsoft" — expected by every SaaS user in 2026. Also enables enterprise SSO via SAML/OIDC bridges.
-
-**Planned Components:**
+**What Exists:**
 | Component | Location |
 |-----------|----------|
-| Domain entities | `internal/domain/oauth_provider.go`, `internal/domain/oauth_account.go` |
-| Repository | `internal/repository/oauth_provider.go`, `internal/repository/oauth_account.go` |
-| Service | `internal/service/oauth.go` |
-| Handler | `internal/http/handler/oauth.go` |
-| Request DTOs | `internal/http/request/oauth.go` |
-| Config | `internal/config/oauth.go` |
-| Migrations | `migrations/000027_oauth_providers.up.sql`, `000028_oauth_accounts.up.sql` |
+| Domain entities | `internal/domain/oauth_provider.go`, `internal/domain/oauth_account.go`, `internal/domain/oauth_events.go` |
+| Repository | `internal/repository/oauth_provider.go` (7-method interface + GORM impl), `internal/repository/oauth_account.go` (7-method interface + GORM impl) |
+| Login service | `internal/service/oauth_login.go` (initiate, callback, link, unlink, profile normalization) |
+| Provider service | `internal/service/oauth_provider.go` (admin CRUD with client_secret encryption) |
+| State manager | `internal/service/oauth_state.go` (Redis PKCE state with nonce, code_verifier, intent) |
+| Encryption service | `internal/service/oauth_encryption.go` (HKDF-SHA256 + AES-256-GCM key derivation) |
+| Login handler | `internal/http/handler/oauth_login.go` (initiate, callback, link) |
+| Account handler | `internal/http/handler/oauth_account.go` (unlink, list accounts) |
+| Provider handler | `internal/http/handler/oauth_provider.go` (5 CRUD + 1 public listing) |
+| Request DTOs | `internal/http/request/oauth.go` (Create/Update/List with validation) |
+| Config | `internal/config/oauth.go` (OAuthConfig with defaults) |
+| Permissions | `config/permissions.yaml` (oauth:view, oauth:link, oauth:manage) |
+| Server wiring | `internal/http/server.go` (conditional creation, RegisterRoutes) |
+| EventBus wiring | `cmd/api/main.go` (OAuthLoginService + OAuthProviderService subscriptions) |
+| Migrations | `migrations/000027_oauth_providers.up.sql`, `migrations/000028_oauth_accounts.up.sql` |
 
 **Endpoints:**
-- `GET /api/v1/auth/oauth/:provider` — Redirect to OAuth provider
-- `GET /api/v1/auth/oauth/:provider/callback` — OAuth callback (exchanges code)
-- `POST /api/v1/auth/oauth/:provider/link` — Link provider to existing account
-- `DELETE /api/v1/auth/oauth/:provider/unlink` — Unlink provider from account
-- `GET /api/v1/auth/oauth/providers` — List available OAuth providers
-- `GET /api/v1/auth/oauth/accounts` — List current user's linked accounts
+- `GET /api/v1/auth/oauth/:provider` — Initiate OAuth login (public, redirect to provider)
+- `GET /api/v1/auth/oauth/:provider/callback` — OAuth callback (public, redirects to frontend with tokens in fragment)
+- `POST /api/v1/auth/oauth/:provider/link` — Initiate provider linking (protected, oauth:link)
+- `DELETE /api/v1/auth/oauth/:provider/unlink` — Unlink provider from account (protected, oauth:link)
+- `GET /api/v1/auth/oauth/accounts` — List current user's linked accounts (protected, oauth:view)
+- `GET /api/v1/oauth-providers` — List enabled providers (public)
+- `POST /api/v1/oauth-providers` — Create provider (protected, oauth:manage)
+- `GET /api/v1/oauth-providers/:id` — Get provider (protected, oauth:manage)
+- `PUT /api/v1/oauth-providers/:id` — Update provider (protected, oauth:manage)
+- `DELETE /api/v1/oauth-providers/:id` — Delete provider (protected, oauth:manage)
 
 **Permissions:**
 | Permission | Resource | Action | Description |
 |-----------|----------|--------|-------------|
-| `oauth:manage` | oauth | manage | Configure OAuth providers (admin) |
+| `oauth:view` | oauth | view | View OAuth providers and linked accounts |
 | `oauth:link` | oauth | link | Link/unlink own social accounts |
+| `oauth:manage` | oauth | manage | Manage OAuth provider configurations |
 
 **EventBus Events:**
 - `auth.oauth.linked` — when user links a social account
 - `auth.oauth.unlinked` — when user unlinks a social account
+
+**Key Design Decisions:**
+- Fragment encoding (`#access_token=...`) for token delivery per RFC 9269 (not query params)
+- PKCE (S256) for all OAuth flows; code_verifier stored in Redis state
+- Shared callback GET handler distinguished by `intent` field (login vs link)
+- Link endpoint (POST) returns JSON `{redirect_url}`; callback redirects are GET only
+- HKDF-SHA256 key derivation for client secret encryption (info: `oauth-encryption-v1`)
+- Provider names as strings (`"google"`, `"github"`, `"microsoft"`)
+- Redis state: `oauth:state:{nonce}` → JSON with 10min TTL, atomic GET+DEL
+- Encryption format: `v1:` + base64(IV[12] + ciphertext + GCM_tag[16])
+- Unlink enforces "at least one auth method" rule (password + linked providers count)
+- SSRF-safe HTTP clients for outbound OAuth requests (via `internal/ssrf`)
+- Audit logging on all CRUD and link/unlink operations
 
 ---
 
