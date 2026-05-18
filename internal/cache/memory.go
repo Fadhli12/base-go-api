@@ -55,6 +55,25 @@ func (c *memoryCache) Set(ctx context.Context, key string, value []byte, ttlSeco
 	return nil
 }
 
+// SetNX sets the key only if it does not already exist (atomic check-then-set).
+// Returns true if the key was set (acquired), false if the key already existed.
+func (c *memoryCache) SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if key exists and is not expired
+	entry, found := c.data[key]
+	if found && time.Now().Before(entry.expiresAt) {
+		// Key exists and is not expired — cannot acquire
+		return false, nil
+	}
+
+	// Key does not exist or is expired — set it
+	expiresAt := time.Now().Add(time.Duration(ttlSeconds) * time.Second)
+	c.data[key] = &memEntry{value: value, expiresAt: expiresAt}
+	return true, nil
+}
+
 // Delete removes a key from the in-memory cache
 func (c *memoryCache) Delete(ctx context.Context, key string) error {
 	c.mu.Lock()

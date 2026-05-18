@@ -47,9 +47,10 @@ type Server struct {
 	activityReaper  *service.ActivityReaper
 	wsHub          *service.Hub
 	wsHandler      *handler.WebSocketHandler
-	analyticsService *service.AnalyticsService
-	analyticsReaper   *service.AnalyticsReaper
-	aggregationWorker *service.AggregationWorker
+	analyticsService    *service.AnalyticsService
+	analyticsReaper     *service.AnalyticsReaper
+	aggregationWorker   *service.AggregationWorker
+	idempotencyService  *service.IdempotencyService
 	userService    *service.UserService
 	invoiceService *invoice.Service
 	newsService    *service.NewsService
@@ -367,6 +368,16 @@ func (s *Server) SetAggregationWorker(worker *service.AggregationWorker) {
 // AggregationWorker returns the aggregation worker
 func (s *Server) AggregationWorker() *service.AggregationWorker {
 	return s.aggregationWorker
+}
+
+// SetIdempotencyService sets the idempotency service
+func (s *Server) SetIdempotencyService(svc *service.IdempotencyService) {
+	s.idempotencyService = svc
+}
+
+// IdempotencyService returns the idempotency service
+func (s *Server) IdempotencyService() *service.IdempotencyService {
+	return s.idempotencyService
 }
 
 // EventBus returns the event bus
@@ -808,6 +819,17 @@ func (s *Server) RegisterRoutes() {
 	if s.analyticsService != nil {
 		analyticsHandler := handler.NewAnalyticsHandler(s.analyticsService, s.enforcer, s.aggregationWorker)
 		analyticsHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+	}
+
+	// Idempotency key routes
+	if s.idempotencyService != nil && s.config.Idempotency.Enabled {
+		idempotencyHandler := handler.NewIdempotencyHandler(s.idempotencyService, s.AuditService(), s.enforcer)
+		idempotencyHandler.RegisterRoutes(v1, s.config.JWT.Secret)
+
+		// Apply idempotency middleware to protected group
+		// The middleware self-skips for GET/DELETE/OPTIONS/HEAD methods
+		idempotencyMiddleware := middleware.NewIdempotencyMiddleware(s.cache, s.idempotencyService, s.config.Idempotency, slog.Default())
+		protected.Use(idempotencyMiddleware.Middleware())
 	}
 
 	// Search routes

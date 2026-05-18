@@ -448,6 +448,12 @@ func runServer() error {
 		slog.Duration("aggregation_interval", cfg.Analytics.AggregationInterval),
 	)
 
+	// Initialize idempotency service
+	idempotencyRepo := repository.NewIdempotencyRepository(db)
+	idempotencyService := service.NewIdempotencyService(idempotencyRepo, cfg.Idempotency, slog.Default())
+	server.SetIdempotencyService(idempotencyService)
+	slog.Info("Idempotency service initialized")
+
 	// Initialize activity reaper for 90-day archival
 	activityRepo := repository.NewActivityRepository(db)
 	activityReaper := service.NewActivityReaper(activityRepo, cfg.Activity, slog.Default())
@@ -583,6 +589,15 @@ func runServer() error {
 		analyticsReaper.Start(ctx)
 	}
 
+	// Start idempotency reaper in background
+	if cfg.Idempotency.Enabled {
+		idempotencyService.StartReaper(ctx)
+		slog.Info("Idempotency reaper started",
+			slog.Duration("interval", cfg.Idempotency.ReaperInterval),
+			slog.Int("retention_days", cfg.Idempotency.RetentionDays),
+		)
+	}
+
 	// Start aggregation worker in background
 	if aggregationWorker := server.AggregationWorker(); aggregationWorker != nil {
 		slog.Info("Starting aggregation worker...")
@@ -645,6 +660,12 @@ func runServer() error {
 	if analyticsReaper := server.AnalyticsReaper(); analyticsReaper != nil {
 		slog.Info("Stopping analytics reaper...")
 		analyticsReaper.Stop()
+	}
+
+	// 2d. Stop idempotency reaper
+	if idempotencyService := server.IdempotencyService(); idempotencyService != nil {
+		slog.Info("Stopping idempotency reaper...")
+		idempotencyService.StopReaper()
 	}
 
 	// 3. Stop workers to finish in-flight processing
@@ -856,12 +877,14 @@ func DefaultPermissions() *PermissionManifest {
 		{Name: "websocket:view_rooms", Description: "View available WebSocket rooms", Resource: "websocket", Action: "view_rooms"},
 		{Name: "analytics:view", Description: "View analytics dashboard and metrics", Resource: "analytics", Action: "view"},
 		{Name: "analytics:manage", Description: "Manage analytics preferences and trigger aggregation", Resource: "analytics", Action: "manage"},
+		{Name: "idempotency:view", Description: "View idempotency key records", Resource: "idempotency", Action: "view"},
+		{Name: "idempotency:manage", Description: "Manage idempotency configuration and trigger cleanup", Resource: "idempotency", Action: "manage"},
 	},
 		Roles: []RoleEntry{
 			{
 				Name:        "admin",
 				Description: "Administrator role with full access",
-				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage", "websocket:connect", "websocket:view_presence", "websocket:view_rooms", "analytics:view", "analytics:manage"},
+				Permissions: []string{"users:manage", "roles:manage", "permissions:manage", "email_templates:manage", "email_queue:manage", "email_bounces:read", "settings:view_user", "settings:manage_user", "settings:view_system", "settings:manage_system", "media_version:upload", "media_version:view", "media_version:download", "media_version:restore", "media_version:delete", "data_portability:export_create", "data_portability:export_download", "data_portability:import_create", "data_portability:import_view", "data_portability:import_cancel", "feature_flag:view", "feature_flag:manage", "comment:view", "comment:create", "comment:delete", "comment:delete_any", "comment:manage", "activity:view", "activity:manage", "tag:view", "tag:create", "tag:update", "tag:delete", "tag:manage", "websocket:connect", "websocket:view_presence", "websocket:view_rooms", "analytics:view", "analytics:manage", "idempotency:view", "idempotency:manage"},
 			},
 		},
 	}

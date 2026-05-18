@@ -68,6 +68,14 @@ func (m *mockCacheDriver) Clear(ctx context.Context, pattern string) error {
 	return nil
 }
 
+func (m *mockCacheDriver) SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error) {
+	if _, ok := m.data[key]; ok {
+		return false, nil // Key already exists
+	}
+	m.data[key] = value
+	return true, nil
+}
+
 func (m *mockCacheDriver) Close() error {
 	return nil
 }

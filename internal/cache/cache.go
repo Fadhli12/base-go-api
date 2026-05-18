@@ -9,6 +9,10 @@ import (
 type Driver interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value []byte, ttlSeconds int) error
+	// SetNX sets the key only if it does not already exist (SET if Not eXists).
+	// Returns true if the key was set (acquired), false if the key already existed.
+	// Used for distributed locking and idempotency guards.
+	SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error)
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context, pattern string) error // Clear all keys matching pattern

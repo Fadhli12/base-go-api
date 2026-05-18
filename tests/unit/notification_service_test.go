@@ -182,6 +182,11 @@ func (m *MockCacheDriver) Clear(ctx context.Context, pattern string) error {
 	return args.Error(0)
 }
 
+func (m *MockCacheDriver) SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error) {
+	args := m.Called(ctx, key, value, ttlSeconds)
+	return args.Bool(0), args.Error(1)
+}
+
 func (m *MockCacheDriver) Close() error {
 	args := m.Called()
 	return args.Error(0)

@@ -22,6 +22,13 @@ func (c *noopCache) Set(ctx context.Context, key string, value []byte, ttlSecond
 	return nil // no-op: silently succeed
 }
 
+// SetNX is a no-op and always returns false (key not acquired) with no error.
+// This ensures fail-open behavior: when cache is disabled, idempotency middleware
+// passes through without locking.
+func (c *noopCache) SetNX(ctx context.Context, key string, value []byte, ttlSeconds int) (bool, error) {
+	return false, nil // no-op: always return false (not acquired), no error
+}
+
 // Delete is a no-op and always succeeds
 func (c *noopCache) Delete(ctx context.Context, key string) error {
 	return nil // no-op: silently succeed
